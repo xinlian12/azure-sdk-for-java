@@ -4,7 +4,6 @@
 package com.azure.cosmos.implementation.directconnectivity;
 
 import com.azure.cosmos.BridgeInternal;
-import com.azure.cosmos.CosmosClientException;
 import com.azure.cosmos.implementation.Configs;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.UserAgentContainer;
@@ -209,6 +208,9 @@ public final class RntbdTransportClient extends TransportClient {
         @JsonProperty()
         private final Duration shutdownTimeout;
 
+        @JsonProperty()
+        private boolean reusePort;
+
         @JsonIgnore()
         private final UserAgentContainer userAgent;
 
@@ -231,6 +233,7 @@ public final class RntbdTransportClient extends TransportClient {
             this.sendHangDetectionTime = Duration.ofSeconds(10L);
             this.shutdownTimeout = Duration.ofSeconds(15L);
             this.userAgent = new UserAgentContainer();
+            this.reusePort = false;
         }
 
         private Options(Builder builder) {
@@ -252,6 +255,8 @@ public final class RntbdTransportClient extends TransportClient {
             this.connectionTimeout = builder.connectionTimeout == null
                 ? builder.requestTimeout
                 : builder.connectionTimeout;
+
+            this.reusePort = builder.reusePort;
         }
 
         // endregion
@@ -314,6 +319,10 @@ public final class RntbdTransportClient extends TransportClient {
             return this.userAgent;
         }
 
+        public boolean reusePort() {
+            return this.reusePort;
+        }
+
         // endregion
 
         // region Methods
@@ -361,7 +370,8 @@ public final class RntbdTransportClient extends TransportClient {
          *   "requestTimeout": "PT1M",
          *   "requestTimerResolution": "PT0.5S",
          *   "sendHangDetectionTime": "PT10S",
-         *   "shutdownTimeout": "PT15S"
+         *   "shutdownTimeout": "PT15S",
+         *   "portReuse" : true,
          * }}</pre>
          * </li>
          * </ol>
@@ -448,6 +458,7 @@ public final class RntbdTransportClient extends TransportClient {
             private Duration sendHangDetectionTime;
             private Duration shutdownTimeout;
             private UserAgentContainer userAgent;
+            private boolean reusePort;
 
             // endregion
 
@@ -470,6 +481,7 @@ public final class RntbdTransportClient extends TransportClient {
                 this.sendHangDetectionTime = DEFAULT_OPTIONS.sendHangDetectionTime;
                 this.shutdownTimeout = DEFAULT_OPTIONS.shutdownTimeout;
                 this.userAgent = DEFAULT_OPTIONS.userAgent;
+                this.reusePort = DEFAULT_OPTIONS.reusePort;
             }
 
             public Builder(int requestTimeoutInSeconds) {
@@ -589,6 +601,11 @@ public final class RntbdTransportClient extends TransportClient {
             public Builder userAgent(final UserAgentContainer value) {
                 checkNotNull(value, "expected non-null value");
                 this.userAgent = value;
+                return this;
+            }
+
+            public Builder reusePort(final boolean value) {
+                this.reusePort = value;
                 return this;
             }
 

@@ -112,6 +112,11 @@ public interface RntbdEndpoint extends AutoCloseable {
         }
 
         @JsonProperty
+        public boolean reusePort() {
+            return options.reusePort();
+        }
+
+        @JsonProperty
         public long idleConnectionTimeoutInNanos() {
             return this.options.idleChannelTimeout().toNanos();
         }
