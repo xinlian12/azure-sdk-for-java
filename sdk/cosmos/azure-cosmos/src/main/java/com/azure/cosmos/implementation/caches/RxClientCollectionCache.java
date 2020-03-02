@@ -25,6 +25,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -84,11 +85,7 @@ public class RxClientCollectionCache extends RxCollectionCache {
                 AuthorizationTokenType.PrimaryMasterKey,
                 properties);
 
-        try {
-            authorizationToken = URLEncoder.encode(authorizationToken, "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            return Mono.error(new IllegalStateException("Failed to encode authtoken.", e));
-        }
+        authorizationToken = URLEncoder.encode(authorizationToken, StandardCharsets.UTF_8);
         request.getHeaders().put(HttpConstants.HttpHeaders.AUTHORIZATION, authorizationToken);
 
         if (retryPolicyInstance != null){
