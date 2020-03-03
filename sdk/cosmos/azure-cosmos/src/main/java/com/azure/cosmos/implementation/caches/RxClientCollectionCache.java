@@ -83,7 +83,7 @@ public class RxClientCollectionCache extends RxCollectionCache {
                 request.getHeaders(),
                 AuthorizationTokenType.PrimaryMasterKey,
                 properties);
-        
+
         try {
             authorizationToken = URLEncoder.encode(authorizationToken, "UTF-8");
         } catch (UnsupportedEncodingException e) {
