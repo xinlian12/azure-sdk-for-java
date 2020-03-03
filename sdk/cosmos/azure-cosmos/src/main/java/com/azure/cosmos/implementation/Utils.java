@@ -219,7 +219,11 @@ public class Utils {
         // TODO: this is not performant revisit
         HashMap<String, String> map = new HashMap<>();
         for (Map.Entry<String, String> paramEntry : queryParams.entrySet()) {
-            map.put(paramEntry.getKey(), URLEncoder.encode(paramEntry.getValue(), StandardCharsets.UTF_8));
+            try {
+                map.put(paramEntry.getKey(), URLEncoder.encode(paramEntry.getValue(), "UTF-8"));
+            } catch (UnsupportedEncodingException e) {
+                throw new IllegalStateException(e);
+            }
         }
         return map;
     }

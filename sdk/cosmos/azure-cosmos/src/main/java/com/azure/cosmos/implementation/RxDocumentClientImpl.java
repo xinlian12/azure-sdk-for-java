@@ -995,6 +995,11 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             String authorization = this.getUserAuthorizationToken(
                     resourceName, request.getResourceType(), httpMethod, request.getHeaders(),
                     AuthorizationTokenType.PrimaryMasterKey, request.properties);
+            try {
+                authorization = URLEncoder.encode(authorization, "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+                throw new IllegalStateException("Failed to encode authtoken.", e);
+            }
             authorization = URLEncoder.encode(authorization, StandardCharsets.UTF_8);
             request.getHeaders().put(HttpConstants.HttpHeaders.AUTHORIZATION, authorization);
         }
