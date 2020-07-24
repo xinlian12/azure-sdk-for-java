@@ -65,7 +65,7 @@ public class AddressResolver implements IAddressResolver {
     public Mono<AddressInformation[]> resolveAsync(
         RxDocumentServiceRequest request,
         boolean forceRefreshPartitionAddresses) {
-
+        logger.info("resolveAsync() start");
         Mono<ResolutionResult> resultObs = this.resolveAddressesAndIdentityAsync(request, forceRefreshPartitionAddresses);
 
         return resultObs.flatMap(result -> {
@@ -79,7 +79,7 @@ public class AddressResolver implements IAddressResolver {
             request.requestContext.resolvedPartitionKeyRange = result.TargetPartitionKeyRange;
 
             return Mono.just(result.Addresses);
-        });
+        }).doOnTerminate(() -> logger.info("resolveAsync() finish"));
     }
 
     private static boolean isSameCollection(PartitionKeyRange initiallyResolved, PartitionKeyRange newlyResolved) {

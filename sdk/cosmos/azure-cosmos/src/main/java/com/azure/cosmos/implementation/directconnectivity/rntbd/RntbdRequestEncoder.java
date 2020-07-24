@@ -43,6 +43,7 @@ public final class RntbdRequestEncoder extends MessageToByteEncoder<RntbdRequest
         final ByteBuf out
     ) {
 
+        logger.info("encode start");
         final RntbdRequest request = RntbdRequest.from(message.args());
         final int start = out.writerIndex();
 
@@ -55,6 +56,7 @@ public final class RntbdRequestEncoder extends MessageToByteEncoder<RntbdRequest
 
         message.requestLength(out.writerIndex() - start);
 
+        logger.info("encode finish");
         if (logger.isDebugEnabled()) {
             logger.debug("{}: ENCODE COMPLETE: request={}", context.channel(), request);
         }

@@ -4,6 +4,8 @@
 package com.azure.cosmos.implementation.directconnectivity;
 
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
@@ -15,6 +17,7 @@ import java.net.URI;
 // signature for backwards compatibility purposes.
 @SuppressWarnings("try")
 public abstract class TransportClient implements AutoCloseable {
+    private final static Logger logger = LoggerFactory.getLogger(TransportClient.class);
 
     // Uses requests's ResourceOperation to determine the operation
     public Mono<StoreResponse> invokeResourceOperationAsync(Uri physicalAddress, RxDocumentServiceRequest request) {

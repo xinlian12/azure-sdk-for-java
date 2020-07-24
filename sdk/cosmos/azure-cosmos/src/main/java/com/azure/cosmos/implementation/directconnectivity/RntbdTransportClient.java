@@ -117,7 +117,6 @@ public final class RntbdTransportClient extends TransportClient {
 
     @Override
     public Mono<StoreResponse> invokeStoreAsync(final Uri addressUri, final RxDocumentServiceRequest request) {
-
         checkNotNull(addressUri, "expected non-null address");
         checkNotNull(request, "expected non-null request");
         this.throwIfClosed();
@@ -125,11 +124,17 @@ public final class RntbdTransportClient extends TransportClient {
         final URI address = addressUri.getURI();
 
         final RntbdRequestArgs requestArgs = new RntbdRequestArgs(request, address);
+        logger.info("endpointProviderGet start");
+        // if the hostname and port not in the map, then a new RntbdServiceEndpoint will be there.
         final RntbdEndpoint endpoint = this.endpointProvider.get(address);
+        logger.info("endpointProviderGet finish");
+
+        logger.info("request() start");
         final RntbdRequestRecord record = endpoint.request(requestArgs);
 
-        final Mono<StoreResponse> result = Mono.fromFuture(record.whenComplete((response, throwable) -> {
 
+        final Mono<StoreResponse> result = Mono.fromFuture(record.whenComplete((response, throwable) -> {
+            logger.info("request() finish");
             record.stage(RntbdRequestRecord.Stage.COMPLETED);
 
             if (request.requestContext.cosmosDiagnostics == null) {
@@ -140,7 +145,6 @@ public final class RntbdTransportClient extends TransportClient {
                 RequestTimeline timeline = record.takeTimelineSnapshot();
                 response.setRequestTimeline(timeline);
             }
-
         })).onErrorMap(throwable -> {
 
             Throwable error = throwable instanceof CompletionException ? throwable.getCause() : throwable;

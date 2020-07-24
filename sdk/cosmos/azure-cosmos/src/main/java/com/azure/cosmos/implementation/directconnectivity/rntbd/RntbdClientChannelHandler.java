@@ -57,6 +57,7 @@ public class RntbdClientChannelHandler extends ChannelInitializer<Channel> imple
     @Override
     public void channelCreated(final Channel channel) {
         logger.debug("{} CHANNEL CREATED", channel);
+        logger.info("Annie:channel created");
         this.initChannel(channel);
     }
 
@@ -69,7 +70,10 @@ public class RntbdClientChannelHandler extends ChannelInitializer<Channel> imple
      */
     @Override
     public void channelReleased(final Channel channel) {
-        logger.debug("{} CHANNEL RELEASED", channel);
+        logger.info("channelReleased");
+        RntbdRequestManager manager = channel.pipeline().get(RntbdRequestManager.class);
+        logger.info("channelReleased.contextRequest done:" + manager.hasRntbdContext());
+        logger.info("channelReleased.pendingRequests size:" + manager.pendingRequestCount());
     }
 
     /**
@@ -93,11 +97,15 @@ public class RntbdClientChannelHandler extends ChannelInitializer<Channel> imple
     @Override
     protected void initChannel(final Channel channel) {
 
+        logger.info("initChannel start");
         checkNotNull(channel);
 
+        logger.info("Annie:maxRequestPerChannel:" + this.config.maxRequestsPerChannel());
         final RntbdRequestManager requestManager = new RntbdRequestManager(this.healthChecker, this.config.maxRequestsPerChannel());
-        final long readerIdleTime = this.config.receiveHangDetectionTimeInNanos();
+        //final long readerIdleTime = this.config.receiveHangDetectionTimeInNanos();
+        final long readerIdleTime = 1000000000L;
         final long writerIdleTime = this.config.sendHangDetectionTimeInNanos();
+        //final long writerIdleTime = 30000000000L;
         final long allIdleTime = this.config.idleConnectionTimeoutInNanos();
         final ChannelPipeline pipeline = channel.pipeline();
 
@@ -118,5 +126,6 @@ public class RntbdClientChannelHandler extends ChannelInitializer<Channel> imple
         );
 
         channel.attr(REQUEST_MANAGER).set(requestManager);
+        logger.info("initChannel finish");
     }
 }

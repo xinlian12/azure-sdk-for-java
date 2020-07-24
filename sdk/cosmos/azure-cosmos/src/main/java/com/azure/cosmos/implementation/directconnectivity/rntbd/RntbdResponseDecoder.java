@@ -27,6 +27,7 @@ public final class RntbdResponseDecoder extends ByteToMessageDecoder {
     @Override
     protected void decode(final ChannelHandlerContext context, final ByteBuf in, final List<Object> out) {
 
+        logger.info("decode() start");
         if (RntbdFramer.canDecodeHead(in)) {
 
             final RntbdResponse response = RntbdResponse.decode(in);
@@ -37,5 +38,7 @@ public final class RntbdResponseDecoder extends ByteToMessageDecoder {
                 out.add(response.retain());
             }
         }
+
+        logger.info("decode() finish");
     }
 }

@@ -13,23 +13,27 @@ import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.RxDocumentServiceResponse;
 import com.azure.cosmos.implementation.RxStoreModel;
 import com.azure.cosmos.implementation.Strings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 public class ServerStoreModel implements RxStoreModel {
     private final StoreClient storeClient;
+    private final static Logger logger = LoggerFactory.getLogger(ServerStoreModel.class);
 
     public ServerStoreModel(StoreClient storeClient) {
         this.storeClient = storeClient;
     }
 
     public Mono<RxDocumentServiceResponse> processMessage(RxDocumentServiceRequest request) {
+        logger.info("processMessage() start");
         String requestConsistencyLevelHeaderValue = request.getHeaders().get(HttpConstants.HttpHeaders.CONSISTENCY_LEVEL);
 
         request.requestContext.originalRequestConsistencyLevel = null;
 
         if (!Strings.isNullOrEmpty(requestConsistencyLevelHeaderValue)) {
             ConsistencyLevel requestConsistencyLevel;
-            
+
                 if ((requestConsistencyLevel = BridgeInternal.fromServiceSerializedFormat(requestConsistencyLevelHeaderValue)) == null) {
                 return Mono.error(new BadRequestException(
                     String.format(
@@ -45,6 +49,6 @@ public class ServerStoreModel implements RxStoreModel {
             request.getHeaders().put(HttpConstants.HttpHeaders.CONSISTENCY_LEVEL, ConsistencyLevel.STRONG.toString());
         }
 
-        return this.storeClient.processMessageAsync(request);
+        return this.storeClient.processMessageAsync(request).doOnTerminate(() -> logger.info("processMessage() finish"));
     }
 }

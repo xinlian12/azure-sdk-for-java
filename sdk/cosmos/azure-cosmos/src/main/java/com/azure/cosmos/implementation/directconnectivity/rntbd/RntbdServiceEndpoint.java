@@ -19,6 +19,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.logging.LogLevel;
+import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import io.netty.util.concurrent.Future;
@@ -33,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.logging.Level;
 import java.util.stream.Stream;
 
 import static com.azure.cosmos.implementation.HttpConstants.HttpHeaders;
@@ -79,6 +81,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         final Bootstrap bootstrap = new Bootstrap()
             .channel(NioSocketChannel.class)
             .group(group)
+            .handler(new LoggingHandler(LogLevel.TRACE))
             .option(ChannelOption.ALLOCATOR, config.allocator())
             .option(ChannelOption.AUTO_READ, true)
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.connectTimeoutInMillis())
@@ -197,6 +200,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
     // region Privates
 
     private void ensureSuccessWhenReleasedToPool(Channel channel, Future<Void> released) {
+        logger.info("channelReleaseToPool finish");
         if (released.isSuccess()) {
             logger.debug("\n  [{}]\n  {}\n  release succeeded", this, channel);
         } else {
@@ -207,13 +211,14 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
     private void releaseToPool(final Channel channel) {
 
         logger.debug("\n  [{}]\n  {}\n  RELEASE", this, channel);
+
         final Future<Void> released = this.channelPool.release(channel);
 
         if (logger.isDebugEnabled()) {
             if (released.isDone()) {
                 ensureSuccessWhenReleasedToPool(channel, released);
             } else {
-                this.channelPool.release(channel).addListener(ignored -> ensureSuccessWhenReleasedToPool(channel, released));
+                released.addListener(ignored -> ensureSuccessWhenReleasedToPool(channel, released));
             }
         }
     }
@@ -225,6 +230,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
     private RntbdRequestRecord write(final RntbdRequestArgs requestArgs) {
 
         final RntbdRequestRecord requestRecord = new RntbdRequestRecord(requestArgs, this.requestTimer);
+        logger.info("channelPoolAcquire() start");
         final Future<Channel> connectedChannel = this.channelPool.acquire();
 
         logger.debug("\n  [{}]\n  {}\n  WRITE WHEN CONNECTED {}", this, requestArgs, connectedChannel);
@@ -241,10 +247,18 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
     private RntbdRequestRecord writeWhenConnected(
         final RntbdRequestRecord requestRecord, final Future<? super Channel> connected) {
 
+        logger.info("channelPoolAcquire() finish");
+
         if (connected.isSuccess()) {
             final Channel channel = (Channel) connected.getNow();
+
             assert channel != null : "impossible";
             this.releaseToPool(channel);
+
+            logger.info("channel.writ start");
+            logger.info("contextRequest done:" + channel.pipeline().get(RntbdRequestManager.class).hasRntbdContext());
+            logger.info("pendingRequests done:" + channel.pipeline().get(RntbdRequestManager.class).pendingRequestCount());
+
             channel.write(requestRecord.stage(RntbdRequestRecord.Stage.PIPELINED));
             return requestRecord;
         }

@@ -9,6 +9,8 @@ import com.azure.cosmos.implementation.ConnectionPolicy;
 import com.azure.cosmos.implementation.CosmosAuthorizationTokenResolver;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.models.CosmosPermissionProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.List;
@@ -22,7 +24,7 @@ import java.util.List;
  * Though consistencyLevel is not mandatory, but we strongly suggest to pay attention to this API when building client.
  * By default, account consistency level is used if none is provided.
  * <p>
- * By default, direct connection mode is used if none specified. 
+ * By default, direct connection mode is used if none specified.
  * <pre>
  *     Building Cosmos Async Client minimal APIs (without any customized configurations)
  * {@code
@@ -96,6 +98,7 @@ public class CosmosClientBuilder {
     private boolean endpointDiscoveryEnabled = true;
     private boolean multipleWriteRegionsEnabled = true;
     private boolean readRequestsFallbackEnabled = true;
+    private static final Logger logger = LoggerFactory.getLogger(CosmosClientBuilder.class);
 
     /**
      * Instantiates a new Cosmos client builder.
@@ -655,10 +658,18 @@ public class CosmosClientBuilder {
      * @return CosmosClient
      */
     public CosmosClient buildClient() {
-
+        logger.info("validateConfig() start");
         validateConfig();
+        logger.info("validateConfig() finish");
+
+        logger.info("buildConnectionPolicy() start");
         buildConnectionPolicy();
-        return new CosmosClient(this);
+        logger.info("buildConnectionPolicy() finish");
+
+        logger.info("newCosmosClient() start");
+        CosmosClient client =  new CosmosClient(this);
+        logger.info("newCosmosClient() finish");
+        return client;
     }
 
     //  Connection policy has to be built before it can be used by this builder

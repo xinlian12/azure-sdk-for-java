@@ -140,6 +140,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
     @Override
     public void channelActive(final ChannelHandlerContext context) {
         this.traceOperation(context, "channelActive");
+        logger.info("channelIsActive");
         context.fireChannelActive();
     }
 
@@ -165,6 +166,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
     @Override
     public void channelRead(final ChannelHandlerContext context, final Object message) {
 
+        logger.info("channelRead start");
         this.traceOperation(context, "channelRead");
 
         try {
@@ -211,6 +213,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
     public void channelReadComplete(final ChannelHandlerContext context) {
         this.traceOperation(context, "channelReadComplete");
         this.timestamps.channelReadCompleted();
+        logger.info("channelReadComplete");
         context.fireChannelReadComplete();
     }
 
@@ -228,6 +231,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
     public void channelRegistered(final ChannelHandlerContext context) {
 
         this.traceOperation(context, "channelRegistered");
+        logger.info("channel registered");
 
         reportIssueUnless(this.pendingWrites == null, context, "pendingWrites: {}", pendingWrites);
         this.pendingWrites = new CoalescingBufferQueue(context.channel());
@@ -307,11 +311,12 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
     public void userEventTriggered(final ChannelHandlerContext context, final Object event) {
 
         this.traceOperation(context, "userEventTriggered", event);
+        logger.info("userEventTriggered");
 
         try {
 
             if (event instanceof IdleStateEvent) {
-
+                logger.info("idle state event");
                 this.healthChecker.isHealthy(context.channel()).addListener((Future<Boolean> future) -> {
 
                     final Throwable cause;
@@ -407,6 +412,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         final ChannelHandlerContext context, final SocketAddress remoteAddress, final SocketAddress localAddress,
         final ChannelPromise promise
     ) {
+        logger.info("channel is connect");
         this.traceOperation(context, "connect", remoteAddress, localAddress);
         context.connect(remoteAddress, localAddress, promise);
     }
@@ -480,14 +486,18 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
     @Override
     public void write(final ChannelHandlerContext context, final Object message, final ChannelPromise promise) {
 
+        logger.info("RntbdRequestManager.write start");
+        logger.info("contextRequest done:" + this.contextFuture.isDone());
+        logger.info("pendingRequests done:" + this.pendingRequests.size());
         this.traceOperation(context, "write", message);
 
         if (message.getClass() == RntbdRequestRecord.class) {
-
+            logger.info("RntbdRequestRecord.write start");
             final RntbdRequestRecord record = (RntbdRequestRecord) message;
             this.timestamps.channelWriteAttempted();
 
             context.write(this.addPendingRequestRecord(context, record), promise).addListener(completed -> {
+                logger.info("RntbdRequestRecord.write finish");
                 record.stage(RntbdRequestRecord.Stage.SENT);
                 if (completed.isSuccess()) {
                     this.timestamps.channelWriteCompleted();
@@ -498,8 +508,9 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         }
 
         if (message == RntbdHealthCheckRequest.MESSAGE) {
-
+            logger.info("RntbdHealthCheckRequest.write start");
             context.write(RntbdHealthCheckRequest.MESSAGE, promise).addListener(completed -> {
+                logger.info("RntbdHealthCheckRequest.write finish");
                 if (completed.isSuccess()) {
                     this.timestamps.channelPingCompleted();
                 }
@@ -520,7 +531,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
     // region Package private methods
 
-    int pendingRequestCount() {
+    public int pendingRequestCount() {
         return this.pendingRequests.size();
     }
 
@@ -560,7 +571,9 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
     private RntbdRequestRecord addPendingRequestRecord(final ChannelHandlerContext context, final RntbdRequestRecord record) {
 
-        return this.pendingRequests.compute(record.transportRequestId(), (id, current) -> {
+        logger.info("addPendingRequestRecord start");
+
+        RntbdRequestRecord rntbdRequestRecord =  this.pendingRequests.compute(record.transportRequestId(), (id, current) -> {
 
             reportIssueUnless(current == null, context, "id: {}, current: {}, request: {}", record);
 
@@ -584,6 +597,8 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             return record;
 
         });
+        logger.info("addPendingRequestRecord finish");
+        return rntbdRequestRecord;
     }
 
     private void completeAllPendingRequestsExceptionally(
@@ -709,6 +724,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         if (HttpResponseStatus.OK.code() <= statusCode && statusCode < HttpResponseStatus.MULTIPLE_CHOICES.code()) {
 
             final StoreResponse storeResponse = response.toStoreResponse(this.contextFuture.getNow(null));
+            logger.info("channelRead finish");
             requestRecord.complete(storeResponse);
 
         } else {

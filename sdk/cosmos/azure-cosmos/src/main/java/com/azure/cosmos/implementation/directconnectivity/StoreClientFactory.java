@@ -8,6 +8,8 @@ import com.azure.cosmos.implementation.ConnectionPolicy;
 import com.azure.cosmos.implementation.IAuthorizationTokenProvider;
 import com.azure.cosmos.implementation.SessionContainer;
 import com.azure.cosmos.implementation.UserAgentContainer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 // TODO: DANOBLE: no support for ICommunicationEventSource ask Ji
 //  Links:
@@ -25,6 +27,7 @@ public class StoreClientFactory implements AutoCloseable {
     private final Protocol protocol;
     private final TransportClient transportClient;
     private volatile boolean isClosed;
+    private static final Logger logger = LoggerFactory.getLogger(StoreClientFactory.class);
 
     public StoreClientFactory(
         Configs configs,
@@ -40,7 +43,9 @@ public class StoreClientFactory implements AutoCloseable {
             if (protocol == Protocol.HTTPS) {
                 this.transportClient = new HttpTransportClient(configs, connectionPolicy, userAgent);
             } else if (protocol == Protocol.TCP) {
+                logger.info("RntbdTransportClient() start");
                 this.transportClient = new RntbdTransportClient(configs, connectionPolicy, userAgent);
+                logger.info("RntbdTransportClient() finish");
             } else {
                 throw new IllegalArgumentException(String.format("protocol: %s", this.protocol));
             }

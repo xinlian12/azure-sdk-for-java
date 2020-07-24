@@ -52,13 +52,18 @@ public final class RntbdContextNegotiator extends CombinedChannelDuplexHandler<R
     @Override
     public void write(final ChannelHandlerContext context, final Object message, final ChannelPromise promise) throws Exception {
 
+        logger.info("RntbdContextNegotiator.write start");
         checkArgument(message instanceof ByteBuf, "message: %s", message.getClass());
         final ByteBuf out = (ByteBuf)message;
 
         if (this.manager.hasRntbdContext()) {
+            logger.info("hasRntbdContext is true");
+            logger.info("writeAndFlushFromRntbdContextNegotiator");
             context.writeAndFlush(out, promise);
         } else {
+            logger.info("hasRntbdContext is false");
             if (this.pendingRntbdContextRequest) {
+                logger.info("pendingRntbdContextRequest is true");
                 // Thread safe: netty guarantees that no channel handler methods are called concurrently
                 this.startRntbdContextRequest(context);
                 this.pendingRntbdContextRequest = false;
@@ -77,9 +82,11 @@ public final class RntbdContextNegotiator extends CombinedChannelDuplexHandler<R
         final RntbdContextRequest request = new RntbdContextRequest(Utils.randomUUID(), this.userAgent);
         final CompletableFuture<RntbdContextRequest> contextRequestFuture = this.manager.rntbdContextRequestFuture();
 
+        logger.info("startRntbdContextRequest start");
         super.write(context, request, channel.newPromise().addListener((ChannelFutureListener)future -> {
 
             if (future.isSuccess()) {
+                logger.info("startRntbdContextRequest finish");
                 contextRequestFuture.complete(request);
                 return;
             }

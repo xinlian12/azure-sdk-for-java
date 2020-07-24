@@ -22,6 +22,8 @@ import com.azure.cosmos.models.ThroughputProperties;
 import com.azure.cosmos.util.CosmosPagedFlux;
 import com.azure.cosmos.util.UtilBridgeInternal;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 
@@ -52,6 +54,7 @@ public final class CosmosAsyncClient implements Closeable {
     private final boolean sessionCapturingOverride;
     private final boolean enableTransportClientSharing;
     private final boolean contentResponseOnWriteEnabled;
+    private final static Logger logger = LoggerFactory.getLogger(CosmosAsyncClient.class);
 
     CosmosAsyncClient(CosmosClientBuilder builder) {
         this.configs = builder.configs();
@@ -219,7 +222,10 @@ public final class CosmosAsyncClient implements Closeable {
                 final CosmosException cosmosException = (CosmosException) unwrappedException;
                 if (cosmosException.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
                     return createDatabase(new CosmosDatabaseProperties(database.getId()),
-                        new CosmosDatabaseRequestOptions());
+                        new CosmosDatabaseRequestOptions())
+                        .map(response -> {
+                            return response;
+                        });
                 }
             }
             return Mono.error(unwrappedException);
@@ -269,6 +275,7 @@ public final class CosmosAsyncClient implements Closeable {
      */
     public Mono<CosmosDatabaseResponse> createDatabase(CosmosDatabaseProperties databaseProperties,
                                                        CosmosDatabaseRequestOptions options) {
+        logger.info("createDatabase() start");
         if (options == null) {
             options = new CosmosDatabaseRequestOptions();
         }
@@ -276,7 +283,8 @@ public final class CosmosAsyncClient implements Closeable {
         wrappedDatabase.setId(databaseProperties.getId());
         return asyncDocumentClient.createDatabase(wrappedDatabase, ModelBridgeInternal.toRequestOptions(options))
                    .map(databaseResourceResponse -> ModelBridgeInternal.createCosmosDatabaseResponse(databaseResourceResponse))
-                   .single();
+                   .single()
+            .doOnTerminate(() -> {logger.info("createDatabase() finish");});
     }
 
     /**

@@ -70,9 +70,11 @@ public class GlobalEndpointManager implements AutoCloseable {
     }
 
     public void init() {
+        logger.info("init() start");
         // TODO: add support for openAsync
         // https://msdata.visualstudio.com/CosmosDB/_workitems/edit/332589
         startRefreshLocationTimerAsync(true).block();
+        logger.info("init() finish");
     }
 
     public UnmodifiableList<URI> getReadEndpoints() {
@@ -106,7 +108,8 @@ public class GlobalEndpointManager implements AutoCloseable {
     }
 
     public URI resolveServiceEndpoint(RxDocumentServiceRequest request) {
-        return this.locationCache.resolveServiceEndpoint(request);
+        URI result = this.locationCache.resolveServiceEndpoint(request);
+        return result;
     }
 
     public void markEndpointUnavailableForRead(URI endpoint) {

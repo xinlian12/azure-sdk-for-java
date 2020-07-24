@@ -232,11 +232,13 @@ public final class RntbdMetrics {
     // region Methods
 
     public void markComplete(RntbdRequestRecord requestRecord) {
+        logger.info("markComplete start");
         requestRecord.stop(this.requests, requestRecord.isCompletedExceptionally()
             ? this.responseErrors
             : this.responseSuccesses);
         this.requestSize.record(requestRecord.requestLength());
         this.responseSize.record(requestRecord.responseLength());
+        logger.info("markComplete finish");
     }
 
     @Override

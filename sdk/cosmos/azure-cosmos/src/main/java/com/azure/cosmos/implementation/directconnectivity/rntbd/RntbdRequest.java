@@ -7,6 +7,8 @@ import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.guava27.Strings;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.netty.buffer.ByteBuf;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
 
@@ -21,6 +23,7 @@ public final class RntbdRequest {
     private final RntbdRequestHeaders headers;
     private final byte[] payload;
 
+    private static Logger logger = LoggerFactory.getLogger(RntbdRequest.class);
     private RntbdRequest(final RntbdRequestFrame frame, final RntbdRequestHeaders headers, final byte[] payload) {
 
         checkNotNull(frame, "frame");
@@ -77,6 +80,7 @@ public final class RntbdRequest {
 
     void encode(final ByteBuf out) {
 
+        logger.info("rntbdRequestEncode start");
         final int expectedLength = RntbdRequestFrame.LENGTH + this.headers.computeLength();
         final int start = out.readerIndex();
 
@@ -90,6 +94,7 @@ public final class RntbdRequest {
             out.writeIntLE(this.payload.length);
             out.writeBytes(this.payload);
         }
+        logger.info("rntbdRequestEncode finish");
     }
 
     public static RntbdRequest from(final RntbdRequestArgs args) {

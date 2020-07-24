@@ -403,6 +403,7 @@ class RxGatewayStoreModel implements RxStoreModel {
     }
 
     private void captureSessionToken(RxDocumentServiceRequest request, Map<String, String> responseHeaders) {
+        logger.info("captureSessionToken() start");
         if (request.getResourceType() == ResourceType.DocumentCollection && request.getOperationType() == OperationType.Delete) {
             String resourceId;
             if (request.getIsNameBased()) {
@@ -414,6 +415,7 @@ class RxGatewayStoreModel implements RxStoreModel {
         } else {
             this.sessionContainer.setSessionToken(request, responseHeaders);
         }
+        logger.info("captureSessionToken() finish");
     }
 
     private void applySessionToken(RxDocumentServiceRequest request) {

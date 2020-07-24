@@ -59,13 +59,13 @@ public final class RntbdClientChannelHealthChecker implements ChannelHealthCheck
 
         checkNotNull(config, "expected non-null config");
 
-        checkArgument(config.receiveHangDetectionTimeInNanos() > readHangGracePeriodInNanos,
-            "config.receiveHangDetectionTimeInNanos: %s",
-            config.receiveHangDetectionTimeInNanos());
-
-        checkArgument(config.sendHangDetectionTimeInNanos() > writeHangGracePeriodInNanos,
-            "config.sendHangDetectionTimeInNanos: %s",
-            config.sendHangDetectionTimeInNanos());
+//        checkArgument(config.receiveHangDetectionTimeInNanos() > readHangGracePeriodInNanos,
+//            "config.receiveHangDetectionTimeInNanos: %s",
+//            config.receiveHangDetectionTimeInNanos());
+//
+//        checkArgument(config.sendHangDetectionTimeInNanos() > writeHangGracePeriodInNanos,
+//            "config.sendHangDetectionTimeInNanos: %s",
+//            config.sendHangDetectionTimeInNanos());
 
         this.idleConnectionTimeoutInNanos = config.idleConnectionTimeoutInNanos();
         this.readDelayLimitInNanos = config.receiveHangDetectionTimeInNanos();
@@ -125,6 +125,7 @@ public final class RntbdClientChannelHealthChecker implements ChannelHealthCheck
      */
     public Future<Boolean> isHealthy(final Channel channel) {
 
+        logger.info("isHealthyCheck start");
         checkNotNull(channel, "expected non-null channel");
 
         final RntbdRequestManager requestManager = channel.pipeline().get(RntbdRequestManager.class);
@@ -132,6 +133,8 @@ public final class RntbdClientChannelHealthChecker implements ChannelHealthCheck
 
         if (requestManager == null) {
             reportIssueUnless(logger, !channel.isActive(), channel, "active with no request manager");
+            logger.info("isHealthyCheck finish");
+
             return promise.setSuccess(Boolean.FALSE);
         }
 
@@ -139,6 +142,8 @@ public final class RntbdClientChannelHealthChecker implements ChannelHealthCheck
         final long currentTime = System.nanoTime();
 
         if (currentTime - timestamps.lastChannelReadNanoTime() < recentReadWindowInNanos) {
+            logger.info("isHealthyCheck finish");
+
             return promise.setSuccess(Boolean.TRUE);  // because we recently received data
         }
 
@@ -163,6 +168,8 @@ public final class RntbdClientChannelHealthChecker implements ChannelHealthCheck
                 channel, timestamps.lastChannelWriteAttemptNanoTime(), timestamps.lastChannelWriteNanoTime(),
                 writeDelayInNanos, this.writeDelayLimitInNanos, rntbdContext, pendingRequestCount);
 
+
+            logger.info("isHealthyCheck finish");
             return promise.setSuccess(Boolean.FALSE);
         }
 
@@ -183,11 +190,15 @@ public final class RntbdClientChannelHealthChecker implements ChannelHealthCheck
                 timestamps.lastChannelWriteNanoTime(), timestamps.lastChannelReadNanoTime(), readDelay,
                 this.readDelayLimitInNanos, rntbdContext, pendingRequestCount);
 
+
+            logger.info("isHealthyCheck finish");
             return promise.setSuccess(Boolean.FALSE);
         }
 
         if (this.idleConnectionTimeoutInNanos > 0L) {
             if (currentTime - timestamps.lastChannelReadNanoTime() > this.idleConnectionTimeoutInNanos) {
+
+                logger.info("isHealthyCheck finish");
                 return promise.setSuccess(Boolean.FALSE);
             }
         }
@@ -201,6 +212,8 @@ public final class RntbdClientChannelHealthChecker implements ChannelHealthCheck
             }
         });
 
+
+        logger.info("isHealthyCheck finish");
         return promise;
     }
 

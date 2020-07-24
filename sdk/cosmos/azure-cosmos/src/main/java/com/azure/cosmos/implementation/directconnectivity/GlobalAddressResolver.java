@@ -16,6 +16,8 @@ import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
 import com.azure.cosmos.implementation.http.HttpClient;
 import com.azure.cosmos.implementation.routing.CollectionRoutingMap;
 import com.azure.cosmos.implementation.routing.PartitionKeyRangeIdentity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.concurrent.Queues;
@@ -40,6 +42,7 @@ public class GlobalAddressResolver implements IAddressResolver {
     private final int maxEndpoints;
     private final GatewayServiceConfigurationReader serviceConfigReader;
     final Map<URI, EndpointCache> addressCacheByEndpoint;
+    private final static Logger logger = LoggerFactory.getLogger(GlobalAddressResolver.class);
 
     private GatewayAddressCache gatewayAddressCache;
     private AddressResolver addressResolver;

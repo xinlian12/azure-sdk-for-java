@@ -22,6 +22,8 @@ import com.azure.cosmos.models.ThroughputProperties;
 import com.azure.cosmos.models.ThroughputResponse;
 import com.azure.cosmos.util.CosmosPagedFlux;
 import com.azure.cosmos.util.UtilBridgeInternal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 
@@ -37,6 +39,7 @@ public class CosmosAsyncDatabase {
     private final CosmosAsyncClient client;
     private final String id;
     private final String link;
+    private static final Logger logger = LoggerFactory.getLogger(CosmosAsyncDatabase.class);
 
     CosmosAsyncDatabase(String id, CosmosAsyncClient client) {
         this.id = id;
@@ -79,11 +82,13 @@ public class CosmosAsyncDatabase {
      * the read database or an error.
      */
     public Mono<CosmosDatabaseResponse> read(CosmosDatabaseRequestOptions options) {
+        logger.info("read() start");
         if (options == null) {
             options = new CosmosDatabaseRequestOptions();
         }
         return getDocClientWrapper().readDatabase(getLink(), ModelBridgeInternal.toRequestOptions(options))
-                   .map(response -> ModelBridgeInternal.createCosmosDatabaseResponse(response)).single();
+                   .map(response -> ModelBridgeInternal.createCosmosDatabaseResponse(response)).single()
+            .doOnTerminate(() -> logger.info("read() finish"));
     }
 
     /**

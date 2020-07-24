@@ -15,6 +15,8 @@ import com.azure.cosmos.implementation.RMResources;
 import com.azure.cosmos.implementation.ResourceId;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.models.ModelBridgeInternal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 
@@ -28,6 +30,7 @@ public abstract class RxCollectionCache {
 
     private final AsyncCache<String, DocumentCollection> collectionInfoByNameCache;
     private final AsyncCache<String, DocumentCollection> collectionInfoByIdCache;
+    private final static Logger logger = LoggerFactory.getLogger(RxCollectionCache.class);
 
     protected RxCollectionCache() {
         this.collectionInfoByNameCache = new AsyncCache<>(new CollectionRidComparer());
@@ -42,9 +45,12 @@ public abstract class RxCollectionCache {
      */
     public Mono<Utils.ValueHolder<DocumentCollection>> resolveCollectionAsync(
         MetadataDiagnosticsContext metaDataDiagnosticsContext, RxDocumentServiceRequest request) {
+
         //  Mono Void to represent only terminal events specifically complete and error
         Mono<Void> init = null;
         if (request.getIsNameBased()) {
+            logger.info("nameBasedresolveByPartitionKeyRangeIdentityAsync() start");
+
             if (request.isForceNameCacheRefresh()) {
                 Mono<Void> mono = this.refreshAsync(metaDataDiagnosticsContext, request);
                 init = mono.then(Mono.fromRunnable(() -> request.setForceNameCacheRefresh(false)));
@@ -80,8 +86,9 @@ public abstract class RxCollectionCache {
                 } else {
                     return this.resolveByRidAsync(metaDataDiagnosticsContext, request.requestContext.resolvedCollectionRid, request.properties);
                 }
-            });
+            }).doOnTerminate(() -> logger.info("nameBasedresolveByPartitionKeyRangeIdentityAsync() finish"));
         } else {
+            logger.info("resolveByPartitionKeyRangeIdentityAsync() start");
             return resolveByPartitionKeyRangeIdentityAsync(metaDataDiagnosticsContext, request.getPartitionKeyRangeIdentity(),request.properties)
                 .flatMap(collectionValueHolder -> {
 
@@ -90,7 +97,7 @@ public abstract class RxCollectionCache {
                     }
 
                     return this.resolveByRidAsync(metaDataDiagnosticsContext, request.getResourceAddress(), request.properties);
-                });
+                }).doOnTerminate(() -> logger.info("resolveByPartitionKeyRangeIdentityAsync() finish"));
         }
     }
 

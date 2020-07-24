@@ -171,6 +171,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
             }
         };
 
+        logger.info("Annie: cosmos-rntbd-channel-acquisition-timer:" + config.idleEndpointTimeoutInNanos() +":" + config.requestTimerResolutionInNanos());
         newTimeout(endpoint, config.idleEndpointTimeoutInNanos(), config.requestTimerResolutionInNanos());
 
 //        this.idleStateDetectionScheduledFuture = this.executor.scheduleAtFixedRate(
@@ -394,6 +395,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
         try {
             final EventLoop loop = channel.eventLoop();
             if (loop.inEventLoop()) {
+                logger.info("start release loop");
                 this.releaseChannel(channel, anotherPromise);
             } else {
                 loop.execute(() -> this.releaseChannel(channel, anotherPromise));
@@ -484,7 +486,9 @@ public final class RntbdClientChannelPool implements ChannelPool {
         }
 
         try {
+            logger.info("GetChannelCandidate start");
             Channel candidate = this.pollChannel();
+            logger.info("GetChannelCandidate finish");
 
             if (candidate != null) {
 
@@ -505,6 +509,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
                     // If our connection attempt fails, notifyChannelConnect will call us again
 
                     final Promise<Channel> anotherPromise = this.newChannelPromise(promise);
+                    logger.info("bootstrap.connect start");
                     final ChannelFuture future = this.bootstrap.clone().attr(POOL_KEY, this).connect();
 
                     if (future.isDone()) {
@@ -690,6 +695,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
     private void doChannelHealthCheckOnRelease(final Channel channel, final Promise<Void> promise) {
 
         try {
+            logger.info("doChannelHealthCheckOnRelease start");
             checkState(channel.eventLoop().inEventLoop());
             final Future<Boolean> future = this.healthChecker.isHealthy(channel);
 
@@ -840,6 +846,8 @@ public final class RntbdClientChannelPool implements ChannelPool {
     }
 
     private void notifyChannelConnect(final ChannelFuture future, final Promise<Channel> promise) {
+
+        logger.info("bootstrap.connect finish");
 
         reportIssueUnless(logger, this.connecting.get(), this, "connecting: false");
 
@@ -1008,18 +1016,25 @@ public final class RntbdClientChannelPool implements ChannelPool {
         final Promise<Void> promise,
         final Future<Boolean> future) {
 
+        logger.info("doChannelHealthCheckOnRelease finish");
+        logger.info("releaseAndOfferChannelIfHealthy start");
+
         final boolean isHealthy = future.getNow();
 
         if (isHealthy) {
+            logger.info("");
             // Channel is healthy so...
             if (this.executor.inEventLoop()) {
+                logger.info("in event loop");
                 this.releaseAndOfferChannel(channel, promise);
             } else {
+                logger.info("Not in event loop, release and offer channel");
                 this.executor.submit(() -> this.releaseAndOfferChannel(channel, promise));
             }
         } else {
             // Channel is unhealthy so just close and release it
             try {
+                logger.info("The channel is unhealthy");
                 this.poolHandler.channelReleased(channel);
             } catch (Throwable error) {
                 logger.debug("[{}] pool handler failed due to ", this, error);
@@ -1045,6 +1060,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
      */
     private void releaseChannel(final Channel channel, final Promise<Void> promise) {
 
+        logger.info("start to release channel");
         checkState(channel.eventLoop().inEventLoop());
 
         final ChannelPool pool = channel.attr(POOL_KEY).getAndSet(null);
@@ -1094,6 +1110,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
 
         while (--channelsAvailable >= 0) {
 
+            logger.info("pendingAcquisitions size:" + this.pendingAcquisitions.size());
             final AcquireTask task = this.pendingAcquisitions.poll();
 
             if (task == null) {
@@ -1162,7 +1179,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
          */
         @Override
         public final void operationComplete(Future<Channel> future) {
-
+            logger.info("operationComplete, going to send health check message");
             this.pool.ensureInEventLoop();
 
             if (this.pool.isClosed()) {
@@ -1196,7 +1213,9 @@ public final class RntbdClientChannelPool implements ChannelPool {
                     if (requestManager.hasRequestedRntbdContext()) {
                         this.originalPromise.setSuccess(channel);
                     } else {
+                        logger.info("send RntbdHealthCheckRequest.MESSAGE start");
                         channel.writeAndFlush(RntbdHealthCheckRequest.MESSAGE).addListener(completed -> {
+                            logger.info("send RntbdHealthCheckRequest.MESSAGE finish");
                             if (completed.isSuccess()) {
                                 reportIssueUnless(logger, this.acquired && requestManager.hasRntbdContext(), this,
                                     "acquired: {}, rntbdContext: {}",

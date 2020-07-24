@@ -126,6 +126,7 @@ public class QuorumReader {
         return Flux.defer(
             // the following will be repeated till the repeat().takeUntil(.) condition is satisfied.
             () -> {
+                logger.info("Annie:readStrongAsync");
                 if (entity.requestContext.timeoutHelper.isElapsed()) {
                         return Flux.error(new GoneException());
                 }
@@ -140,12 +141,14 @@ public class QuorumReader {
                         switch (secondaryQuorumReadResult.quorumResult) {
                             case QuorumMet:
                                 try {
+                                    logger.info("Annie:QuorumMet");
                                             return Flux.just(secondaryQuorumReadResult.getResponse());
                                 } catch (CosmosException e) {
                                     return Flux.error(e);
                                 }
 
                             case QuorumSelected:
+                                logger.info("Annie:QuorumSelected");
                                 Mono<RxDocumentServiceRequest> barrierRequestObs = BarrierRequestHelper.createAsync(
                                     entity,
                                     this.authorizationTokenProvider,
@@ -192,6 +195,7 @@ public class QuorumReader {
                                 });
 
                             case QuorumNotSelected:
+                                logger.info("Annie:QuorumNotSelected");
                                 if (hasPerformedReadFromPrimary.v) {
                                     logger.warn("QuorumNotSelected: Primary read already attempted. Quorum could not be selected after retrying on secondaries.");
                                     return Flux.error(new GoneException(RMResources.ReadQuorumNotMet));
@@ -251,11 +255,13 @@ public class QuorumReader {
         int readQuorum,
         boolean includePrimary,
         ReadMode readMode) {
+        logger.info("readQuorumAsync() start");
         if (entity.requestContext.timeoutHelper.isElapsed()) {
             return Mono.error(new GoneException());
         }
 
-        return ensureQuorumSelectedStoreResponse(entity, readQuorum, includePrimary, readMode).flatMap(
+        logger.info("ensureQuorumSelectedStoreResponse() start");
+        return ensureQuorumSelectedStoreResponse(entity, readQuorum, includePrimary, readMode).doOnTerminate(() -> logger.info("ensureQuorumSelectedStoreResponse() finish")).flatMap(
             res -> {
                 if (res.getLeft() != null) {
                     // no need for barrier
@@ -271,6 +277,7 @@ public class QuorumReader {
                 Mono<RxDocumentServiceRequest> barrierRequestObs = BarrierRequestHelper.createAsync(entity, this.authorizationTokenProvider, readLsn, globalCommittedLSN);
                 return barrierRequestObs.flatMap(
                     barrierRequest -> {
+                        logger.info("waitForReadBarrierAsync() start");
                         Mono<Boolean> waitForObs = this.waitForReadBarrierAsync(barrierRequest, false, readQuorum, readLsn, globalCommittedLSN, readMode);
                         return waitForObs.flatMap(
                             waitFor -> {
@@ -292,20 +299,21 @@ public class QuorumReader {
                                     storeResult,
                                     storeResponses));
                             }
-                        );
+                        ).doOnTerminate(() -> logger.info("waitForReadBarrierAsync() finish"));
                     }
                 );
             }
-        );
+        ).doOnTerminate(() -> logger.info("readQuorumAsync() finish"));
     }
 
     private Mono<Pair<ReadQuorumResult, Quadruple<Long, Long, StoreResult, List<String>>>> ensureQuorumSelectedStoreResponse(RxDocumentServiceRequest entity, int readQuorum, boolean includePrimary, ReadMode readMode) {
 
         if (entity.requestContext.quorumSelectedStoreResponse == null) {
+            logger.info("readMultipleReplicaAsync() start");
             Mono<List<StoreResult>> responseResultObs = this.storeReader.readMultipleReplicaAsync(
                 entity, includePrimary, readQuorum, true /*required valid LSN*/, false, readMode);
 
-            return responseResultObs.flatMap(
+            return responseResultObs.doOnTerminate(() -> logger.info("readMultipleReplicaAsync() finish")).flatMap(
                 responseResult -> {
                     List<String> storeResponses = responseResult.stream().map(response -> response.toString()).collect(Collectors.toList());
                     int responseCount = (int) responseResult.stream().filter(response -> response.isValid).count();

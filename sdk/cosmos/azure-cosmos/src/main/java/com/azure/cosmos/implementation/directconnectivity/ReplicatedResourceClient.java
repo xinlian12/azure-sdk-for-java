@@ -156,7 +156,6 @@ public class ReplicatedResourceClient {
 
     private Mono<StoreResponse> invokeAsync(RxDocumentServiceRequest request, TimeoutHelper timeout,
             boolean isInRetry, boolean forceRefresh) {
-
         if (request.getOperationType().equals(OperationType.ExecuteJavaScript)) {
             if (request.isReadOnlyScript()) {
                 return this.consistencyReader.readAsync(request, timeout, isInRetry, forceRefresh);
@@ -166,7 +165,8 @@ public class ReplicatedResourceClient {
         } else if (request.getOperationType().isWriteOperation()) {
             return this.consistencyWriter.writeAsync(request, timeout, forceRefresh);
         } else if (request.isReadOnlyRequest()) {
-            return this.consistencyReader.readAsync(request, timeout, isInRetry, forceRefresh);
+            logger.info("invokeAsync() start");
+            return this.consistencyReader.readAsync(request, timeout, isInRetry, forceRefresh).doOnTerminate(() -> logger.info("invokeAsync() finish"));
         } else {
             throw new IllegalArgumentException(
                     String.format("Unexpected operation type %s", request.getOperationType()));

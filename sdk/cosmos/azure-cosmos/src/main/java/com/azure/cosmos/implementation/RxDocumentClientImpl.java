@@ -202,12 +202,12 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
                          boolean sessionCapturingOverrideEnabled,
                          boolean connectionSharingAcrossClientsEnabled,
                          boolean contentResponseOnWriteEnabled) {
-
         logger.info(
             "Initializing DocumentClient with"
                 + " serviceEndpoint [{}], connectionPolicy [{}], consistencyLevel [{}], directModeProtocol [{}]",
             serviceEndpoint, connectionPolicy, consistencyLevel, configs.getProtocol());
 
+        logger.info("RxDocumentClientImplInternal start");
         this.connectionSharingAcrossClientsEnabled = connectionSharingAcrossClientsEnabled;
         this.configs = configs;
         this.masterKeyOrResourceToken = masterKeyOrResourceToken;
@@ -248,10 +248,13 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             userAgentContainer.setSuffix(userAgentSuffix);
         }
 
+        logger.info("httpClient() start");
         this.reactorHttpClient = httpClient();
+        logger.info("httpClient() finish");
         this.globalEndpointManager = new GlobalEndpointManager(asDatabaseAccountManagerInternal(), this.connectionPolicy, /**/configs);
         this.retryPolicy = new RetryPolicy(this.globalEndpointManager, this.connectionPolicy);
         this.resetSessionTokenRetryPolicy = retryPolicy;
+        logger.info("RxDocumentClientImplInternal finish");
     }
 
     private void initializeGatewayConfigurationReader() {
@@ -268,7 +271,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
     }
 
     public void init() {
-
+        logger.info("init() start");
         // TODO: add support for openAsync
         // https://msdata.visualstudio.com/CosmosDB/_workitems/edit/332589
         this.gatewayProxy = createRxGatewayProxy(this.sessionContainer,
@@ -291,6 +294,8 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
         } else {
             this.initializeDirectConnectivity();
         }
+        logger.info("init() finish");
+
     }
 
     private void initializeDirectConnectivity() {
@@ -496,6 +501,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
     }
 
     private Mono<ResourceResponse<Database>> readDatabaseInternal(String databaseLink, RequestOptions options, DocumentClientRetryPolicy retryPolicyInstance) {
+        logger.info("readDatabaseInternal() start");
         try {
             if (StringUtils.isEmpty(databaseLink)) {
                 throw new IllegalArgumentException("databaseLink");
@@ -510,7 +516,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             if (retryPolicyInstance != null) {
                 retryPolicyInstance.onBeforeSendRequest(request);
             }
-            return this.read(request, retryPolicyInstance).map(response -> toResourceResponse(response, Database.class));
+            return this.read(request, retryPolicyInstance).map(response -> toResourceResponse(response, Database.class)).doOnTerminate(() -> {logger.info("readDatabaseInternal() finish");});
         } catch (Exception e) {
             logger.debug("Failure in reading a database. due to [{}]", e.getMessage(), e);
             return Mono.error(e);

@@ -4,6 +4,8 @@
 package com.azure.cosmos.implementation;
 
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -18,6 +20,7 @@ import static com.azure.cosmos.implementation.Utils.ValueHolder;
  * Used internally to provides helper functions to work with session tokens in the Azure Cosmos DB database service.
  */
 public class SessionTokenHelper {
+    private static final Logger logger = LoggerFactory.getLogger(SessionTokenHelper.class);
 
     public static void setOriginalSessionToken(RxDocumentServiceRequest request, String originalSessionToken) {
         if (request == null) {
@@ -32,6 +35,7 @@ public class SessionTokenHelper {
     }
 
     public static void setPartitionLocalSessionToken(RxDocumentServiceRequest request, ISessionContainer sessionContainer) {
+        logger.info("setPartitionLocalSessionToken() start");
         String originalSessionToken = request.getHeaders().get(HttpConstants.HttpHeaders.SESSION_TOKEN);
         String partitionKeyRangeId = request.requestContext.resolvedPartitionKeyRange.getId();
 
@@ -58,6 +62,7 @@ public class SessionTokenHelper {
             request.getHeaders().put(HttpConstants.HttpHeaders.SESSION_TOKEN,
                                      concatPartitionKeyRangeIdWithSessionToken(partitionKeyRangeId, request.requestContext.sessionToken.convertToString()));
         }
+        logger.info("setPartitionLocalSessionToken() finish");
     }
 
     private static ISessionToken getLocalSessionToken(

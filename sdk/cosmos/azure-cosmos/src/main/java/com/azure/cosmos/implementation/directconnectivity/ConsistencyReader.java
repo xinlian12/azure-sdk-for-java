@@ -172,6 +172,7 @@ public class ConsistencyReader {
                                          TimeoutHelper timeout,
                                          boolean isInRetry,
                                          boolean forceRefresh) {
+        logger.info("readAsync() start");
         if (!isInRetry) {
             if (timeout.isElapsed()) {
                 return Mono.error(new RequestTimeoutException());
@@ -199,7 +200,9 @@ public class ConsistencyReader {
         ValueHolder<Boolean> useSessionToken = ValueHolder.initialize(null);
         ReadMode desiredReadMode;
         try {
+            logger.info("deduceReadMode() start");
             desiredReadMode = this.deduceReadMode(entity, targetConsistencyLevel, useSessionToken);
+            logger.info("deduceReadMode() finish");
         } catch (CosmosException e) {
             return Mono.error(e);
         }
@@ -208,11 +211,13 @@ public class ConsistencyReader {
 
         switch (desiredReadMode) {
             case Primary:
-                return this.readPrimaryAsync(entity, useSessionToken.v);
+                logger.info("readPrimaryAsync() start");
+                return this.readPrimaryAsync(entity, useSessionToken.v).doOnTerminate(() -> {logger.info("readPrimaryAsync() finish"); logger.info("readAsync() finish");});
 
             case Strong:
+                logger.info("readStrongAsync() start");
                 entity.requestContext.performLocalRefreshOnGoneException = true;
-                return this.quorumReader.readStrongAsync(entity, readQuorumValue, desiredReadMode);
+                return this.quorumReader.readStrongAsync(entity, readQuorumValue, desiredReadMode).doOnTerminate(() -> {logger.info("readStrongAsync() finish"); logger.info("readAsync() finish");});
 
             case BoundedStaleness:
                 entity.requestContext.performLocalRefreshOnGoneException = true;
@@ -227,13 +232,15 @@ public class ConsistencyReader {
                 // we always contact two secondary replicas and exclude primary.
                 // However, this model significantly reduces availability and available throughput for serving reads for bounded staleness during reconfiguration.
                 // Therefore, to ensure monotonic read guarantee from any replica set we will just use regular quorum read(R=2) since our write quorum is always majority(W=3)
-                return this.quorumReader.readStrongAsync(entity, readQuorumValue, desiredReadMode);
+                logger.info("readStrongAsync() start");
+                return this.quorumReader.readStrongAsync(entity, readQuorumValue, desiredReadMode).doOnTerminate(() -> {logger.info("readStrongAsync() finish"); logger.info("readAsync() finish");});
 
             case Any:
                 if (targetConsistencyLevel.v == ConsistencyLevel.SESSION) {
-                    return this.readSessionAsync(entity, desiredReadMode);
+                    logger.info("readSessionAsync() start");
+                    return this.readSessionAsync(entity, desiredReadMode).doOnTerminate(() -> {logger.info("readSessionAsync() finish"); logger.info("readAsync() finish");});
                 } else {
-                    return this.readAnyAsync(entity, desiredReadMode);
+                    return this.readAnyAsync(entity, desiredReadMode).doOnTerminate(() -> { logger.info("readAsync() finish");});
                 }
 
             default:
@@ -244,6 +251,7 @@ public class ConsistencyReader {
     private Mono<StoreResponse> readPrimaryAsync(RxDocumentServiceRequest entity,
                                                  boolean useSessionToken) {
 
+        logger.info("readPrimaryAsync() start");
         Mono<StoreResult> responseObs = this.storeReader.readPrimaryAsync(
             entity,
             false /*required valid LSN*/,
@@ -254,11 +262,12 @@ public class ConsistencyReader {
             } catch (CosmosException e) {
                 return Mono.error(e);
             }
-        });
+        }).doOnTerminate(() ->  logger.info("readPrimaryAsync() finish"));
     }
 
     private Mono<StoreResponse> readAnyAsync(RxDocumentServiceRequest entity,
                                              ReadMode readMode) {
+        logger.info("readAnyAsync() start");
         Mono<List<StoreResult>> responsesObs = this.storeReader.readMultipleReplicaAsync(
             entity,
             /* includePrimary */ true,
@@ -279,12 +288,13 @@ public class ConsistencyReader {
                 return Mono.error(e);
             }
                 }
-        );
+        ).doOnTerminate(() -> logger.info("readAnyAsync() finish"));
     }
 
     private Mono<StoreResponse> readSessionAsync(RxDocumentServiceRequest entity,
                                                  ReadMode readMode) {
 
+        logger.info("readSessionAsync() start");
         if (entity.requestContext.timeoutHelper.isElapsed()) {
             return Mono.error(new GoneException());
         }
@@ -328,7 +338,7 @@ public class ConsistencyReader {
             ISessionToken requestSessionToken = entity.requestContext.sessionToken;
             logger.warn("Fail the session read {}, request session token {}", entity.getResourceAddress(), requestSessionToken == null ? "<empty>" : requestSessionToken.convertToString());
             return Mono.error(new NotFoundException(RMResources.ReadSessionNotAvailable, responseHeaders, null));
-        });
+        }).doOnTerminate(() -> logger.info("readSessionAsync() finish"));
     }
 
     ReadMode deduceReadMode(RxDocumentServiceRequest request,

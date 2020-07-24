@@ -98,6 +98,7 @@ public class StoreReader {
             entity.requestContext.cosmosDiagnostics = BridgeInternal.createCosmosDiagnostics();
         }
 
+        logger.info("readMultipleReplicasInternalAsync() start");
         Mono<ReadReplicaResult> readQuorumResultObs = this.readMultipleReplicasInternalAsync(
                 entity, includePrimary, replicaCountToRead, requiresValidLsn, useSessionToken, readMode, checkMinLSN, forceReadAll);
 
@@ -117,7 +118,7 @@ public class StoreReader {
             } else {
                 return Mono.just(readQuorumResult.responses);
             }
-        }).flux().doAfterTerminate(() -> SessionTokenHelper.setOriginalSessionToken(entity, originalSessionToken)).single();
+        }).flux().doOnTerminate(() -> logger.info("readMultipleReplicasInternalAsync() finish")).doAfterTerminate(() -> SessionTokenHelper.setOriginalSessionToken(entity, originalSessionToken)).single();
     }
 
     private Flux<ReadReplicaResult> earlyResultIfNotEnoughReplicas(List<Uri> replicaAddresses,
@@ -198,6 +199,8 @@ public class StoreReader {
                                                            final MutableVolatile<Boolean> hasGoneException,
                                                            boolean enforceSessionCheck,
                                                            final MutableVolatile<ReadReplicaResult> shortCircut) {
+
+
         if (entity.requestContext.timeoutHelper.isElapsed()) {
             return Flux.error(new GoneException());
         }
@@ -226,7 +229,6 @@ public class StoreReader {
         }
 
         replicasToRead.set(readStoreTasks.size() >= replicasToRead.get() ? 0 : replicasToRead.get() - readStoreTasks.size());
-
 
         List<Flux<StoreResult>> storeResult = readStoreTasks
                 .stream()
@@ -365,7 +367,10 @@ public class StoreReader {
                     try {
                         MutableVolatile<ISessionToken> requestSessionToken = new MutableVolatile<>();
                         if (useSessionToken) {
+                            logger.info("setPartitionLocalSessionToken() start");
                             SessionTokenHelper.setPartitionLocalSessionToken(entity, this.sessionContainer);
+                            logger.info("setPartitionLocalSessionToken() finish");
+
                             if (checkMinLSN) {
                                 requestSessionToken.v = entity.requestContext.sessionToken;
                             }
@@ -390,8 +395,10 @@ public class StoreReader {
                                     MutableVolatile<ReadReplicaResult> shortCircuitResult
                                         = new MutableVolatile<>();
 
-                                    return Flux.defer(() ->
-                                                                    readFromReplicas(
+                                    logger.info("readFromReplicas() start");
+
+                                    return Flux.defer(() ->readFromReplicas
+                                                                    (
                                                                             storeResultList,
                                                                             resolveApiResults,
                                                                             replicasToRead,
@@ -428,7 +435,7 @@ public class StoreReader {
                                                                              return Flux.error(e);
                                                 }
                                                                      }
-                                                    ));
+                                                    )).doOnTerminate(() -> logger.info("readFromReplicas() finish"));
                                 }));
                     } catch (Exception e) {
                         return Flux.error(e);
@@ -582,7 +589,6 @@ public class StoreReader {
     private Pair<Mono<StoreResponse>, Uri> readFromStoreAsync(
             Uri physicalAddress,
             RxDocumentServiceRequest request) {
-
         if (request.requestContext.timeoutHelper.isElapsed()) {
             throw new GoneException();
         }
@@ -623,6 +629,7 @@ public class StoreReader {
         switch (request.getOperationType()) {
             case Read:
             case Head: {
+                logger.info("Annie:operationType read");
                 Mono<StoreResponse> storeResponseObs = this.transportClient.invokeResourceOperationAsync(
                         physicalAddress,
                         request);
@@ -636,6 +643,7 @@ public class StoreReader {
             case Query:
             case SqlQuery:
             case ExecuteJavaScript: {
+                logger.info("Annie:operationType readFeed");
                 Mono<StoreResponse> storeResponseObs = StoreReader.completeActivity(this.transportClient.invokeResourceOperationAsync(
                         physicalAddress,
                         request), null);

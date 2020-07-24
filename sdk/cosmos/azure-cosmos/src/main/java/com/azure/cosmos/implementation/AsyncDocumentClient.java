@@ -10,6 +10,8 @@ import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.models.SqlQuerySpec;
 import com.azure.cosmos.implementation.apachecommons.lang.tuple.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -75,6 +77,7 @@ public interface AsyncDocumentClient {
         boolean sessionCapturingOverride;
         boolean transportClientSharing;
         boolean contentResponseOnWriteEnabled;
+        private Logger logger = LoggerFactory.getLogger(Builder.class);
 
         public Builder withServiceEndpoint(String serviceEndpoint) {
             try {
@@ -180,6 +183,7 @@ public interface AsyncDocumentClient {
 
         public AsyncDocumentClient build() {
 
+            logger.info("AsyncDocumentClient.build() start");
             ifThrowIllegalArgException(this.serviceEndpoint == null, "cannot buildAsyncClient client without service endpoint");
             ifThrowIllegalArgException(
                     this.masterKeyOrResourceToken == null && (permissionFeed == null || permissionFeed.isEmpty())
@@ -189,6 +193,7 @@ public interface AsyncDocumentClient {
             ifThrowIllegalArgException(credential != null && StringUtils.isEmpty(credential.getKey()),
                 "cannot buildAsyncClient client without key credential");
 
+            logger.info("newRxDocumentClientImpl() start");
             RxDocumentClientImpl client = new RxDocumentClientImpl(serviceEndpoint,
                 masterKeyOrResourceToken,
                 permissionFeed,
@@ -200,7 +205,13 @@ public interface AsyncDocumentClient {
                 sessionCapturingOverride,
                 transportClientSharing,
                 contentResponseOnWriteEnabled);
+            logger.info("newRxDocumentClientImpl() finish");
+
+
+
+
             client.init();
+            logger.info("AsyncDocumentClient.build() finish");
             return client;
         }
 

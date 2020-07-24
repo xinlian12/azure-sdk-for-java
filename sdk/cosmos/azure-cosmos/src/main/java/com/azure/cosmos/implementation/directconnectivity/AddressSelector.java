@@ -6,6 +6,8 @@ package com.azure.cosmos.implementation.directconnectivity;
 import com.azure.cosmos.implementation.GoneException;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.Strings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
@@ -15,6 +17,7 @@ import java.util.stream.Collectors;
 public class AddressSelector {
     private final IAddressResolver addressResolver;
     private final Protocol protocol;
+    private final static Logger logger = LoggerFactory.getLogger(AddressSelector.class);
 
     public AddressSelector(IAddressResolver addressResolver, Protocol protocol) {
         this.addressResolver = addressResolver;
@@ -65,6 +68,7 @@ public class AddressSelector {
     }
 
     public Mono<List<AddressInformation>> resolveAddressesAsync(RxDocumentServiceRequest request, boolean forceAddressRefresh) {
+        logger.info("resolveAddressesAsync() start");
         Mono<List<AddressInformation>> resolvedAddressesObs =
             (this.addressResolver.resolveAsync(request, forceAddressRefresh))
                 .map(addresses -> Arrays.stream(addresses)
@@ -80,6 +84,6 @@ public class AddressSelector {
                     return resolvedAddresses.stream().filter(AddressInformation::isPublic).collect(Collectors.toList());
                 }
             }
-        );
+        ).doOnTerminate(() -> logger.info("resolveAddressesAsync() finish"));
     }
 }
