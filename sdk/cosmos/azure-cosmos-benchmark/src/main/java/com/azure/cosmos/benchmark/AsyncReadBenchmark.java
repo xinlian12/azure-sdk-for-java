@@ -52,22 +52,30 @@ class AsyncReadBenchmark extends AsyncBenchmark<PojoizedJson> {
 
     @Override
     protected void performWorkload(BaseSubscriber<PojoizedJson> baseSubscriber, long i) throws InterruptedException {
+
+        concurrencyControlSemaphore.acquire();
+        Mono.delay(Duration.ofSeconds(1)).doOnNext(t -> {
+            performWorkloadInternal(baseSubscriber, i);
+        }).subscribe();
+    }
+
+    protected void performWorkloadInternal(BaseSubscriber<PojoizedJson> baseSubscriber, long i) {
         int index = (int) (i % docsToRead.size());
         PojoizedJson doc = docsToRead.get(index);
 
         String partitionKeyValue = doc.getId();
-        Mono<PojoizedJson> result = Mono.delay(Duration.ofSeconds(1)).then(cosmosAsyncContainer.readItem(doc.getId(),
+        Mono<PojoizedJson> result = cosmosAsyncContainer.readItem(doc.getId(),
             new PartitionKey(partitionKeyValue),
-            PojoizedJson.class).map(CosmosItemResponse::getItem));
-
-        concurrencyControlSemaphore.acquire();
+            PojoizedJson.class).map(CosmosItemResponse::getItem);
 
         if (configuration.getOperationType() == Configuration.Operation.ReadThroughput) {
             result.subscribeOn(Schedulers.parallel()).subscribe(baseSubscriber);
         } else {
             LatencySubscriber<PojoizedJson> latencySubscriber = new LatencySubscriber<>(baseSubscriber);
-            latencySubscriber.context = latency.time();
             result.subscribeOn(Schedulers.parallel()).subscribe(latencySubscriber);
+            latencySubscriber.context = latency.time();
         }
+
     }
+
 }
