@@ -78,12 +78,12 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
                     if (this.lastRetryWithException != null) {
                         logger.warn(
                                 "Received gone exception after backoff/retry including at least one RetryWithException. "
-                                        + "Will fail the request with RetryWithException. GoneException: {}. RetryWithException: {}",
-                                exception, this.lastRetryWithException);
+                                        + "Will fail the request with RetryWithException {}. GoneException: {}. RetryWithException: {}",
+                                request.getActivityId(), exception, this.lastRetryWithException);
                         exceptionToThrow = this.lastRetryWithException;
                     } else {
-                        logger.warn("Received gone exception after backoff/retry. Will fail the request. {}",
-                                exception.toString());
+                        logger.warn("Received gone exception after backoff/retry. Will fail the request. {} {}",
+                                request.getActivityId(), exception.toString());
                         exceptionToThrow = BridgeInternal.createServiceUnavailableException(exception);
                     }
                 } else if (exception instanceof PartitionKeyRangeGoneException) {
@@ -112,8 +112,8 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
                         exceptionToThrow = BridgeInternal.createServiceUnavailableException(exception);
                     }
                 } else {
-                    logger.warn("Received retrywith exception after backoff/retry. Will fail the request. {}",
-                            exception.toString());
+                    logger.warn("Received retry with exception after backoff/retry. Will fail the request. {} {}",
+                            request.getActivityId(), exception.toString());
                 }
                 stopStopWatch(this.durationTimer);
                 return Mono.just(ShouldRetryResult.error(exceptionToThrow));
@@ -121,7 +121,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
             backoffTime = Duration.ofSeconds(Math.min(Math.min(this.currentBackoffSeconds, remainingSeconds),
                     GoneAndRetryWithRetryPolicy.MAXIMUM_BACKOFF_TIME_IN_SECONDS));
             this.currentBackoffSeconds *= GoneAndRetryWithRetryPolicy.BACK_OFF_MULTIPLIER;
-            logger.info("BackoffTime: {} seconds.", backoffTime.getSeconds());
+            logger.info("BackoffTime {} : {} seconds.", request.getActivityId(), backoffTime.getSeconds());
         }
 
         // Calculate the remaining time based after accounting for the backoff that we
@@ -130,7 +130,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
         timeout = timeoutInMillSec > 0 ? Duration.ofMillis(timeoutInMillSec)
                 : Duration.ofSeconds(GoneAndRetryWithRetryPolicy.MAXIMUM_BACKOFF_TIME_IN_SECONDS);
         if (exception instanceof GoneException) {
-            logger.info("Received gone exception, will retry, {}", exception.toString());
+            logger.info("Received gone exception, will retry, {} {}", request.getActivityId(), exception.toString());
             forceRefreshAddressCache = true; // indicate we are in retry.
         } else if (exception instanceof PartitionIsMigratingException) {
             logger.warn("Received PartitionIsMigratingException, will retry, {}", exception.toString());
@@ -167,7 +167,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
             this.request.forcePartitionKeyRangeRefresh = true;
             forceRefreshAddressCache = false;
         } else {
-            logger.warn("Received retrywith exception, will retry, {}", exception);
+            logger.warn("Received retry with exception, will retry, {} {}", request.getActivityId(), exception);
             // For RetryWithException, prevent the caller
             // from refreshing any caches.
             forceRefreshAddressCache = false;

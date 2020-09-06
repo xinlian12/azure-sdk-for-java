@@ -12,6 +12,7 @@ import com.azure.cosmos.implementation.HttpConstants.SubStatusCodes;
 import com.azure.cosmos.implementation.RequestTimeline;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.UserAgentContainer;
+import com.azure.cosmos.implementation.directconnectivity.WFConstants.BackendHeaders;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdConnectionEvent;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdConnectionStateListener;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdEndpoint;
@@ -46,8 +47,6 @@ import java.util.Locale;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-
-import com.azure.cosmos.implementation.directconnectivity.WFConstants.BackendHeaders;
 
 import static com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdReporter.reportIssue;
 import static com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdReporter.reportIssueUnless;
@@ -271,10 +270,12 @@ public final class RntbdTransportClient extends TransportClient {
                             "expected ClosedChannelException or IOException, not ",
                             cause);
                         event = RntbdConnectionEvent.READ_FAILURE;
+                        logger.info("READ_FAILURE: " + record.activityId() + ": " + record.takeTimelineSnapshot());
                     }
 
-                    logger.warn("connection to {} lost due to {} event caused by ",
+                    logger.warn("connection to {} {} lost due to {} event caused by ",
                         endpoint.remoteURI(),
+                        record.activityId(),
                         event,
                         cause);
 
@@ -291,8 +292,8 @@ public final class RntbdTransportClient extends TransportClient {
                         event = null;
                     } else {
                         logger.warn(
-                            "dropping connection to {} because the service is being discontinued or reconfigured",
-                            endpoint.remoteURI());
+                            "dropping connection to {} because the service is being discontinued or reconfigured {}",
+                            endpoint.remoteURI(), record.activityId());
                         event = RntbdConnectionEvent.READ_EOF;
                     }
                 }

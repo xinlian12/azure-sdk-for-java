@@ -17,6 +17,8 @@ import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdAddressCach
 import com.azure.cosmos.implementation.http.HttpClient;
 import com.azure.cosmos.implementation.routing.CollectionRoutingMap;
 import com.azure.cosmos.implementation.routing.PartitionKeyRangeIdentity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.concurrent.Queues;
@@ -28,12 +30,12 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class GlobalAddressResolver implements AddressResolverExtension {
 
+    private final static Logger logger = LoggerFactory.getLogger(GlobalAddressResolver.class);
     private final static int MaxBackupReadRegions = 3;
     final Map<URI, EndpointCache> addressCacheByEndpoint;
     private final RxCollectionCache collectionCache;
@@ -111,6 +113,8 @@ public class GlobalAddressResolver implements AddressResolverExtension {
                     final PartitionKeyRangeIdentity partitionKeyRangeIdentity = token.getPartitionKeyRangeIdentity();
 
                     if (partitionKeyRangeIdentity != null) {
+                        logger.info("Remove address from cache " + partitionKeyRangeIdentity + " : " + request.getActivityId());
+
                         addressCache.removeAddresses(partitionKeyRangeIdentity);
                     }
                 }

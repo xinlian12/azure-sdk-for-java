@@ -21,6 +21,7 @@ import com.azure.cosmos.implementation.PartitionKeyRangeGoneException;
 import com.azure.cosmos.implementation.Paths;
 import com.azure.cosmos.implementation.PathsHelper;
 import com.azure.cosmos.implementation.RMResources;
+import com.azure.cosmos.implementation.RequestVerb;
 import com.azure.cosmos.implementation.ResourceType;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.RxDocumentServiceResponse;
@@ -34,7 +35,6 @@ import com.azure.cosmos.implementation.http.HttpHeaders;
 import com.azure.cosmos.implementation.http.HttpRequest;
 import com.azure.cosmos.implementation.http.HttpResponse;
 import com.azure.cosmos.implementation.routing.PartitionKeyRangeIdentity;
-import com.azure.cosmos.implementation.RequestVerb;
 import io.netty.handler.codec.http.HttpMethod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +47,6 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -413,6 +412,7 @@ public class GatewayAddressCache implements IAddressCache {
         Mono<List<Pair<PartitionKeyRangeIdentity, AddressInformation[]>>> addressInfos =
                 addressResponse.map(
                     addresses -> {
+                        logger.info("Refresh address for " + partitionKeyRangeId + " : " + request.getActivityId() + ": " + addresses);
                         if (logger.isDebugEnabled()) {
                             logger.debug("addresses from getServerAddressesViaGatewayAsync in getAddressesForRangeId {}",
                                 JavaStreamUtils.info(addresses));

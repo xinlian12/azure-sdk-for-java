@@ -50,8 +50,8 @@ public class RntbdConnectionStateListener {
         checkNotNull(endpoint, "expected non-null endpoint");
         checkNotNull(request, "expected non-null request");
 
-        if (logger.isDebugEnabled()) {
-            logger.debug("onConnectionEvent({\"event\":{},\"time\":{},\"endpoint\":{},\"request\":{})",
+        if (logger.isInfoEnabled()) {
+            logger.info("onConnectionEvent({\"event\":{},\"time\":{},\"endpoint\":{},\"request\":{})",
                 RntbdObjectMapper.toJson(event),
                 RntbdObjectMapper.toJson(time),
                 RntbdObjectMapper.toJson(endpoint),
