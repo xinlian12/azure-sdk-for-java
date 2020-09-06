@@ -62,7 +62,7 @@ public final class ConnectionPolicy {
     public ConnectionPolicy(DirectConnectionConfig directConnectionConfig) {
         this(ConnectionMode.DIRECT);
         this.connectTimeout = directConnectionConfig.getConnectTimeout();
-        this.enableTcpConnectionEndpointRediscovery = directConnectionConfig.getEnableConnectionEndpointRediscovery();
+        this.enableTcpConnectionEndpointRediscovery = true;
         this.idleTcpConnectionTimeout = directConnectionConfig.getIdleConnectionTimeout();
         this.idleTcpEndpointTimeout = directConnectionConfig.getIdleEndpointTimeout();
         this.maxConnectionsPerEndpoint = directConnectionConfig.getMaxConnectionsPerEndpoint();

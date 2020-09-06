@@ -121,7 +121,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
             backoffTime = Duration.ofSeconds(Math.min(Math.min(this.currentBackoffSeconds, remainingSeconds),
                     GoneAndRetryWithRetryPolicy.MAXIMUM_BACKOFF_TIME_IN_SECONDS));
             this.currentBackoffSeconds *= GoneAndRetryWithRetryPolicy.BACK_OFF_MULTIPLIER;
-            logger.info("BackoffTime: {} seconds.", backoffTime.getSeconds());
+            logger.info("BackoffTime: {} seconds.", backoffTime.getSeconds() + ": " + request.getActivityId());
         }
 
         // Calculate the remaining time based after accounting for the backoff that we
@@ -130,7 +130,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
         timeout = timeoutInMillSec > 0 ? Duration.ofMillis(timeoutInMillSec)
                 : Duration.ofSeconds(GoneAndRetryWithRetryPolicy.MAXIMUM_BACKOFF_TIME_IN_SECONDS);
         if (exception instanceof GoneException) {
-            logger.info("Received gone exception, will retry, {}", exception.toString());
+            logger.info("Received gone exception, {} will retry, {}", request.getActivityId(), exception.toString());
             forceRefreshAddressCache = true; // indicate we are in retry.
         } else if (exception instanceof PartitionIsMigratingException) {
             logger.warn("Received PartitionIsMigratingException, will retry, {}", exception.toString());
@@ -167,7 +167,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
             this.request.forcePartitionKeyRangeRefresh = true;
             forceRefreshAddressCache = false;
         } else {
-            logger.warn("Received retrywith exception, will retry, {}", exception);
+            logger.warn("Received retry with exception, will retry, {}", exception);
             // For RetryWithException, prevent the caller
             // from refreshing any caches.
             forceRefreshAddressCache = false;

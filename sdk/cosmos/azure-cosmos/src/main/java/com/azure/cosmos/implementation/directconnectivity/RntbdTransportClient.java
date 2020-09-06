@@ -12,6 +12,7 @@ import com.azure.cosmos.implementation.HttpConstants.SubStatusCodes;
 import com.azure.cosmos.implementation.RequestTimeline;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.UserAgentContainer;
+import com.azure.cosmos.implementation.directconnectivity.WFConstants.BackendHeaders;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdConnectionEvent;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdConnectionStateListener;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdEndpoint;
@@ -47,9 +48,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.azure.cosmos.implementation.directconnectivity.WFConstants.BackendHeaders;
-
-import static com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdConnectionStateListener.UpdateStrategy;
 import static com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdReporter.reportIssue;
 import static com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdReporter.reportIssueUnless;
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkArgument;
@@ -207,6 +205,7 @@ public final class RntbdTransportClient extends TransportClient {
 
         final RntbdRequestArgs requestArgs = new RntbdRequestArgs(request, address);
         final RntbdEndpoint endpoint = this.endpointProvider.get(address);
+        //logger.info("start to send request: " + request.getActivityId());
         final RntbdRequestRecord record = endpoint.request(requestArgs);
 
         if (this.connectionStateListener != null) {
@@ -271,6 +270,7 @@ public final class RntbdTransportClient extends TransportClient {
                             "expected ClosedChannelException or IOException, not ",
                             cause);
                         event = RntbdConnectionEvent.READ_FAILURE;
+                        logger.info("READ_FAILURE: " + request.getActivityId() + ": " + record.takeTimelineSnapshot());
                     }
 
                     logger.warn("connection to {} lost due to {} event caused by ",

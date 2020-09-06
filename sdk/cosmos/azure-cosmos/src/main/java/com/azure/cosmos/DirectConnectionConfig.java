@@ -34,7 +34,7 @@ public final class DirectConnectionConfig {
      */
     public DirectConnectionConfig() {
         this.connectTimeout = DEFAULT_CONNECT_TIMEOUT;
-        this.enableConnectionEndpointRediscovery = false;
+        this.enableConnectionEndpointRediscovery = true;
         this.idleConnectionTimeout = Duration.ZERO;
         this.idleEndpointTimeout = DEFAULT_IDLE_ENDPOINT_TIMEOUT;
         this.maxConnectionsPerEndpoint = DEFAULT_MAX_CONNECTIONS_PER_ENDPOINT;

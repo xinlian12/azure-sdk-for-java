@@ -21,6 +21,7 @@ import com.azure.cosmos.implementation.PartitionKeyRangeGoneException;
 import com.azure.cosmos.implementation.Paths;
 import com.azure.cosmos.implementation.PathsHelper;
 import com.azure.cosmos.implementation.RMResources;
+import com.azure.cosmos.implementation.RequestVerb;
 import com.azure.cosmos.implementation.ResourceType;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.RxDocumentServiceResponse;
@@ -34,7 +35,6 @@ import com.azure.cosmos.implementation.http.HttpHeaders;
 import com.azure.cosmos.implementation.http.HttpRequest;
 import com.azure.cosmos.implementation.http.HttpResponse;
 import com.azure.cosmos.implementation.routing.PartitionKeyRangeIdentity;
-import com.azure.cosmos.implementation.RequestVerb;
 import io.netty.handler.codec.http.HttpMethod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +47,6 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -221,8 +220,8 @@ public class GatewayAddressCache implements IAddressCache {
         return addressesObs.map(
                 addressesValueHolder -> {
                     if (notAllReplicasAvailable(addressesValueHolder.v)) {
-                        if (logger.isDebugEnabled()) {
-                            logger.debug("not all replicas available {}", JavaStreamUtils.info(addressesValueHolder.v));
+                        if (logger.isInfoEnabled()) {
+                            logger.info(request.getActivityId() + " not all replicas available {}", JavaStreamUtils.info(addressesValueHolder.v));
                         }
                         this.suboptimalServerPartitionTimestamps.putIfAbsent(partitionKeyRangeIdentity, Instant.now());
                     }
@@ -417,6 +416,7 @@ public class GatewayAddressCache implements IAddressCache {
                             logger.debug("addresses from getServerAddressesViaGatewayAsync in getAddressesForRangeId {}",
                                 JavaStreamUtils.info(addresses));
                         }
+                        logger.info("refresh address : " + request.getActivityId() + ":" + partitionKeyRangeId + ": " + addresses.toString());
                         return addresses.stream().filter(addressInfo ->
                                                              this.protocolScheme.equals(addressInfo.getProtocolScheme()))
                                    .collect(Collectors.groupingBy(
