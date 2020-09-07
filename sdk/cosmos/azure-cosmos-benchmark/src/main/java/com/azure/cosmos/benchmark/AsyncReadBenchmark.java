@@ -3,17 +3,16 @@
 
 package com.azure.cosmos.benchmark;
 
+import com.azure.cosmos.implementation.guava25.base.Stopwatch;
 import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.PartitionKey;
 import com.codahale.metrics.Timer;
-import org.apache.commons.lang3.RandomUtils;
 import org.reactivestreams.Subscription;
 import reactor.core.publisher.BaseSubscriber;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 class AsyncReadBenchmark extends AsyncBenchmark<PojoizedJson> {
 
@@ -58,9 +57,14 @@ class AsyncReadBenchmark extends AsyncBenchmark<PojoizedJson> {
         PojoizedJson doc = docsToRead.get(index);
         String partitionKeyValue = doc.getId();
 
-        Mono<PojoizedJson> result = cosmosAsyncContainer.readItem(doc.getId(),
-            new PartitionKey(partitionKeyValue),
-            PojoizedJson.class).map(CosmosItemResponse::getItem);
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        Mono<PojoizedJson> result = cosmosAsyncContainer.readItem(doc.getId(), new PartitionKey(partitionKeyValue), PojoizedJson.class)
+            .doOnNext(itemResponse -> {
+                stopwatch.stop();
+                if (stopwatch.elapsed(TimeUnit.SECONDS) > 2) {
+                    logger.info(itemResponse.getActivityId() + ":"  + stopwatch.elapsed(TimeUnit.SECONDS) + ":" + itemResponse.getDiagnostics());
+                }
+            }).map(CosmosItemResponse::getItem);
 
         concurrencyControlSemaphore.acquire();
 
