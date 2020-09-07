@@ -234,6 +234,7 @@ Licensed under the MIT License.
                 <include>org.apache.logging.log4j:log4j-api:[2.13.3]</include> <!-- {x-include-update;org.apache.logging.log4j:log4j-api;external_dependency} -->
                 <include>org.apache.logging.log4j:log4j-core:[2.13.3]</include> <!-- {x-include-update;org.apache.logging.log4j:log4j-core;external_dependency} -->
                 <include>org.apache.logging.log4j:log4j-slf4j-impl:[2.13.3]</include> <!-- {x-include-update;org.apache.logging.log4j:log4j-slf4j-impl;external_dependency} -->
+                <include>org.mpierce.metrics.reservoir:hdrhistogram-metrics-reservoir:[1.1.0]</include> <!-- {x-include-update;org.mpierce.metrics.reservoir:hdrhistogram-metrics-reservoir;external_dependency} -->
               </includes>
             </bannedDependencies>
           </rules>
