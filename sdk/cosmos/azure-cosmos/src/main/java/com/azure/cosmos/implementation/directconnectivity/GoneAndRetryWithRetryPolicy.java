@@ -24,7 +24,7 @@ import java.time.Duration;
 
 public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
     private final static Logger logger = LoggerFactory.getLogger(GoneAndRetryWithRetryPolicy.class);
-    private final static int DEFAULT_WAIT_TIME_IN_SECONDS = 30;
+    private final static int DEFAULT_WAIT_TIME_IN_SECONDS = 0;
     private final static int MAXIMUM_BACKOFF_TIME_IN_SECONDS = 15;
     private final static int INITIAL_BACKOFF_TIME = 1;
     private final static int BACK_OFF_MULTIPLIER = 2;
