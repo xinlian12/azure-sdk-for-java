@@ -171,7 +171,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
              */
             @Override
             public void onTimeout(AcquireTask task) {
-                RntbdClientChannelPool.this.pendingAcquisitions.remove(checkNotNull(task, "expected non-null task"));
+              //  RntbdClientChannelPool.this.pendingAcquisitions.remove(checkNotNull(task, "expected non-null task"));
                 task.promise.setFailure(ACQUISITION_TIMEOUT);
             }
         };
@@ -1303,7 +1303,9 @@ public final class RntbdClientChannelPool implements ChannelPool {
                 if (nanoTime - task.expireNanoTime < 0) {
                     break;
                 }
-                this.pool.pendingAcquisitions.remove();
+
+                this.pool.pendingAcquisitions.remove(checkNotNull(task, "expected non-null task"));
+                // this.pool.pendingAcquisitions.remove();
                 try {
                     this.onTimeout(task);
                 } catch (Throwable error) {
