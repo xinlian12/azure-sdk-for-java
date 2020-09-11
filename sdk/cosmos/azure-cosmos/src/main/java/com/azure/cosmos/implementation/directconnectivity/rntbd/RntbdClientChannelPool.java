@@ -152,12 +152,15 @@ public final class RntbdClientChannelPool implements ChannelPool {
         //  The metric is redundant in the scope of this class and should be pulled up to RntbdServiceEndpoint or
         //  entirely removed.
 
-        this.acquisitionTimeoutInNanos = config.connectionAcquisitionTimeoutInNanos();
+        this.acquisitionTimeoutInNanos = Duration.ofSeconds(2).toNanos();
+        // config.connectionAcquisitionTimeoutInNanos();
         this.allocatorMetric = config.allocator().metric();
         this.maxChannels = config.maxChannelsPerEndpoint();
         this.maxRequestsPerChannel = config.maxRequestsPerChannel();
 
         this.maxPendingAcquisitions = Integer.MAX_VALUE;
+        // TODO: Annie: What is a good value?
+        // this.maxPendingAcquisitions = 10;
         this.releaseHealthCheck = true;
 
         this.acquisitionTimeoutTask = acquisitionTimeoutInNanos <= 0 ? null : new AcquireTimeoutTask(this) {
