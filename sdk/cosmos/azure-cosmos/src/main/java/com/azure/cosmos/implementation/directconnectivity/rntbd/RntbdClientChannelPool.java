@@ -846,7 +846,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
             }
 
         } else {
-            this.connecting.set(false);
+           // this.connecting.set(false);
             promise.tryFailure(future.cause());
         }
     }
