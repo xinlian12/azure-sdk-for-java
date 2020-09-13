@@ -301,6 +301,14 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
                 requestArgs.replicaPath()
             );
 
+            if (requestRecord != null && requestRecord.args() != null &&
+                requestRecord.args().serviceRequest() != null) {
+
+                logger.warn("GONE EXCEPTION for {} with ResourceId {}",
+                    requestRecord.args().serviceRequest().getResourceAddress(),
+                    requestRecord.args().serviceRequest().getResourceId());
+            }
+
             BridgeInternal.setRequestHeaders(goneException, requestArgs.serviceRequest().getHeaders());
             requestRecord.completeExceptionally(goneException);
         }

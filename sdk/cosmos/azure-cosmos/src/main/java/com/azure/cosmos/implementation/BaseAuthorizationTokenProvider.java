@@ -6,6 +6,8 @@ package com.azure.cosmos.implementation;
 import com.azure.core.credential.AzureKeyCredential;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.models.ModelBridgeInternal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
@@ -26,6 +28,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class BaseAuthorizationTokenProvider implements AuthorizationTokenProvider {
 
+    private static Logger logger = LoggerFactory.getLogger(BaseAuthorizationTokenProvider.class);
     private static final String AUTH_PREFIX = "type=master&ver=1.0&sig=";
     private final AzureKeyCredential credential;
     private volatile String currentCredentialKey;
@@ -127,6 +130,8 @@ public class BaseAuthorizationTokenProvider implements AuthorizationTokenProvide
             resourceIdOrFullName = resourceIdOrFullName.toLowerCase(Locale.ROOT);
         }
 
+        logger.warn("In AUTH -> for resource {}", resourceIdOrFullName);
+
         // Skipping lower casing of resourceId since it may now contain "ID" of the resource as part of the FullName
         StringBuilder body = new StringBuilder();
         body.append(ModelBridgeInternal.toLower(verb))
@@ -147,6 +152,8 @@ public class BaseAuthorizationTokenProvider implements AuthorizationTokenProvide
         }
 
         body.append('\n');
+
+        logger.warn("In AUTH -> Generating payload: {}", body.toString());
 
         MacPool.ReUsableMac macInstance = getReUseableMacInstance();
 

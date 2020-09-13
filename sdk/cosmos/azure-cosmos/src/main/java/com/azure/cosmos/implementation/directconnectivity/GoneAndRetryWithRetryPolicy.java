@@ -70,6 +70,8 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
         } else if (exception instanceof RetryWithException) {
             this.lastRetryWithException = (RetryWithException) exception;
         }
+
+        logger.warn("GoneAndRetry GOT EXCEPTION for exception", exception);
         long remainingSeconds = this.waitTimeInSeconds - this.durationTimer.getTime() / 1000;
         int currentRetryAttemptCount = this.attemptCount;
         if (this.attemptCount++ > 1) {
