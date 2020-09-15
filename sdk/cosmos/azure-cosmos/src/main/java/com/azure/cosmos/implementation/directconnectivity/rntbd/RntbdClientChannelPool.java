@@ -1047,6 +1047,9 @@ public final class RntbdClientChannelPool implements ChannelPool {
         Channel first;
         do {
             first = this.availableChannels.pollLast();
+            if (first != null && !first.isActive()) {
+                this.closeChannel(first);
+            }
         } while (first != null && !first.isActive());
 
         if (first == null) {
