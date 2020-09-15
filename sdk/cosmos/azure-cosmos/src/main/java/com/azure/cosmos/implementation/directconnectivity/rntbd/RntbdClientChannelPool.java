@@ -556,7 +556,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
             }
 
             // make sure to retrieve the actual channel count to avoid establishing more
-            // TCP connections than allowed. 
+            // TCP connections than allowed.
             final int channelCount = this.channels(false);
 
             if (channelCount < this.maxChannels) {
@@ -1044,7 +1044,10 @@ public final class RntbdClientChannelPool implements ChannelPool {
     private Channel pollChannel() {
         ensureInEventLoop();
 
-        final Channel first = this.availableChannels.pollLast();
+        Channel first;
+        do {
+            first = this.availableChannels.pollLast();
+        } while (first != null && !first.isActive());
 
         if (first == null) {
             return null;  // because there are no available channels
@@ -1054,7 +1057,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
             return first;  // because this.close -> this.close0 -> this.pollChannel
         }
 
-        // Only return channels as servicable here if less than maxPendingRequests 
+        // Only return channels as servicable here if less than maxPendingRequests
         // are queued on them
         if (this.isChannelServiceable(first, false)) {
             return first;
@@ -1067,7 +1070,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
 
             if (next.isActive()) {
 
-                // Only return channels as servicable here if less than maxPendingRequests 
+                // Only return channels as servicable here if less than maxPendingRequests
                 // are queued on them
                 if (this.isChannelServiceable(next, false)) {
                     return next;
@@ -1310,6 +1313,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
 
                     if (!channel.isActive()) {
                         this.fail(CHANNEL_CLOSED_ON_ACQUIRE);
+                        this.pool.closeChannel(channel);
                         return;
                     }
 
