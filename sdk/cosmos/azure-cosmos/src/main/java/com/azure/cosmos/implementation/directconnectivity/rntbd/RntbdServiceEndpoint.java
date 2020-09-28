@@ -394,7 +394,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
 
         } else {
 
-            logger.debug("\n  [{}]\n  {}\n  write failed due to {} ", this, requestArgs, cause);
+            logger.info("\n  [{}]\n  {}\n  write failed due to {} ", this, requestArgs, cause);
             final String reason = cause.toString();
 
             final GoneException goneException = new GoneException(

@@ -282,6 +282,8 @@ public final class RntbdTransportClient extends TransportClient {
                 final Throwable cause = error.getCause();
                 final RntbdConnectionEvent event;
 
+                logger.info("connectionStateListener: " + record.activityId() + ":" + record.takeTimelineSnapshot() + ": " + cause);
+
                 if (cause != null) {
 
                     // GoneException was produced by the client, not the server
@@ -337,7 +339,7 @@ public final class RntbdTransportClient extends TransportClient {
                     exception.getResponseHeaders().put(BackendHeaders.SUB_STATUS, DISCONTINUING_SERVICE);
                 }
             }
-            
+
             assert error instanceof CosmosException;
             CosmosException cosmosException = (CosmosException) error;
             BridgeInternal.setServiceEndpointStatistics(cosmosException, record.serviceEndpointStatistics());

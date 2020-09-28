@@ -293,6 +293,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         //  https://msdata.visualstudio.com/CosmosDB/_workitems/edit/373213
 
         this.traceOperation(context, "exceptionCaught", cause);
+        logger.info("{}\n{}\n{}", "exceptionCaught", context, cause);
 
         if (!this.closingExceptionally) {
             this.completeAllPendingRequestsExceptionally(context, cause);
