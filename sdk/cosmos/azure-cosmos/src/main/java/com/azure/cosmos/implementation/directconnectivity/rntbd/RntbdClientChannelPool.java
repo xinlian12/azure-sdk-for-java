@@ -680,6 +680,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
             this.addTaskToPendingAcquisitionQueue(promise);
 
         } catch (Throwable cause) {
+            logger.warn("Acquire channel failed: " + cause);
             promise.tryFailure(cause);
         }
     }
@@ -1122,6 +1123,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
             }
         }
 
+        logger.warn("Channel is not healthy, close the channel");
         if (this.executor.inEventLoop()) {
             this.closeChannel(channel);
             this.acquireChannel(promise);

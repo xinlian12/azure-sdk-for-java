@@ -3,6 +3,8 @@
 
 package com.azure.cosmos.benchmark;
 
+import com.azure.cosmos.ConnectionMode;
+import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.benchmark.ctl.AsyncCtlWorkload;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.ParameterException;
@@ -21,6 +23,19 @@ public class Main {
             LOGGER.debug("Parsing the arguments ...");
             Configuration cfg = new Configuration();
             cfg.tryGetValuesFromSystem();
+            cfg.setConnectionMode(ConnectionMode.DIRECT);
+            cfg.setConsistencyLevel(ConsistencyLevel.EVENTUAL);
+//            cfg.setServiceEndpoint("https://cosmos-sdk-tests.documents.azure.com:443/");
+//            cfg.setMasterKey("hoTaUW11OCQ16P4Qp7tUM3C4xk20vTQZbh0eSTZHwTPyAQNMwlYqim63ltJJLuhUeDLC081r34vHOn8PHlGmug==");
+//            cfg.setServiceEndpoint("https://localhost:8081");
+//            cfg.setMasterKey("C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==");
+            cfg.setServiceEndpoint("https://danoble-test33-southeastasia.documents-test.windows-int.net:443/");
+            cfg.setMasterKey("SiHB8Ju2iZapiyG1i7wqelbGn0FlJs9SCsw1sap9J3zJcV59HiaiTgONFElv0Ob21TDKkiKNUcU17ZQyVdSkAQ==");
+            cfg.setCollectionId("testCollection2");
+            cfg.setDatabaseId("testdb2");
+            cfg.setOperation(Configuration.Operation.ReadLatency);
+            cfg.setConcurrency(2);
+            cfg.setNumberOfOperations(1000000000);
 
             JCommander jcommander = new JCommander(cfg, args);
             if (cfg.isHelp()) {
