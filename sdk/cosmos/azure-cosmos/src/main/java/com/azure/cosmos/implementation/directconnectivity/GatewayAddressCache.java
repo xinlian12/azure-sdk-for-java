@@ -54,6 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class GatewayAddressCache implements IAddressCache {
@@ -69,6 +70,7 @@ public class GatewayAddressCache implements IAddressCache {
     private final URI addressEndpoint;
 
     private final AsyncCache<PartitionKeyRangeIdentity, AddressInformation[]> serverPartitionAddressCache;
+    private final ConcurrentHashMap<PartitionKeyRangeIdentity, Boolean> serverPartitionAddressCacheForceRefresh;
     private final ConcurrentHashMap<PartitionKeyRangeIdentity, Instant> suboptimalServerPartitionTimestamps;
     private final long suboptimalPartitionForceRefreshIntervalInSeconds;
 
@@ -79,6 +81,7 @@ public class GatewayAddressCache implements IAddressCache {
     private final HttpClient httpClient;
 
     private volatile Pair<PartitionKeyRangeIdentity, AddressInformation[]> masterPartitionAddressCache;
+    private volatile AtomicBoolean masterPartitionAddressCacheForceRefresh;
     private volatile Instant suboptimalMasterPartitionTimestamp;
 
     public GatewayAddressCache(
@@ -98,7 +101,9 @@ public class GatewayAddressCache implements IAddressCache {
         this.tokenProvider = tokenProvider;
         this.serviceEndpoint = serviceEndpoint;
         this.serverPartitionAddressCache = new AsyncCache<>();
+        this.serverPartitionAddressCacheForceRefresh = new ConcurrentHashMap<>();
         this.suboptimalServerPartitionTimestamps = new ConcurrentHashMap<>();
+        this.masterPartitionAddressCacheForceRefresh = new AtomicBoolean(false);
         this.suboptimalMasterPartitionTimestamp = Instant.MAX;
 
         this.suboptimalPartitionForceRefreshIntervalInSeconds = suboptimalPartitionForceRefreshIntervalInSeconds;
@@ -137,14 +142,19 @@ public class GatewayAddressCache implements IAddressCache {
 
 
     @Override
-    public void removeAddresses(final PartitionKeyRangeIdentity partitionKeyRangeIdentity) {
+    public void removeAddress(final PartitionKeyRangeIdentity partitionKeyRangeIdentity) {
 
         Objects.requireNonNull(partitionKeyRangeIdentity, "expected non-null partitionKeyRangeIdentity");
 
         if (partitionKeyRangeIdentity.getPartitionKeyRangeId().equals(PartitionKeyRange.MASTER_PARTITION_KEY_RANGE_ID)) {
+           // this.masterPartitionAddressCacheForceRefresh.set(true);
             this.masterPartitionAddressCache = null;
         } else {
             this.serverPartitionAddressCache.remove(partitionKeyRangeIdentity);
+           // this.serverPartitionAddressCacheForceRefresh.put(partitionKeyRangeIdentity, true);
+            if (logger.isDebugEnabled()) {
+                logger.debug("Removed partitionKeyRangeIdentity cache {}", partitionKeyRangeIdentity);
+            }
         }
     }
 
@@ -195,6 +205,10 @@ public class GatewayAddressCache implements IAddressCache {
             }
         }
 
+//        if (this.serverPartitionAddressCacheForceRefresh.get(partitionKeyRangeIdentity)) {
+//            forceRefreshPartitionAddresses = true;
+//        }
+
         final boolean forceRefreshPartitionAddressesModified = forceRefreshPartitionAddresses;
 
         if (forceRefreshPartitionAddressesModified) {
@@ -208,6 +222,7 @@ public class GatewayAddressCache implements IAddressCache {
                             true));
 
             this.suboptimalServerPartitionTimestamps.remove(partitionKeyRangeIdentity);
+           // this.serverPartitionAddressCacheForceRefresh.remove(partitionKeyRangeIdentity);
         }
 
         Mono<Utils.ValueHolder<AddressInformation[]>> addressesObs = this.serverPartitionAddressCache.getAsync(

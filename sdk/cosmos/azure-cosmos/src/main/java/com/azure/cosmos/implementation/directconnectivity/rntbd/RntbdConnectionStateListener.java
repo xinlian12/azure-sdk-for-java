@@ -3,18 +3,21 @@
 
 package com.azure.cosmos.implementation.directconnectivity.rntbd;
 
+import com.azure.cosmos.implementation.GoneException;
+import com.azure.cosmos.implementation.ReplicaReconfigurationException;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
-import com.azure.cosmos.implementation.apachecommons.collections.list.UnmodifiableList;
-import com.azure.cosmos.implementation.directconnectivity.AddressResolverExtension;
+import com.azure.cosmos.implementation.directconnectivity.IAddressResolver;
+import com.azure.cosmos.implementation.routing.PartitionKeyRangeIdentity;
+import io.netty.channel.ConnectTimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.SocketAddress;
-import java.time.Duration;
+import java.io.IOException;
+import java.nio.channels.ClosedChannelException;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
 
@@ -24,96 +27,151 @@ public class RntbdConnectionStateListener {
 
     private static final Logger logger = LoggerFactory.getLogger(RntbdConnectionStateListener.class);
 
-    private final AddressResolverExtension addressResolver;
-    private final ConcurrentHashMap<SocketAddress, Set<RntbdAddressCacheToken>> partitionAddressCache;
-    private final ConcurrentHashMap<SocketAddress, Instant> addressCacheUpdateTimestamp;
-    private final int addressCacheRefreshIntervalInSeconds = 5; // TODO: Annie: does this needed?
-
+    private final IAddressResolver addressResolver;
+    private final RntbdEndpoint endpoint;
+    private final Set<PartitionKeyRangeIdentity> partitionAddressCache;
+    private final AtomicBoolean updatingAddressCache = new AtomicBoolean(false);
 
     // endregion
 
     // region Constructors
 
-    public RntbdConnectionStateListener(final AddressResolverExtension addressResolver) {
-        this.addressResolver = checkNotNull(addressResolver, "expected non-null addressResolver");;
-        this.partitionAddressCache = new ConcurrentHashMap<>();
-        this.addressCacheUpdateTimestamp = new ConcurrentHashMap<>();
+    public RntbdConnectionStateListener(final IAddressResolver addressResolver, final RntbdEndpoint endpoint) {
+        this.addressResolver = checkNotNull(addressResolver, "expected non-null addressResolver");
+        this.endpoint = checkNotNull(endpoint, "expected non-null endpoint");
+        this.partitionAddressCache = ConcurrentHashMap.newKeySet();
     }
 
     // endregion
 
     // region Methods
 
-    public void onConnectionEvent(
-        final RntbdConnectionEvent event,
-        final Instant time,
-        final RntbdEndpoint endpoint,
-        final RxDocumentServiceRequest request) {
+    public void onException(final RxDocumentServiceRequest request, final Throwable exception) {
+        checkNotNull(request, "expect non-null request");
+        checkNotNull(exception, "expect non-null error");
 
-        checkNotNull(event, "expected non-null event");
-        checkNotNull(time,"expected non-null time" );
-        checkNotNull(endpoint, "expected non-null endpoint");
-        checkNotNull(request, "expected non-null request");
+        if (exception instanceof ReplicaReconfigurationException) {
+            logger.warn(
+                "dropping connection to {} because the service is being discontinued or reconfigured {}",
+                endpoint.remoteURI(),
+                request.getActivityId());
 
-        if (logger.isDebugEnabled()) {
-            logger.debug("onConnectionEvent({\"event\":{},\"time\":{},\"endpoint\":{},\"request\":{})",
-                RntbdObjectMapper.toJson(event),
-                RntbdObjectMapper.toJson(time),
-                RntbdObjectMapper.toJson(endpoint),
-                RntbdObjectMapper.toJson(request));
+            this.onConnectionEvent(RntbdConnectionEvent.REPLICA_RECONFIG, request, exception);
+            return;
         }
 
-        if (event == RntbdConnectionEvent.READ_EOF || event == RntbdConnectionEvent.READ_FAILURE || event == RntbdConnectionEvent.REPLICA_RECONFIG) {
-            this.updateAddressCache(endpoint, request);
+        // TODO : Annie: Or should we just check WebExceptionUtility.isNetworkFailure(exception)?
+        // ConnectionTimeout exception does not necessary mean the server is in upgrade, should we aggressively remove the address?
+        if (exception instanceof GoneException) {
+            final Throwable cause = exception.getCause();
+            if (cause != null) {
+                // GoneException was produced by the client, not the server
+                //
+                // This could occur when:
+                //
+                // * an operation fails due to an IOException which indicates a connection reset by the server,
+                // * a channel closes unexpectedly because the server stopped taking requests, or
+                // * an error was detected by the transport client (e.g., IllegalStateException)
+                // * a request timed out in pending acquisition queue
+                // * a request failed fast in admission control layer due to high load
+                //
+                // We only consider the following scenario which might relates to replica movement.
+                final Class<?> type = cause.getClass();
+
+                if (type == ClosedChannelException.class) {
+                    this.onConnectionEvent(RntbdConnectionEvent.READ_EOF, request, cause);
+                } else if (type == ConnectTimeoutException.class || type == IOException.class) {
+                    this.onConnectionEvent(RntbdConnectionEvent.READ_FAILURE, request, cause); // aggressive
+                } else{
+                    return;
+                }
+
+                logger.warn("connection to {} {} lost caused by {}", request.getActivityId(), endpoint.remoteURI(), cause);
+            }
         }
     }
 
-    public void updateConnectionState(final RntbdEndpoint endpoint, final RxDocumentServiceRequest request) {
-        this.updatePartitionAddressCache(new RntbdAddressCacheToken(this.addressResolver, endpoint, request));
+    public void updateConnectionState(final RxDocumentServiceRequest request) {
+
+        checkNotNull("expect non-null request");
+
+        PartitionKeyRangeIdentity partitionKeyRangeIdentity = this.getPartitionKeyRangeIdentity(request);
+        checkNotNull(partitionKeyRangeIdentity, "expected non-null partitionKeyRangeIdentity");
+
+        this.partitionAddressCache.add(partitionKeyRangeIdentity);
+
+        if (logger.isDebugEnabled()) {
+            logger.debug(
+                "updateConnectionState({\"time\":{},\"endpoint\":{},\"partitionKeyRangeIdentity\":{}})",
+                RntbdObjectMapper.toJson(Instant.now()),
+                RntbdObjectMapper.toJson(endpoint),
+                RntbdObjectMapper.toJson(partitionKeyRangeIdentity));
+        }
     }
 
     // endregion
 
     // region Privates
 
-    @SuppressWarnings("unchecked")
-    private void updateAddressCache(final RntbdEndpoint endpoint, final RxDocumentServiceRequest request) {
-        this.addressCacheUpdateTimestamp.compute(endpoint.remoteAddress(), (address, timestamp) -> {
-            boolean shouldRemoveAddressCache = false;
+    private PartitionKeyRangeIdentity getPartitionKeyRangeIdentity(final RxDocumentServiceRequest request) {
+        checkNotNull(request, "expect non-null request");
 
-            if (timestamp == null) {
-                shouldRemoveAddressCache = true;
-            } else {
-                shouldRemoveAddressCache = Duration.between(timestamp, Instant.now()).getSeconds() >= addressCacheRefreshIntervalInSeconds;
-            }
+        PartitionKeyRangeIdentity partitionKeyRangeIdentity = request.getPartitionKeyRangeIdentity();
 
-            if (shouldRemoveAddressCache) {
-                this.partitionAddressCache.computeIfPresent(endpoint.remoteAddress(), (remoteAddress, tokens) -> {
-                    this.addressResolver.remove(request, new UnmodifiableList<>(new ArrayList<>(tokens)));
-                    return null;
-                });
+        if (partitionKeyRangeIdentity == null) {
 
-                return Instant.now();
-            } else {
-                return timestamp == null ? Instant.now() : timestamp;
-            }
-        });
+            final String partitionKeyRange = checkNotNull(
+                request.requestContext.resolvedPartitionKeyRange, "expected non-null resolvedPartitionKeyRange").getId();
 
+            final String collectionRid = request.requestContext.resolvedCollectionRid;
 
+            partitionKeyRangeIdentity = collectionRid != null
+                ? new PartitionKeyRangeIdentity(collectionRid, partitionKeyRange)
+                : new PartitionKeyRangeIdentity(partitionKeyRange);
+        }
+
+        return partitionKeyRangeIdentity;
     }
 
-    private void updatePartitionAddressCache(final RntbdAddressCacheToken addressCacheToken) {
+    private void onConnectionEvent(final RntbdConnectionEvent event, final RxDocumentServiceRequest request, final Throwable exception) {
 
-        logger.debug("Adding addressCacheToken {} to partitionAddressCache", addressCacheToken);
+        checkNotNull(event, "expected non-null event");
+        checkNotNull(request, "expected non-null exception");
+        checkNotNull(exception, "expected non-null exception");
 
-        this.partitionAddressCache.compute(addressCacheToken.getRemoteAddress(), (address, tokens) -> {
-            if (tokens == null) {
-                tokens = ConcurrentHashMap.newKeySet();
+        if (!this.endpoint.isClosed()) {
+
+            if (logger.isDebugEnabled()) {
+                logger.debug("onConnectionEvent({\"event\":{},\"time\":{},\"endpoint\":{},\"cause\":{})",
+                    RntbdObjectMapper.toJson(event),
+                    RntbdObjectMapper.toJson(Instant.now()),
+                    RntbdObjectMapper.toJson(this.endpoint),
+                    RntbdObjectMapper.toJson(exception));
             }
-            tokens.add(addressCacheToken);
-            return tokens;
-        });
+
+            this.updateAddressCache(request);
+        }
     }
 
+    private void updateAddressCache(final RxDocumentServiceRequest request) {
+        try{
+            if (this.updatingAddressCache.compareAndSet(false, true)) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug(
+                        "updateAddressCache ({\"time\":{},\"endpoint\":{},\"partitionAddressCache\":{}})",
+                        RntbdObjectMapper.toJson(Instant.now()),
+                        RntbdObjectMapper.toJson(this.endpoint),
+                        RntbdObjectMapper.toJson(this.partitionAddressCache));
+                }
+
+                // TODO: should we remove address? What if gateway has issue? Cache change about reusing old value will not work.
+                // TODO : Annie: Should we close channel/close endpoint here?
+                this.addressResolver.remove(request, this.partitionAddressCache);
+                this.partitionAddressCache.clear();
+            }
+        } finally {
+            this.updatingAddressCache.set(false);
+        }
+    }
     // endregion
 }

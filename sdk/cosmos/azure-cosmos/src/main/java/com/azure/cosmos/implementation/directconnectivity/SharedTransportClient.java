@@ -29,7 +29,7 @@ public class SharedTransportClient extends TransportClient {
     private static final AtomicInteger counter = new AtomicInteger(0);
     private static SharedTransportClient sharedTransportClient;
 
-    public static TransportClient getOrCreateInstance(Protocol protocol, Configs configs, ConnectionPolicy connectionPolicy, UserAgentContainer userAgent, AddressResolverExtension addressResolver) {
+    public static TransportClient getOrCreateInstance(Protocol protocol, Configs configs, ConnectionPolicy connectionPolicy, UserAgentContainer userAgent, IAddressResolver addressResolver) {
         synchronized (SharedTransportClient.class) {
             if (sharedTransportClient == null) {
                 assert counter.get() == 0;
@@ -51,7 +51,7 @@ public class SharedTransportClient extends TransportClient {
         Configs configs,
         ConnectionPolicy connectionPolicy,
         UserAgentContainer userAgent,
-        AddressResolverExtension addressResolver) {
+        IAddressResolver addressResolver) {
 
         if (protocol == Protocol.TCP) {
             this.transportClient = new RntbdTransportClient(configs, connectionPolicy, userAgent, addressResolver);

@@ -850,7 +850,8 @@ public class TestSuiteBase extends CosmosAsyncClientTest {
 
     @DataProvider
     public static Object[][] clientBuilders() {
-        return new Object[][]{{createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null, true)}};
+        return new Object[][]{{createDirectRxDocumentClient(ConsistencyLevel.SESSION, Protocol.TCP, false, null, true)}};
+
     }
 
     @DataProvider

@@ -15,7 +15,7 @@ public interface IAddressCache {
      *
      *
      */
-    void removeAddresses(PartitionKeyRangeIdentity partitionKeyRangeIdentity);
+    void removeAddress(PartitionKeyRangeIdentity partitionKeyRangeIdentity);
 
     /**
      * Resolves physical addresses by either PartitionKeyRangeIdentity.

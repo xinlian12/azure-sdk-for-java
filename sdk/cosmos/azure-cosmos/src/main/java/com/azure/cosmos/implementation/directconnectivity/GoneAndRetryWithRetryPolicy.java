@@ -117,6 +117,9 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
                 : Duration.ofSeconds(GoneAndRetryWithRetryPolicy.MAXIMUM_BACKOFF_TIME_IN_SECONDS);
         if (exception instanceof GoneException) {
             logger.info("Received gone exception, will retry, {}", exception.toString());
+
+            // TODO: Annie: for IOException, ClosedChannelException, ConnectTimeoutException, should force refresh be false?
+            // TODO: if cache has been removed, flag in requestContext?
             forceRefreshAddressCache = true; // indicate we are in retry.
         } else if (exception instanceof PartitionIsMigratingException) {
             logger.warn("Received PartitionIsMigratingException, will retry, {}", exception.toString());
@@ -154,7 +157,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
             forceRefreshAddressCache = false;
         } else if (exception instanceof ReplicaReconfigurationException) {
             logger.info("Received replica reconfigured exception, will retry, {}", exception.toString());
-            // ConnectionStateListener.onConnectionEvent will be called to remove staled address cache when replicaReconfigurationException happened.
+            // TODO: ConnectionStateListener.onConnectionEvent will be called to remove staled address cache when replicaReconfigurationException happened.
             forceRefreshAddressCache = false;
         }
         else {

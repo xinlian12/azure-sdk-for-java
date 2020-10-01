@@ -180,10 +180,12 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
                 try {
                     this.messageReceived(context, (RntbdResponse) message);
                 } catch (CorruptedFrameException error) {
+                    logger.warn("CorruptedFrameException exceptionCaught");
                     this.exceptionCaught(context, error);
                 } catch (Throwable throwable) {
                     reportIssue(context, "{} ", message, throwable);
                     this.exceptionCaught(context, throwable);
+                    logger.warn("throwable exceptionCaught");
                 }
 
             } else {
@@ -298,7 +300,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
         if (!this.closingExceptionally) {
             this.completeAllPendingRequestsExceptionally(context, cause);
-            logger.debug("{} closing due to:", context, cause);
+            logger.info("{} closing due to:", context, cause);
             context.flush().close();
         }
     }
@@ -673,6 +675,8 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             final Map<String, String> requestHeaders = record.args().serviceRequest().getHeaders();
             final String requestUri = record.args().physicalAddress().toString();
 
+
+            logger.warn("exception caught for  {} cause {}", record.args().activityId(), cause);
             final GoneException error = new GoneException(message, cause, (Map<String, String>) null, requestUri);
             BridgeInternal.setRequestHeaders(error, requestHeaders);
 
@@ -772,8 +776,6 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
                             break;
                         case SubStatusCodes.REPLICA_RECONFIGURATION:
                             cause = new ReplicaReconfigurationException(error, lsn, partitionKeyRangeId, responseHeaders);
-                            // TODO: should we just short cut all pending requests to throw gone exception with the same cause?
-                            this.exceptionCaught(context, cause);
                             break;
                         default:
                             cause = new GoneException(error, lsn, partitionKeyRangeId, responseHeaders);

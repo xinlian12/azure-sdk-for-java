@@ -736,7 +736,7 @@ public final class RntbdTransportClientTest {
             throw new AssertionError(String.format("%s: %s", error.getClass(), error.getMessage()));
         }
 
-        return new RntbdTransportClient(new FakeEndpoint.Provider(options, sslContext, expected), null);
+        return new RntbdTransportClient(new FakeEndpoint.Provider(options, sslContext, expected, null));
     }
 
     private void validateFailure(final Mono<? extends StoreResponse> responseMono, final FailureValidator validator) {
@@ -977,13 +977,15 @@ public final class RntbdTransportClientTest {
             final Config config;
             final RntbdResponse expected;
             final RntbdRequestTimer timer;
+            final IAddressResolver addressResolver;
 
-            Provider(RntbdTransportClient.Options options, SslContext sslContext, RntbdResponse expected) {
+            Provider(RntbdTransportClient.Options options, SslContext sslContext, RntbdResponse expected, IAddressResolver addressResolver) {
                 this.config = new Config(options, sslContext, LogLevel.WARN);
                 this.timer = new RntbdRequestTimer(
                     config.requestTimeoutInNanos(),
                     config.requestTimerResolutionInNanos());
                 this.expected = expected;
+                this.addressResolver = addressResolver;
             }
 
             @Override
@@ -1004,6 +1006,11 @@ public final class RntbdTransportClientTest {
             @Override
             public int evictions() {
                 return 0;
+            }
+
+            @Override
+            public IAddressResolver getAddressResolver() {
+                return this.addressResolver;
             }
 
             @Override

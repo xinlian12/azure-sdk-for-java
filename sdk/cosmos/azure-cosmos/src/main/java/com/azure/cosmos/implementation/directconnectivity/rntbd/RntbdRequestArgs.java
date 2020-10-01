@@ -119,10 +119,7 @@ public final class RntbdRequestArgs {
     }
 
     public void traceOperation(
-        final Logger logger,
-        final ChannelHandlerContext context,
-        final String operationName,
-        final Object... args) {
+        final Logger logger, final ChannelHandlerContext context, final String operationName, final Object... args) {
 
         checkNotNull(logger, "expected non-null logger");
 

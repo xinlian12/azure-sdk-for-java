@@ -8,14 +8,9 @@ import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.implementation.Configs;
 import com.azure.cosmos.implementation.ConnectionPolicy;
 import com.azure.cosmos.implementation.GoneException;
-import com.azure.cosmos.implementation.HttpConstants.SubStatusCodes;
-import com.azure.cosmos.implementation.ReplicaReconfigurationException;
 import com.azure.cosmos.implementation.RequestTimeline;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.UserAgentContainer;
-import com.azure.cosmos.implementation.directconnectivity.rntbd.FailFastRntbdRequestRecord;
-import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdConnectionEvent;
-import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdConnectionStateListener;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdEndpoint;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdObjectMapper;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdRequestArgs;
@@ -30,7 +25,6 @@ import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import io.micrometer.core.instrument.Tag;
-import io.netty.channel.ConnectTimeoutException;
 import io.netty.handler.ssl.SslContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,9 +37,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.nio.channels.ClosedChannelException;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.concurrent.CompletionException;
@@ -64,7 +56,6 @@ public final class RntbdTransportClient extends TransportClient {
 
     // region Fields
 
-    private static final String DISCONTINUING_SERVICE = Integer.toString(SubStatusCodes.DISCONTINUING_SERVICE);
     private static final String TAG_NAME = RntbdTransportClient.class.getSimpleName();
 
     private static final AtomicLong instanceCount = new AtomicLong();
@@ -94,7 +85,6 @@ public final class RntbdTransportClient extends TransportClient {
         };
 
     private final AtomicBoolean closed = new AtomicBoolean();
-    private final RntbdConnectionStateListener connectionStateListener;
     private final RntbdEndpoint.Provider endpointProvider;
     private final long id;
     private final Tag tag;
@@ -116,19 +106,16 @@ public final class RntbdTransportClient extends TransportClient {
         final Configs configs,
         final ConnectionPolicy connectionPolicy,
         final UserAgentContainer userAgent,
-        final AddressResolverExtension addressResolver) {
+        final IAddressResolver addressResolver) {
 
         this(
             new Options.Builder(connectionPolicy).userAgent(userAgent).build(),
             configs.getSslContext(),
-            addressResolver == null ? null : new RntbdConnectionStateListener(addressResolver));
+            addressResolver);
     }
 
-    RntbdTransportClient(
-        final RntbdEndpoint.Provider endpointProvider,
-        final RntbdConnectionStateListener connectionStateListener) {
+    RntbdTransportClient(final RntbdEndpoint.Provider endpointProvider) {
 
-        this.connectionStateListener = connectionStateListener;
         this.endpointProvider = endpointProvider;
         this.id = instanceCount.incrementAndGet();
         this.tag = RntbdTransportClient.tag(this.id);
@@ -137,16 +124,13 @@ public final class RntbdTransportClient extends TransportClient {
     RntbdTransportClient(
         final Options options,
         final SslContext sslContext,
-        final RntbdConnectionStateListener connectionStateListener) {
-
-        this.connectionStateListener = checkNotNull(options, "expected non-null options").connectionEndpointRediscoveryEnabled
-            ? checkNotNull( connectionStateListener, "expected non-null connectionStateListener")
-            : null;
+        final IAddressResolver addressResolver) {
 
         this.endpointProvider = new RntbdServiceEndpoint.Provider(
             this,
             options,
-            checkNotNull(sslContext, "expected non-null sslContext"));
+            checkNotNull(sslContext, "expected non-null sslContext"),
+            addressResolver);
 
         this.id = instanceCount.incrementAndGet();
         this.tag = RntbdTransportClient.tag(this.id);
@@ -236,11 +220,6 @@ public final class RntbdTransportClient extends TransportClient {
 
         final Context reactorContext = Context.of(KEY_ON_ERROR_DROPPED, onErrorDropHookWithReduceLogLevel);
 
-        if (this.connectionStateListener != null &&
-            !(record instanceof FailFastRntbdRequestRecord)) {
-            this.connectionStateListener.updateConnectionState(endpoint, request);
-        }
-
         final Mono<StoreResponse> result = Mono.fromFuture(record.whenComplete((response, throwable) -> {
             record.stage(RntbdRequestRecord.Stage.COMPLETED);
 
@@ -279,53 +258,6 @@ public final class RntbdTransportClient extends TransportClient {
                     error instanceof Exception ? (Exception) error : new RuntimeException(error));
             }
 
-            if (this.connectionStateListener != null) {
-                RntbdConnectionEvent event = null;
-
-                if (error instanceof ReplicaReconfigurationException) {
-                    event = RntbdConnectionEvent.REPLICA_RECONFIG;
-                }
-                else if (error instanceof GoneException) {
-                    final Throwable cause = error.getCause();
-
-                    if (cause != null) {
-                        // GoneException was produced by the client, not the server
-                        //
-                        // This will occur when:
-                        //
-                        // * an operation fails due to an IOException which indicates a connection reset by the server,
-                        // * a channel closes unexpectedly because the server stopped taking requests, or
-                        // * an error was detected by the transport client (e.g., IllegalStateException)
-                        // * a request timed out in pending acquisition queue
-                        // * a request failed fast in admission control layer due to high load
-                        //
-                        // We only consider the following scenario which might relates to replica movement.
-                        final Class<?> type = cause.getClass();
-
-                        if (type == ClosedChannelException.class) {
-                            event = RntbdConnectionEvent.READ_EOF;
-                        } else if (type == IOException.class || type == ConnectTimeoutException.class) {
-                            // TODO: Annie: when these two exceptions happens, should endpoint.close() ?
-                            event = RntbdConnectionEvent.READ_FAILURE;
-                        }
-
-                        if (logger.isDebugEnabled()) {
-                            if (event == RntbdConnectionEvent.READ_EOF || event == RntbdConnectionEvent.READ_FAILURE) {
-                                logger.debug(
-                                    "connection to {} lost due to {} event caused by ",
-                                    endpoint.remoteURI(),
-                                    event,
-                                    cause);
-                            }
-                        }
-                    }
-                }
-
-                if (event != null && !(endpoint.isClosed() || this.isClosed())) {
-                    this.connectionStateListener.onConnectionEvent(event, Instant.now(), endpoint, request);
-                }
-            }
-
             assert error instanceof CosmosException;
             CosmosException cosmosException = (CosmosException) error;
             BridgeInternal.setServiceEndpointStatistics(cosmosException, record.serviceEndpointStatistics());
@@ -336,6 +268,7 @@ public final class RntbdTransportClient extends TransportClient {
             BridgeInternal.setRequestTimeline(cosmosException, record.takeTimelineSnapshot());
             BridgeInternal.setRntbdPendingRequestQueueSize(cosmosException, record.pendingRequestQueueSize());
             BridgeInternal.setChannelTaskQueueSize(cosmosException, record.channelTaskQueueLength());
+
 
             return cosmosException;
         });
@@ -559,10 +492,6 @@ public final class RntbdTransportClient extends TransportClient {
             return this.connectionAcquisitionTimeout;
         }
 
-        public boolean isConnectionEndpointRediscoveryEnabled() {
-            return this.connectionEndpointRediscoveryEnabled;
-        }
-
         public Duration connectTimeout() {
             return this.connectTimeout;
         }
@@ -577,6 +506,10 @@ public final class RntbdTransportClient extends TransportClient {
 
         public Duration idleEndpointTimeout() {
             return this.idleEndpointTimeout;
+        }
+
+        public boolean isConnectionEndpointRediscoveryEnabled() {
+            return this.connectionEndpointRediscoveryEnabled;
         }
 
         public int maxBufferCapacity() {

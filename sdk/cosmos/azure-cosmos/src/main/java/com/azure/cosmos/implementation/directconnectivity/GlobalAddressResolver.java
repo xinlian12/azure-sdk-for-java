@@ -13,7 +13,6 @@ import com.azure.cosmos.implementation.UserAgentContainer;
 import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.caches.RxCollectionCache;
 import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
-import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdAddressCacheToken;
 import com.azure.cosmos.implementation.http.HttpClient;
 import com.azure.cosmos.implementation.routing.CollectionRoutingMap;
 import com.azure.cosmos.implementation.routing.PartitionKeyRangeIdentity;
@@ -28,10 +27,11 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-public class GlobalAddressResolver implements AddressResolverExtension {
+public class GlobalAddressResolver implements IAddressResolver {
 
     private final static int MaxBackupReadRegions = 3;
     private final GlobalEndpointManager endpointManager;
@@ -78,11 +78,6 @@ public class GlobalAddressResolver implements AddressResolverExtension {
         }
     }
 
-    @Override
-    public URI getAddressResolverURI(RxDocumentServiceRequest rxDocumentServiceRequest) {
-        return this.endpointManager.resolveServiceEndpoint(rxDocumentServiceRequest);
-    }
-
     Mono<Void> openAsync(DocumentCollection collection) {
         Mono<Utils.ValueHolder<CollectionRoutingMap>> routingMap = this.routingMapProvider.tryLookupAsync(null, collection.getId(), null, null);
         return routingMap.flatMap(collectionRoutingMap -> {
@@ -104,28 +99,18 @@ public class GlobalAddressResolver implements AddressResolverExtension {
     }
 
     @Override
-    public void remove(final RxDocumentServiceRequest request, final List<RntbdAddressCacheToken> tokens) {
+    public void remove(final RxDocumentServiceRequest request, final Set<PartitionKeyRangeIdentity> partitionKeyRangeIdentitySet) {
 
-        Objects.requireNonNull(request, "expected non-null addressResolverURI");
-        Objects.requireNonNull(tokens, "expected non-null tokens");
+        Objects.requireNonNull(request, "expected non-null request");
+        Objects.requireNonNull(partitionKeyRangeIdentitySet, "expected non-null partitionKeyRangeIdentitySet");
 
-        URI addressResolverURI = this.getAddressResolverURI(request);
+        if (partitionKeyRangeIdentitySet.size() > 0) {
 
-        if (tokens.size() > 0) {
+            URI addressResolverURI = this.endpointManager.resolveServiceEndpoint(request);;
 
             this.addressCacheByEndpoint.computeIfPresent(addressResolverURI, (ignored, endpointCache) -> {
-
                 final GatewayAddressCache addressCache = endpointCache.addressCache;
-
-                for (RntbdAddressCacheToken token : tokens) {
-
-                    final PartitionKeyRangeIdentity partitionKeyRangeIdentity = token.getPartitionKeyRangeIdentity();
-
-                    if (partitionKeyRangeIdentity != null) {
-                        addressCache.removeAddresses(partitionKeyRangeIdentity);
-                    }
-                }
-
+                partitionKeyRangeIdentitySet.forEach(partitionKeyRangeIdentity -> addressCache.removeAddress(partitionKeyRangeIdentity));
                 return endpointCache;
             });
         }
