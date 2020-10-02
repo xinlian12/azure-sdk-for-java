@@ -6,10 +6,8 @@ package com.azure.cosmos.benchmark;
 import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.PartitionKey;
 import com.codahale.metrics.Timer;
-import org.apache.commons.lang3.RandomUtils;
 import org.reactivestreams.Subscription;
 import reactor.core.publisher.BaseSubscriber;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -54,13 +52,18 @@ class AsyncReadBenchmark extends AsyncBenchmark<PojoizedJson> {
 
     @Override
     protected void performWorkload(BaseSubscriber<PojoizedJson> baseSubscriber, long i) throws InterruptedException {
+
+        if (i > 1) {
+            return;
+        }
+
         int index = (int) (i % docsToRead.size());
         PojoizedJson doc = docsToRead.get(index);
         String partitionKeyValue = doc.getId();
 
         Mono<PojoizedJson> result = cosmosAsyncContainer.readItem(doc.getId(),
             new PartitionKey(partitionKeyValue),
-            PojoizedJson.class).map(CosmosItemResponse::getItem);
+            PojoizedJson.class).map(CosmosItemResponse::getItem).delayElement(Duration.ofSeconds(1));
 
         concurrencyControlSemaphore.acquire();
 

@@ -237,8 +237,8 @@ public class GatewayAddressCache implements IAddressCache {
         return addressesObs.map(
             addressesValueHolder -> {
                 if (notAllReplicasAvailable(addressesValueHolder.v)) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("not all replicas available {}", JavaStreamUtils.info(addressesValueHolder.v));
+                    if (logger.isInfoEnabled()) {
+                        logger.info("not all replicas available {}", JavaStreamUtils.info(addressesValueHolder.v));
                     }
                     this.suboptimalServerPartitionTimestamps.putIfAbsent(partitionKeyRangeIdentity, Instant.now());
                 }
@@ -445,6 +445,7 @@ public class GatewayAddressCache implements IAddressCache {
             boolean forceRefresh) {
         logger.debug("getAddressesForRangeId collectionRid {}, partitionKeyRangeId {}, forceRefresh {}",
             collectionRid, partitionKeyRangeId, forceRefresh);
+
         Mono<List<Address>> addressResponse = this.getServerAddressesViaGatewayAsync(request, collectionRid, Collections.singletonList(partitionKeyRangeId), forceRefresh);
 
         Mono<List<Pair<PartitionKeyRangeIdentity, AddressInformation[]>>> addressInfos =
@@ -454,6 +455,8 @@ public class GatewayAddressCache implements IAddressCache {
                             logger.debug("addresses from getServerAddressesViaGatewayAsync in getAddressesForRangeId {}",
                                 JavaStreamUtils.info(addresses));
                         }
+
+                      //  System.out.println(addresses);
                         return addresses.stream().filter(addressInfo ->
                                                              this.protocolScheme.equals(addressInfo.getProtocolScheme()))
                                    .collect(Collectors.groupingBy(

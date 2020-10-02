@@ -9,7 +9,6 @@ import com.azure.cosmos.implementation.GoneException;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.InvalidPartitionException;
 import com.azure.cosmos.implementation.PartitionIsMigratingException;
-import com.azure.cosmos.implementation.PartitionKeyRangeGoneException;
 import com.azure.cosmos.implementation.PartitionKeyRangeIsSplittingException;
 import com.azure.cosmos.implementation.Quadruple;
 import com.azure.cosmos.implementation.ReplicaReconfigurationException;
@@ -74,41 +73,41 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
         }
         long remainingSeconds = this.waitTimeInSeconds - this.durationTimer.getTime() / 1000;
         int currentRetryAttemptCount = this.attemptCount;
-        if (this.attemptCount++ > 1) {
-            if (remainingSeconds <= 0) {
-                if (exception instanceof GoneException ||
-                    exception instanceof PartitionKeyRangeGoneException ||
-                    exception instanceof InvalidPartitionException ||
-                    exception instanceof ReplicaReconfigurationException) {
-
-                    if (this.lastRetryWithException != null) {
-                        logger.warn(
-                            "Received {} after backoff/retry including at least one RetryWithException. "
-                                + "Will fail the request with RetryWithException. GoneException: {}. RetryWithException: {}",
-                            exception.getClass(),
-                            exception,
-                            this.lastRetryWithException);
-
-                        exceptionToThrow = this.lastRetryWithException;
-                    } else {
-                        logger.warn(
-                            "Received {} after backoff/retry. Will fail the request. {}",
-                            exception.getClass(),
-                            exception.toString());
-                        exceptionToThrow = BridgeInternal.createServiceUnavailableException(exception);
-                    }
-                } else {
-                    logger.warn("Received retry with exception after backoff/retry. Will fail the request. {}",
-                            exception.toString());
-                }
-                stopStopWatch(this.durationTimer);
-                return Mono.just(ShouldRetryResult.error(exceptionToThrow));
-            }
-            backoffTime = Duration.ofSeconds(Math.min(Math.min(this.currentBackoffSeconds, remainingSeconds),
-                    GoneAndRetryWithRetryPolicy.MAXIMUM_BACKOFF_TIME_IN_SECONDS));
-            this.currentBackoffSeconds *= GoneAndRetryWithRetryPolicy.BACK_OFF_MULTIPLIER;
-            logger.info("BackoffTime: {} seconds.", backoffTime.getSeconds());
-        }
+//        if (this.attemptCount++ > 1) {
+//            if (remainingSeconds <= 0) {
+//                if (exception instanceof GoneException ||
+//                    exception instanceof PartitionKeyRangeGoneException ||
+//                    exception instanceof InvalidPartitionException ||
+//                    exception instanceof ReplicaReconfigurationException) {
+//
+//                    if (this.lastRetryWithException != null) {
+//                        logger.warn(
+//                            "Received {} after backoff/retry including at least one RetryWithException. "
+//                                + "Will fail the request with RetryWithException. GoneException: {}. RetryWithException: {}",
+//                            exception.getClass(),
+//                            exception,
+//                            this.lastRetryWithException);
+//
+//                        exceptionToThrow = this.lastRetryWithException;
+//                    } else {
+//                        logger.warn(
+//                            "Received {} after backoff/retry. Will fail the request. {}",
+//                            exception.getClass(),
+//                            exception.toString());
+//                        exceptionToThrow = BridgeInternal.createServiceUnavailableException(exception);
+//                    }
+//                } else {
+//                    logger.warn("Received retry with exception after backoff/retry. Will fail the request. {}",
+//                            exception.toString());
+//                }
+//                stopStopWatch(this.durationTimer);
+//                return Mono.just(ShouldRetryResult.error(exceptionToThrow));
+//            }
+//            backoffTime = Duration.ofSeconds(Math.min(Math.min(this.currentBackoffSeconds, remainingSeconds),
+//                    GoneAndRetryWithRetryPolicy.MAXIMUM_BACKOFF_TIME_IN_SECONDS));
+//            this.currentBackoffSeconds *= GoneAndRetryWithRetryPolicy.BACK_OFF_MULTIPLIER;
+//            logger.info("BackoffTime: {} seconds.", backoffTime.getSeconds());
+//        }
 
         // Calculate the remaining time based after accounting for the backoff that we
         // will perform
@@ -116,7 +115,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
         timeout = timeoutInMillSec > 0 ? Duration.ofMillis(timeoutInMillSec)
                 : Duration.ofSeconds(GoneAndRetryWithRetryPolicy.MAXIMUM_BACKOFF_TIME_IN_SECONDS);
         if (exception instanceof GoneException) {
-            logger.info("Received gone exception, will retry, {}", exception.toString());
+            logger.info("Received gone exception, will retry, {} {}", exception.toString(), request.getActivityId());
 
             // TODO: Annie: for IOException, ClosedChannelException, ConnectTimeoutException, should force refresh be false?
             // TODO: if cache has been removed, flag in requestContext?
@@ -158,10 +157,10 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
         } else if (exception instanceof ReplicaReconfigurationException) {
             logger.info("Received replica reconfigured exception, will retry, {}", exception.toString());
             // TODO: ConnectionStateListener.onConnectionEvent will be called to remove staled address cache when replicaReconfigurationException happened.
-            forceRefreshAddressCache = false;
+            forceRefreshAddressCache = true;
         }
         else {
-            logger.warn("Received retry with exception, will retry, {}", exception);
+            logger.warn("Received retry with exception, will retry, {} {}", exception, request.getActivityId());
             // For RetryWithException, prevent the caller
             // from refreshing any caches.
             forceRefreshAddressCache = false;

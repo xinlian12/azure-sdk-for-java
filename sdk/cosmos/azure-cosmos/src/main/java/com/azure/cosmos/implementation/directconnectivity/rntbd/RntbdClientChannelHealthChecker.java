@@ -192,6 +192,7 @@ public final class RntbdClientChannelHealthChecker implements ChannelHealthCheck
             }
         }
 
+        logger.info("need to write and flush the channel");
         channel.writeAndFlush(RntbdHealthCheckRequest.MESSAGE).addListener(completed -> {
             if (completed.isSuccess()) {
                 promise.setSuccess(Boolean.TRUE);

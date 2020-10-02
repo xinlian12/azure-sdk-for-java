@@ -255,7 +255,6 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
     }
 
     public RntbdRequestRecord request(final RntbdRequestArgs args) {
-
         this.throwIfClosed();
 
         int concurrentRequestSnapshot = this.concurrentRequests.incrementAndGet();
@@ -302,7 +301,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         }
 
         if (this.connectionStateListener != null) {
-            this.connectionStateListener.onException(record.args().serviceRequest(), exception);
+           // this.connectionStateListener.onException(record.args().serviceRequest(), exception);
         }
 
         // exception != null

@@ -128,8 +128,10 @@ public final class RntbdClientChannelPool implements ChannelPool {
         new ChannelAcquisitionException("service endpoint was closed while releasing a channel"),
         RntbdClientChannelPool.class, "release");
 
-    private static final AttributeKey<RntbdClientChannelPool> POOL_KEY = AttributeKey.newInstance(
+    public static final AttributeKey<RntbdClientChannelPool> POOL_KEY = AttributeKey.newInstance(
         RntbdClientChannelPool.class.getName());
+    public static final AttributeKey<RntbdClientChannelPool> ENDPOINT_KEY = AttributeKey.newInstance(
+        RntbdServiceEndpoint.class.getName());
 
     private static final IllegalStateException TOO_MANY_PENDING_ACQUISITIONS = ThrowableUtil.unknownStackTrace(
         new ChannelAcquisitionException("too many outstanding channel acquisition operations"),
@@ -527,6 +529,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
             this.ensureInEventLoop();
 
             if (this.isClosed()) {
+                logger.warn("release closed");
                 // We have no choice but to close the channel
                 promise.setFailure(POOL_CLOSED_ON_RELEASE);
                 this.closeChannel(channel);
@@ -623,7 +626,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
                     // If our connection attempt fails, notifyChannelConnect will call us again
 
                     final Promise<Channel> anotherPromise = this.newChannelPromiseForToBeEstablishedChannel(promise);
-                    final ChannelFuture future = this.bootstrap.clone().attr(POOL_KEY, this).connect();
+                    final ChannelFuture future = this.bootstrap.clone().attr(POOL_KEY, this).attr(ENDPOINT_KEY, this).connect();
 
                     if (future.isDone()) {
                         this.safeNotifyChannelConnect(future, anotherPromise);
@@ -724,14 +727,30 @@ public final class RntbdClientChannelPool implements ChannelPool {
      * @param channel the {@link Channel channel} to close and remove from the {@link RntbdClientChannelPool pool}.
      */
     private void closeChannel(final Channel channel) {
+        logger.warn("chanelPool closeChannel");
+        this.ensureInEventLoop();
+        this.acquiredChannels.remove(channel);
+        this.availableChannels.remove(channel);
+       // channel.attr(POOL_KEY).set(null);
+        channel.close();
+    }
+
+    /**
+     * Closes a {@link Channel channel} and removes it from the {@link RntbdClientChannelPool pool}.
+     *
+     * @param channel the {@link Channel channel} to close and remove from the {@link RntbdClientChannelPool pool}.
+     */
+    private void closeChannelEvent(final Channel channel) {
+        logger.warn("chanelPool closeChannelEvent");
         this.ensureInEventLoop();
         this.acquiredChannels.remove(channel);
         this.availableChannels.remove(channel);
         channel.attr(POOL_KEY).set(null);
-        channel.close();
+        //channel.close();
     }
 
     private void closeChannelAndFail(final Channel channel, final Throwable cause, final Promise<?> promise) {
+        logger.warn("close and fail");
         this.ensureInEventLoop();
         this.closeChannel(channel);
         promise.tryFailure(cause);
@@ -1041,7 +1060,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
                                 "isRegistered={}, " +
                                 "isWritable={}, " +
                                 "threadName={}",
-                            channel.remoteAddress(),
+                            this.endpoint.remoteURI(),
                             availableChannels.contains(channel),
                             acquiredChannels.contains(channel),
                             channel.eventLoop().inEventLoop(),
@@ -1053,6 +1072,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
                         );
                     }
 
+                    logger.warn("Safe close a channel when channel is closed");
                     this.safeCloseChannel(channel);
                 });
 

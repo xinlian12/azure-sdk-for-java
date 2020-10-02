@@ -74,14 +74,14 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
     // region Fields
 
-    private static final ClosedChannelException ON_CHANNEL_UNREGISTERED =
-        ThrowableUtil.unknownStackTrace(new ClosedChannelException(), RntbdRequestManager.class, "channelUnregistered");
+    private static final RntbdClosedChannelException ON_CHANNEL_UNREGISTERED =
+        ThrowableUtil.unknownStackTrace(new RntbdClosedChannelException("channelUnregistered"), RntbdRequestManager.class, "channelUnregistered");
 
-    private static final ClosedChannelException ON_CLOSE =
-        ThrowableUtil.unknownStackTrace(new ClosedChannelException(), RntbdRequestManager.class, "close");
+    private static final RntbdClosedChannelException ON_CLOSE =
+        ThrowableUtil.unknownStackTrace(new RntbdClosedChannelException("close"), RntbdRequestManager.class, "close");
 
-    private static final ClosedChannelException ON_DEREGISTER =
-        ThrowableUtil.unknownStackTrace(new ClosedChannelException(), RntbdRequestManager.class, "deregister");
+    private static final RntbdClosedChannelException ON_DEREGISTER =
+        ThrowableUtil.unknownStackTrace(new RntbdClosedChannelException("deregister"), RntbdRequestManager.class, "deregister");
 
     private static final EventExecutor requestExpirationExecutor = new DefaultEventExecutor(new RntbdThreadFactory(
         "request-expirator",
@@ -296,7 +296,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         //  https://msdata.visualstudio.com/CosmosDB/_workitems/edit/373213
 
         this.traceOperation(context, "exceptionCaught", cause);
-        logger.info("{}\n{}\n{}", "exceptionCaught", context, cause);
+        logger.warn("Inside exceptionCaught caused by {}", cause);
 
         if (!this.closingExceptionally) {
             this.completeAllPendingRequestsExceptionally(context, cause);
@@ -450,6 +450,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
     @Override
     public void disconnect(final ChannelHandlerContext context, final ChannelPromise promise) {
         this.traceOperation(context, "disconnect");
+        logger.warn("channelDisconnect {}", context.channel().remoteAddress());
         context.disconnect(promise);
     }
 
@@ -496,11 +497,13 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
             final RntbdRequestRecord record = (RntbdRequestRecord) message;
             this.timestamps.channelWriteAttempted();
+            logger.info("update channelWriteAttempted");
 
             context.write(this.addPendingRequestRecord(context, record), promise).addListener(completed -> {
                 record.stage(RntbdRequestRecord.Stage.SENT);
                 if (completed.isSuccess()) {
                     this.timestamps.channelWriteCompleted();
+                    logger.info("update channelWriteCompleted");
                 }
             });
 
@@ -595,6 +598,10 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         final ChannelHandlerContext context, final Throwable throwable
     ) {
 
+        logger.warn("completeAllPendingRequestsExceptionally {} {} {}",
+            throwable,
+            context.channel().attr(RntbdClientChannelPool.POOL_KEY),
+            context.channel().attr(RntbdClientChannelPool.ENDPOINT_KEY));
         reportIssueUnless(!this.closingExceptionally, context, "", throwable);
         this.closingExceptionally = true;
 
