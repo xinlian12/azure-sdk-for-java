@@ -99,18 +99,41 @@ public class GlobalAddressResolver implements IAddressResolver {
     }
 
     @Override
-    public void remove(final RxDocumentServiceRequest request, final Set<PartitionKeyRangeIdentity> partitionKeyRangeIdentitySet) {
+    public void expire(
+        final RxDocumentServiceRequest request,
+        final Set<PartitionKeyRangeIdentity> partitionKeyRangeIdentitySet) {
 
         Objects.requireNonNull(request, "expected non-null request");
         Objects.requireNonNull(partitionKeyRangeIdentitySet, "expected non-null partitionKeyRangeIdentitySet");
 
         if (partitionKeyRangeIdentitySet.size() > 0) {
 
-            URI addressResolverURI = this.endpointManager.resolveServiceEndpoint(request);;
+            URI addressResolverURI = this.endpointManager.resolveServiceEndpoint(request);
 
             this.addressCacheByEndpoint.computeIfPresent(addressResolverURI, (ignored, endpointCache) -> {
                 final GatewayAddressCache addressCache = endpointCache.addressCache;
-                partitionKeyRangeIdentitySet.forEach(partitionKeyRangeIdentity -> addressCache.removeAddress(partitionKeyRangeIdentity));
+                partitionKeyRangeIdentitySet.forEach(partitionKeyRangeIdentity -> addressCache.expireAddress(partitionKeyRangeIdentity));
+                return endpointCache;
+            });
+        }
+    }
+
+    @Override
+    public void remove(
+        final RxDocumentServiceRequest request,
+        final URI physicalUri,
+        final Set<PartitionKeyRangeIdentity> partitionKeyRangeIdentitySet) {
+
+        Objects.requireNonNull(request, "expected non-null request");
+        Objects.requireNonNull(partitionKeyRangeIdentitySet, "expected non-null partitionKeyRangeIdentitySet");
+
+        if (partitionKeyRangeIdentitySet.size() > 0) {
+
+            URI addressResolverURI = this.endpointManager.resolveServiceEndpoint(request);
+
+            this.addressCacheByEndpoint.computeIfPresent(addressResolverURI, (ignored, endpointCache) -> {
+                final GatewayAddressCache addressCache = endpointCache.addressCache;
+                partitionKeyRangeIdentitySet.forEach(partitionKeyRangeIdentity -> addressCache.removeAddress(physicalUri, partitionKeyRangeIdentity));
                 return endpointCache;
             });
         }

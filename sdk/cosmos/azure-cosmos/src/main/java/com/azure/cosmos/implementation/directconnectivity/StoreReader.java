@@ -216,9 +216,20 @@ public class StoreReader {
             }
         }
 
+        // try not to use the same replica address as last retry
+
         while (resolveApiResults.size() > 0) {
-            uriIndex = uriIndex % resolveApiResults.size();
-            Uri uri = resolveApiResults.get(uriIndex);
+            int retryCount = 0;
+            Uri uri;
+            // try here several times, if still can not find a replica not used before, then gave up just use whatever
+            do {
+                uriIndex = (uriIndex + retryCount) % resolveApiResults.size();
+                uri = resolveApiResults.get(uriIndex);
+            } while (uri == entity.requestContext.retryContext.lastRetryPhysicalAddress && retryCount++ <= resolveApiResults.size());
+
+            if (retryCount > 1) {
+                logger.warn("Tried {} times to avoid reusing bad replica {} ", retryCount, entity.requestContext.retryContext.lastRetryPhysicalAddress);
+            }
             Pair<Mono<StoreResponse>, Uri> res;
             try {
                 res = this.readFromStoreAsync(resolveApiResults.get(uriIndex),

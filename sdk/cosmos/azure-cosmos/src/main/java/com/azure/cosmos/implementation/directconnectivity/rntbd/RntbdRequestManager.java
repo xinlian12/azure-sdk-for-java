@@ -10,6 +10,7 @@ import com.azure.cosmos.implementation.ConflictException;
 import com.azure.cosmos.implementation.CosmosError;
 import com.azure.cosmos.implementation.ForbiddenException;
 import com.azure.cosmos.implementation.GoneException;
+import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.InternalServerErrorException;
 import com.azure.cosmos.implementation.InvalidPartitionException;
 import com.azure.cosmos.implementation.LockedException;
@@ -27,6 +28,7 @@ import com.azure.cosmos.implementation.RetryWithException;
 import com.azure.cosmos.implementation.ServiceUnavailableException;
 import com.azure.cosmos.implementation.UnauthorizedException;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
+import com.azure.cosmos.implementation.guava25.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
@@ -53,6 +55,7 @@ import io.netty.util.internal.ThrowableUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
@@ -682,12 +685,35 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             final Map<String, String> requestHeaders = record.args().serviceRequest().getHeaders();
             final String requestUri = record.args().physicalAddress().toString();
 
-
             logger.warn("exception caught for  {} cause {}", record.args().activityId(), cause);
-            final GoneException error = new GoneException(message, cause, (Map<String, String>) null, requestUri);
-            BridgeInternal.setRequestHeaders(error, requestHeaders);
 
-            record.completeExceptionally(error);
+            CosmosException cosmosException = null;
+            final Class<?> type = cause.getClass();
+
+            // TODO: Annie: move this to RntbdConnectionStateListener
+            // ClosedChannelException, ConnectionTimeoutException, IOException do not necessarily mean the BE server is bad
+            // hence, we should not be too aggressively remove the addresses
+            if (type == ClosedChannelException.class
+                || type == IOException.class) {
+                // TODO: Annie: maybe put in ConnectionStateListener?
+                cosmosException = new ReplicaReconfigurationException(
+                    message,
+                    cause,
+                    ImmutableMap.of(HttpConstants.HttpHeaders.ACTIVITY_ID, record.activityId().toString()),
+                    requestUri
+                );
+            }
+            else{
+                cosmosException = new GoneException(
+                    message,
+                    cause,
+                    ImmutableMap.of(HttpConstants.HttpHeaders.ACTIVITY_ID, record.activityId().toString()),
+                    requestUri);
+            }
+
+            BridgeInternal.setRequestHeaders(cosmosException, requestHeaders);
+
+            record.completeExceptionally(cosmosException);
         }
     }
 
@@ -735,6 +761,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
             final long lsn = response.getHeader(RntbdResponseHeader.LSN);
             final String partitionKeyRangeId = response.getHeader(RntbdResponseHeader.PartitionKeyRangeId);
+            final String resourceAddress = requestRecord.args().physicalAddress().toString();
 
             // ..Create Error instance
 
@@ -782,7 +809,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
                             cause = new PartitionKeyRangeGoneException(error, lsn, partitionKeyRangeId, responseHeaders);
                             break;
                         case SubStatusCodes.REPLICA_RECONFIGURATION:
-                            cause = new ReplicaReconfigurationException(error, lsn, partitionKeyRangeId, responseHeaders);
+                            cause = new ReplicaReconfigurationException(error, lsn, partitionKeyRangeId, resourceAddress, responseHeaders);
                             break;
                         default:
                             cause = new GoneException(error, lsn, partitionKeyRangeId, responseHeaders);

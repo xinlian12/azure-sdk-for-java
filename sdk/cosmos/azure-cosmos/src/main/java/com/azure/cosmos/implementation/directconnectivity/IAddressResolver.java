@@ -7,6 +7,7 @@ import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.routing.PartitionKeyRangeIdentity;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
 import java.util.Set;
 
 public interface IAddressResolver {
@@ -14,5 +15,8 @@ public interface IAddressResolver {
             RxDocumentServiceRequest request,
             boolean forceRefreshPartitionAddresses);
 
-    void remove(RxDocumentServiceRequest request, Set<PartitionKeyRangeIdentity> partitionKeyRangeIdentitySet);
+    void remove(RxDocumentServiceRequest request, URI physicalUri, Set<PartitionKeyRangeIdentity> partitionKeyRangeIdentitySet);
+
+    void expire(RxDocumentServiceRequest request, Set<PartitionKeyRangeIdentity> partitionKeyRangeIdentitySet);
+
 }

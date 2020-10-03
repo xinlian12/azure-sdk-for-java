@@ -3,17 +3,13 @@
 
 package com.azure.cosmos.implementation.directconnectivity.rntbd;
 
-import com.azure.cosmos.implementation.GoneException;
 import com.azure.cosmos.implementation.ReplicaReconfigurationException;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.directconnectivity.IAddressResolver;
 import com.azure.cosmos.implementation.routing.PartitionKeyRangeIdentity;
-import io.netty.channel.ConnectTimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.channels.ClosedChannelException;
 import java.time.Instant;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,48 +42,50 @@ public class RntbdConnectionStateListener {
 
     // region Methods
 
-    public void onException(final RxDocumentServiceRequest request, final Throwable exception) {
+    public void onException(final RxDocumentServiceRequest request, Throwable exception) {
         checkNotNull(request, "expect non-null request");
         checkNotNull(exception, "expect non-null error");
 
+        if (exception == null) {
+            return;
+        }
         if (exception instanceof ReplicaReconfigurationException) {
             logger.warn(
                 "dropping connection to {} because the service is being discontinued or reconfigured {}",
                 endpoint.remoteURI(),
                 request.getActivityId());
-
-            this.onConnectionEvent(RntbdConnectionEvent.REPLICA_RECONFIG, request, exception);
-            return;
-        }
-
-        // TODO : Annie: Or should we just check WebExceptionUtility.isNetworkFailure(exception)?
-        // ConnectionTimeout exception does not necessary mean the server is in upgrade, should we aggressively remove the address?
-        if (exception instanceof GoneException) {
-            final Throwable cause = exception.getCause();
-            if (cause != null) {
-                // GoneException was produced by the client, not the server
-                //
-                // This could occur when:
-                //
-                // * an operation fails due to an IOException which indicates a connection reset by the server,
-                // * a channel closes unexpectedly because the server stopped taking requests, or
-                // * an error was detected by the transport client (e.g., IllegalStateException)
-                // * a request timed out in pending acquisition queue
-                // * a request failed fast in admission control layer due to high load
-                //
-                // We only consider the following scenario which might relates to replica movement.
-                final Class<?> type = cause.getClass();
-
-                if (type == ClosedChannelException.class) {
-                    this.onConnectionEvent(RntbdConnectionEvent.READ_EOF, request, cause);
-                } else if (type == ConnectTimeoutException.class || type == IOException.class) {
-                    this.onConnectionEvent(RntbdConnectionEvent.READ_FAILURE, request, cause); // aggressive
-                } else{
-                    return;
-                }
-
-                logger.warn("connection to {} {} lost caused by {}", request.getActivityId(), endpoint.remoteURI(), cause);
-            }
+//
+//<<<<<<< Updated upstream
+//        // TODO : Annie: Or should we just check WebExceptionUtility.isNetworkFailure(exception)?
+//        // ConnectionTimeout exception does not necessary mean the server is in upgrade, should we aggressively remove the address?
+//        if (exception instanceof GoneException) {
+//            final Throwable cause = exception.getCause();
+//            if (cause != null) {
+//                // GoneException was produced by the client, not the server
+//                //
+//                // This could occur when:
+//                //
+//                // * an operation fails due to an IOException which indicates a connection reset by the server,
+//                // * a channel closes unexpectedly because the server stopped taking requests, or
+//                // * an error was detected by the transport client (e.g., IllegalStateException)
+//                // * a request timed out in pending acquisition queue
+//                // * a request failed fast in admission control layer due to high load
+//                //
+//                // We only consider the following scenario which might relates to replica movement.
+//                final Class<?> type = cause.getClass();
+//
+//                if (type == ClosedChannelException.class) {
+//                    this.onConnectionEvent(RntbdConnectionEvent.READ_EOF, request, cause);
+//                } else if (type == ConnectTimeoutException.class || type == IOException.class) {
+//                    this.onConnectionEvent(RntbdConnectionEvent.READ_FAILURE, request, cause); // aggressive
+//                } else{
+//                    return;
+//                }
+//
+//                logger.warn("connection to {} {} lost caused by {}", request.getActivityId(), endpoint.remoteURI(), cause);
+//            }
+//=======
+            this.onConnectionEvent(request, exception);
         }
     }
 
@@ -133,17 +131,15 @@ public class RntbdConnectionStateListener {
         return partitionKeyRangeIdentity;
     }
 
-    private void onConnectionEvent(final RntbdConnectionEvent event, final RxDocumentServiceRequest request, final Throwable exception) {
+    private void onConnectionEvent(final RxDocumentServiceRequest request, final Throwable exception) {
 
-        checkNotNull(event, "expected non-null event");
         checkNotNull(request, "expected non-null exception");
         checkNotNull(exception, "expected non-null exception");
 
         if (!this.endpoint.isClosed()) {
 
             if (logger.isDebugEnabled()) {
-                logger.debug("onConnectionEvent({\"event\":{},\"time\":{},\"endpoint\":{},\"cause\":{})",
-                    RntbdObjectMapper.toJson(event),
+                logger.debug("onConnectionEvent({\"time\":{},\"endpoint\":{},\"cause\":{})",
                     RntbdObjectMapper.toJson(Instant.now()),
                     RntbdObjectMapper.toJson(this.endpoint),
                     RntbdObjectMapper.toJson(exception));
@@ -166,7 +162,8 @@ public class RntbdConnectionStateListener {
 
                 // TODO: should we remove address? What if gateway has issue? Cache change about reusing old value will not work.
                 // TODO : Annie: Should we close channel/close endpoint here?
-                this.addressResolver.remove(request, this.partitionAddressCache);
+                // this.addressResolver.remove(request, this.endpoint.remoteURI(), this.partitionAddressCache);
+                this.addressResolver.expire(request, this.partitionAddressCache);
                 this.partitionAddressCache.clear();
             }
         } finally {

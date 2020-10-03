@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,17 +24,21 @@ public class AsyncCache<TKey, TValue> {
 
     public AsyncCache() {
         this((value1, value2) -> {
-        if (value1 == value2)
-            return true;
-        if (value1 == null || value2 == null)
-            return false;
-        return value1.equals(value2);
+            if (value1 == value2)
+                return true;
+            if (value1 == null || value2 == null)
+                return false;
+            return value1.equals(value2);
         });
     }
 
     public void set(TKey key, TValue value) {
         logger.debug("set cache[{}]={}", key, value);
         values.put(key, new AsyncLazy<>(value));
+    }
+
+    public TValue get(TKey key) {
+        return values.get(key).getOldValue().get();
     }
 
     /**
@@ -58,9 +63,9 @@ public class AsyncCache<TKey, TValue> {
      * @return Cached value or value returned by initialization function.
      */
     public Mono<TValue> getAsync(
-            TKey key,
-            TValue obsoleteValue,
-            Callable<Mono<TValue>> singleValueInitFunc) {
+        TKey key,
+        TValue obsoleteValue,
+        Callable<Mono<TValue>> singleValueInitFunc) {
 
         AsyncLazy<TValue> initialLazyValue = values.get(key);
         if (initialLazyValue != null) {
@@ -68,23 +73,23 @@ public class AsyncCache<TKey, TValue> {
             logger.debug("cache[{}] exists", key);
             return initialLazyValue.single().flux().flatMap(value -> {
 
-                if (!equalityComparer.areEqual(value, obsoleteValue)) {
+                if (!equalityComparer.areEqual(value, obsoleteValue) && !initialLazyValue.isExpired()) {
                     logger.debug("Returning cache[{}] as it is different from obsoleteValue", key);
                     return Flux.just(value);
                 }
 
                 logger.debug("cache[{}] result value is obsolete ({}), computing new value", key, obsoleteValue);
-                AsyncLazy<TValue> asyncLazy = new AsyncLazy<>(singleValueInitFunc);
+                AsyncLazy<TValue> asyncLazy = new AsyncLazy<>(singleValueInitFunc, Optional.of(value));
                 AsyncLazy<TValue> actualValue = values.merge(key, asyncLazy,
-                        (lazyValue1, lazyValue2) -> lazyValue1 == initialLazyValue ? lazyValue2 : lazyValue1);
+                    (lazyValue1, lazyValue2) -> lazyValue1 == initialLazyValue ? lazyValue2 : lazyValue1);
                 return actualValue.single().flux();
 
             }, err -> {
 
                 logger.debug("cache[{}] resulted in error, computing new value", key, err);
-                AsyncLazy<TValue> asyncLazy = new AsyncLazy<>(singleValueInitFunc);
+                AsyncLazy<TValue> asyncLazy = new AsyncLazy<>(singleValueInitFunc, initialLazyValue.getOldValue());
                 AsyncLazy<TValue> resultAsyncLazy = values.merge(key, asyncLazy,
-                        (lazyValue1, lazyValu2) -> lazyValue1 == initialLazyValue ? lazyValu2 : lazyValue1);
+                    (lazyValue1, lazyValu2) -> lazyValue1 == initialLazyValue ? lazyValu2 : lazyValue1);
                 return resultAsyncLazy.single().flux();
 
             }, Flux::empty).single();
@@ -93,7 +98,7 @@ public class AsyncCache<TKey, TValue> {
         logger.debug("cache[{}] doesn't exist, computing new value", key);
         AsyncLazy<TValue> asyncLazy = new AsyncLazy<>(singleValueInitFunc);
         AsyncLazy<TValue> resultAsyncLazy = values.merge(key, asyncLazy,
-                (lazyValue1, lazyValu2) -> lazyValue1 == initialLazyValue ? lazyValu2 : lazyValue1);
+            (lazyValue1, lazyValu2) -> lazyValue1 == initialLazyValue ? lazyValu2 : lazyValue1);
         return resultAsyncLazy.single();
     }
 
@@ -122,16 +127,32 @@ public class AsyncCache<TKey, TValue> {
      * @param singleValueInitFunc
      */
     public void refresh(
-            TKey key,
-            Callable<Mono<TValue>> singleValueInitFunc) {
+        TKey key,
+        Callable<Mono<TValue>> singleValueInitFunc) {
         logger.debug("refreshing cache[{}]", key);
         AsyncLazy<TValue> initialLazyValue = values.get(key);
         if (initialLazyValue != null && (initialLazyValue.isSucceeded() || initialLazyValue.isFaulted())) {
-            AsyncLazy<TValue> newLazyValue = new AsyncLazy<>(singleValueInitFunc);
+            // TODO: on the force refresh we are keeping the old value just in case the current refresh fails.
+            // is this the correct behaviour? or should we forget the old value as it is a "forced" refresh?
+            AsyncLazy<TValue> newLazyValue = new AsyncLazy<>(singleValueInitFunc, initialLazyValue.getOldValue());
 
             // UPDATE the new task in the cache,
             values.merge(key, newLazyValue,
-                    (lazyValue1, lazyValu2) -> lazyValue1 == initialLazyValue ? lazyValu2 : lazyValue1);
+                (lazyValue1, lazyValu2) -> lazyValue1 == initialLazyValue ? lazyValu2 : lazyValue1);
+        }
+    }
+
+
+
+    /**
+     * Forces refresh of the cached item if it is not being refreshed at the moment.
+     * @param key
+     */
+    public void expire(TKey key) {
+        logger.debug("expire cache[{}]", key);
+        AsyncLazy<TValue> initialLazyValue = values.get(key);
+        if (initialLazyValue != null) {
+            initialLazyValue.setExpired();
         }
     }
 }

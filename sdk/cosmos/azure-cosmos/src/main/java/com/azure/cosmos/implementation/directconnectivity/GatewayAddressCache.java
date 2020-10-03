@@ -48,6 +48,7 @@ import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -140,9 +141,27 @@ public class GatewayAddressCache implements IAddressCache {
              DefaultSuboptimalPartitionForceRefreshIntervalInSeconds);
     }
 
+    @Override
+    public void expireAddress(final PartitionKeyRangeIdentity partitionKeyRangeIdentity) {
+
+        Objects.requireNonNull(partitionKeyRangeIdentity, "expected non-null partitionKeyRangeIdentity");
+
+        if (partitionKeyRangeIdentity.getPartitionKeyRangeId().equals(PartitionKeyRange.MASTER_PARTITION_KEY_RANGE_ID)) {
+            this.masterPartitionAddressCache = null;
+        } else {
+
+            // TODO: Should lower the suboptimalServerPartitionTimestamps?
+            AddressInformation[] existingAddresses = this.serverPartitionAddressCache.get(partitionKeyRangeIdentity);
+            this.serverPartitionAddressCache.expire(partitionKeyRangeIdentity);
+
+            if (logger.isDebugEnabled()) {
+                logger.debug("Expired address for partitionKeyRangeIdentity cache {}", partitionKeyRangeIdentity);
+            }
+        }
+    }
 
     @Override
-    public void removeAddress(final PartitionKeyRangeIdentity partitionKeyRangeIdentity) {
+    public void removeAddress(final URI physicalUri, final PartitionKeyRangeIdentity partitionKeyRangeIdentity) {
 
         Objects.requireNonNull(partitionKeyRangeIdentity, "expected non-null partitionKeyRangeIdentity");
 
@@ -150,10 +169,19 @@ public class GatewayAddressCache implements IAddressCache {
            // this.masterPartitionAddressCacheForceRefresh.set(true);
             this.masterPartitionAddressCache = null;
         } else {
-            this.serverPartitionAddressCache.remove(partitionKeyRangeIdentity);
-           // this.serverPartitionAddressCacheForceRefresh.put(partitionKeyRangeIdentity, true);
+
+            // TODO: Should lower the suboptimalServerPartitionTimestamps?
+            AddressInformation[] existingAddresses = this.serverPartitionAddressCache.get(partitionKeyRangeIdentity);
+
+            List<AddressInformation> updatedAddresses =
+                Arrays.stream(existingAddresses)
+                    .filter(addressInformation -> addressInformation.getPhysicalUri().getURI()!= physicalUri)
+                    .collect(Collectors.toList());
+
+            this.serverPartitionAddressCache.set(partitionKeyRangeIdentity, updatedAddresses.toArray(new AddressInformation[updatedAddresses.size()]));
+
             if (logger.isDebugEnabled()) {
-                logger.debug("Removed partitionKeyRangeIdentity cache {}", partitionKeyRangeIdentity);
+                logger.debug("Removed address {} from partitionKeyRangeIdentity cache {}", physicalUri, partitionKeyRangeIdentity);
             }
         }
     }

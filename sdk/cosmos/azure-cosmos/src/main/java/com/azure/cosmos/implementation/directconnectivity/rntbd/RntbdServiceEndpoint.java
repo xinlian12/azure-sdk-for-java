@@ -7,6 +7,7 @@ import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.implementation.GoneException;
 import com.azure.cosmos.implementation.HttpConstants;
+import com.azure.cosmos.implementation.ReplicaReconfigurationException;
 import com.azure.cosmos.implementation.directconnectivity.IAddressResolver;
 import com.azure.cosmos.implementation.directconnectivity.RntbdTransportClient;
 import com.azure.cosmos.implementation.directconnectivity.TransportException;
@@ -20,6 +21,7 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.AdaptiveRecvByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ConnectTimeoutException;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.logging.LogLevel;
@@ -35,6 +37,7 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.channels.ClosedChannelException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
@@ -301,7 +304,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         }
 
         if (this.connectionStateListener != null) {
-           // this.connectionStateListener.onException(record.args().serviceRequest(), exception);
+            this.connectionStateListener.onException(record.args().serviceRequest(), exception);
         }
 
         // exception != null
@@ -410,16 +413,41 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
 
             logger.info("\n  [{}]\n  {}\n  write failed due to {} ", this, requestArgs, cause);
             final String reason = cause.toString();
+            CosmosException cosmosException = null;
 
-            final GoneException goneException = new GoneException(
-                lenientFormat("failed to establish connection to %s due to %s", this.remoteAddress, reason),
-                cause instanceof Exception ? (Exception) cause : new IOException(reason, cause),
-                ImmutableMap.of(HttpHeaders.ACTIVITY_ID, activityId.toString()),
-                requestArgs.replicaPath()
-            );
+            final Class<?> type = cause.getClass();
 
-            BridgeInternal.setRequestHeaders(goneException, requestArgs.serviceRequest().getHeaders());
-            requestRecord.completeExceptionally(goneException);
+            // TODO: Annie: move this to RntbdConnectionStateListener
+            // ClosedChannelException, ConnectionTimeoutException, IOException do not necessarily mean the BE server is bad
+            // hence, we should not be too aggressively remove the addresses
+            if (type == ClosedChannelException.class
+                || type == ConnectTimeoutException.class
+                || type == IOException.class) {
+
+                // TODO: Annie: what is a good value here? 10s? Make it configurable.
+                // TODO: Annie: What if more determinisic way? like the error count?
+                // TODO: Annie: maybe healthCheck an existing channel?
+                if (System.nanoTime() - this.lastSuccessfulRequestNanoTime() >= Duration.ofSeconds(0).toNanos()) {
+                    cosmosException = new ReplicaReconfigurationException(
+                        "Node might be down",
+                        cause instanceof Exception ? (Exception) cause : new IOException(reason, cause),
+                        ImmutableMap.of(HttpHeaders.ACTIVITY_ID, activityId.toString()),
+                        requestRecord.args().physicalAddress().toString()
+                        );
+                }
+            }
+
+            if (cosmosException == null) {
+                cosmosException = new GoneException(
+                    lenientFormat("failed to establish connection to %s due to %s", this.remoteAddress, reason),
+                    cause instanceof Exception ? (Exception) cause : new IOException(reason, cause),
+                    ImmutableMap.of(HttpHeaders.ACTIVITY_ID, activityId.toString()),
+                    requestRecord.args().physicalAddress().toString()
+                );
+            }
+
+            BridgeInternal.setRequestHeaders(cosmosException, requestArgs.serviceRequest().getHeaders());
+            requestRecord.completeExceptionally(cosmosException);
         }
 
         return requestRecord;

@@ -56,6 +56,11 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
         Duration backoffTime = Duration.ofSeconds(0);
         Duration timeout = Duration.ofSeconds(0);
         boolean forceRefreshAddressCache = false;
+
+        if (exception instanceof CosmosException) {
+            CosmosException cosmosException = (CosmosException)exception;
+            this.request.requestContext.retryContext.lastRetryPhysicalAddress = Uri.create(BridgeInternal.getResourceAddress(cosmosException));
+        }
         if (!(exception instanceof GoneException) &&
             !(exception instanceof RetryWithException) &&
             !(exception instanceof PartitionIsMigratingException) &&
@@ -71,6 +76,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
         } else if (exception instanceof RetryWithException) {
             this.lastRetryWithException = (RetryWithException) exception;
         }
+
         long remainingSeconds = this.waitTimeInSeconds - this.durationTimer.getTime() / 1000;
         int currentRetryAttemptCount = this.attemptCount;
 //        if (this.attemptCount++ > 1) {
@@ -115,7 +121,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
         timeout = timeoutInMillSec > 0 ? Duration.ofMillis(timeoutInMillSec)
                 : Duration.ofSeconds(GoneAndRetryWithRetryPolicy.MAXIMUM_BACKOFF_TIME_IN_SECONDS);
         if (exception instanceof GoneException) {
-            logger.info("Received gone exception, will retry, {} {}", exception.toString(), request.getActivityId());
+            logger.info("Received gone exception, will retry, {}", exception.toString());
 
             // TODO: Annie: for IOException, ClosedChannelException, ConnectTimeoutException, should force refresh be false?
             // TODO: if cache has been removed, flag in requestContext?
@@ -157,7 +163,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
         } else if (exception instanceof ReplicaReconfigurationException) {
             logger.info("Received replica reconfigured exception, will retry, {}", exception.toString());
             // TODO: ConnectionStateListener.onConnectionEvent will be called to remove staled address cache when replicaReconfigurationException happened.
-            forceRefreshAddressCache = true;
+            forceRefreshAddressCache = false;
         }
         else {
             logger.warn("Received retry with exception, will retry, {} {}", exception, request.getActivityId());

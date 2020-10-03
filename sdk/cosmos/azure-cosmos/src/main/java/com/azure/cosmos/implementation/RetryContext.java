@@ -3,6 +3,7 @@
 
 package com.azure.cosmos.implementation;
 
+import com.azure.cosmos.implementation.directconnectivity.Uri;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.Duration;
@@ -25,6 +26,9 @@ public class RetryContext {
 
     public List<int[]> statusAndSubStatusCodes;
 
+    // TODO : Annie: Maybe we can keep a list?
+    public Uri lastRetryPhysicalAddress;
+
     public RetryContext() {
     }
 
@@ -36,6 +40,7 @@ public class RetryContext {
                 this.retryStartTime = retryContext.retryStartTime;
             }
             this.retryEndTime = retryContext.retryEndTime;
+            this.lastRetryPhysicalAddress = retryContext.lastRetryPhysicalAddress;
         }
     }
 

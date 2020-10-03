@@ -5,9 +5,7 @@ package com.azure.cosmos.implementation;
 
 import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.CosmosException;
-import com.azure.cosmos.implementation.directconnectivity.HttpUtils;
 import com.azure.cosmos.implementation.directconnectivity.WFConstants;
-import com.azure.cosmos.implementation.http.HttpHeaders;
 
 import java.util.Map;
 
@@ -40,6 +38,19 @@ public class ReplicaReconfigurationException extends CosmosException {
         BridgeInternal.setPartitionKeyRangeId(this, partitionKeyRangeId);
     }
 
+    public ReplicaReconfigurationException(
+        CosmosError cosmosError,
+        long lsn,
+        String partitionKeyRangeId,
+        String resourceAddress,
+        Map<String, String> responseHeaders) {
+
+        super(HttpConstants.StatusCodes.GONE, cosmosError, responseHeaders);
+        BridgeInternal.setLSN(this, lsn);
+        BridgeInternal.setPartitionKeyRangeId(this, partitionKeyRangeId);
+        BridgeInternal.setResourceAddress(this, resourceAddress);
+    }
+
     ReplicaReconfigurationException(String msg) {
         super(HttpConstants.StatusCodes.GONE, msg);
         setSubStatus();
@@ -57,21 +68,21 @@ public class ReplicaReconfigurationException extends CosmosException {
      * @param headers the headers
      * @param requestUri the request uri
      */
-    public ReplicaReconfigurationException(String message, HttpHeaders headers, String requestUri) {
+    public ReplicaReconfigurationException(String message, Map<String, String> headers, String requestUri) {
         this(message, null, headers, requestUri);
     }
 
-    ReplicaReconfigurationException(Exception innerException) {
+    public ReplicaReconfigurationException(Exception innerException) {
         this(RMResources.Gone, innerException, null, null);
     }
 
-    ReplicaReconfigurationException(String message,
+    public ReplicaReconfigurationException(String message,
                                           Exception innerException,
-                                          HttpHeaders headers,
+                                          Map<String, String> headers,
                                           String requestUri) {
         super(String.format("%s: %s", RMResources.Gone, message),
             innerException,
-            HttpUtils.asMap(headers),
+            headers,
             HttpConstants.StatusCodes.GONE,
             requestUri);
 

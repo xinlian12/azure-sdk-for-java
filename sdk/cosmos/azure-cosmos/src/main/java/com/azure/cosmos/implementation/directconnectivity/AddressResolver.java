@@ -22,16 +22,17 @@ import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.Strings;
 import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.apachecommons.lang.NotImplementedException;
+import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.caches.RxCollectionCache;
 import com.azure.cosmos.implementation.routing.CollectionRoutingMap;
 import com.azure.cosmos.implementation.routing.PartitionKeyInternal;
 import com.azure.cosmos.implementation.routing.PartitionKeyInternalHelper;
 import com.azure.cosmos.implementation.routing.PartitionKeyRangeIdentity;
-import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.function.Function;
@@ -85,7 +86,12 @@ public class AddressResolver implements IAddressResolver {
     }
 
     @Override
-    public void remove(RxDocumentServiceRequest request, Set<PartitionKeyRangeIdentity> partitionKeyRangeIdentitySet) {
+    public void expire(RxDocumentServiceRequest request, Set<PartitionKeyRangeIdentity> partitionKeyRangeIdentitySet) {
+        throw new NotImplementedException("expire() is not supported in AddressResolver");
+    }
+
+    @Override
+    public void remove(RxDocumentServiceRequest request, URI physicalUri, Set<PartitionKeyRangeIdentity> partitionKeyRangeIdentitySet) {
         throw new NotImplementedException("remove() is not supported in AddressResolver");
     }
 
