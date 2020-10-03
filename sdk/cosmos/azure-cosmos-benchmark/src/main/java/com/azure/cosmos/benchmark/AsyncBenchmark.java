@@ -33,12 +33,14 @@ import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.BaseSubscriber;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -61,7 +63,7 @@ abstract class AsyncBenchmark<T> {
 
     final String partitionKey;
     final Configuration configuration;
-    final List<PojoizedJson> docsToRead = new ArrayList<>();
+    final List<PojoizedJson> docsToRead;
     final Semaphore concurrencyControlSemaphore;
     Timer latency;
 
@@ -127,37 +129,37 @@ abstract class AsyncBenchmark<T> {
             .getPaths().iterator().next().split("/")[1];
 
         concurrencyControlSemaphore = new Semaphore(cfg.getConcurrency());
-//
-//        ArrayList<Flux<PojoizedJson>> createDocumentObservables = new ArrayList<>();
-//
-//        if (configuration.getOperationType() != Configuration.Operation.WriteLatency
-//                && configuration.getOperationType() != Configuration.Operation.WriteThroughput
-//                && configuration.getOperationType() != Configuration.Operation.ReadMyWrites) {
-//            logger.info("PRE-populating {} documents ....", cfg.getNumberOfPreCreatedDocuments());
-//            String dataFieldValue = RandomStringUtils.randomAlphabetic(cfg.getDocumentDataFieldSize());
-//            for (int i = 0; i < cfg.getNumberOfPreCreatedDocuments(); i++) {
-//                String uuid = UUID.randomUUID().toString();
-//                PojoizedJson newDoc = BenchmarkHelper.generateDocument(uuid,
-//                    dataFieldValue,
-//                    partitionKey,
-//                    configuration.getDocumentDataFieldCount());
-//                Flux<PojoizedJson> obs = cosmosAsyncContainer.createItem(newDoc).map(resp -> {
-//                    PojoizedJson x =
-//                        resp.getItem();
-//                    return x;
-//                }).flux();
-//                createDocumentObservables.add(obs);
-//            }
-//        }
 
-        //docsToRead = Flux.merge(Flux.fromIterable(createDocumentObservables), 100).collectList().block();
-        docsToRead.add(
-            BenchmarkHelper.generateDocument(
-                "6a69f923-dcd8-4e19-8051-914f14789ecd",
-                RandomStringUtils.randomAlphabetic(cfg.getDocumentDataFieldSize()),
-                partitionKey,
-                configuration.getDocumentDataFieldCount())
-        );
+        ArrayList<Flux<PojoizedJson>> createDocumentObservables = new ArrayList<>();
+
+        if (configuration.getOperationType() != Configuration.Operation.WriteLatency
+                && configuration.getOperationType() != Configuration.Operation.WriteThroughput
+                && configuration.getOperationType() != Configuration.Operation.ReadMyWrites) {
+            logger.info("PRE-populating {} documents ....", cfg.getNumberOfPreCreatedDocuments());
+            String dataFieldValue = RandomStringUtils.randomAlphabetic(cfg.getDocumentDataFieldSize());
+            for (int i = 0; i < cfg.getNumberOfPreCreatedDocuments(); i++) {
+                String uuid = UUID.randomUUID().toString();
+                PojoizedJson newDoc = BenchmarkHelper.generateDocument(uuid,
+                    dataFieldValue,
+                    partitionKey,
+                    configuration.getDocumentDataFieldCount());
+                Flux<PojoizedJson> obs = cosmosAsyncContainer.createItem(newDoc).map(resp -> {
+                    PojoizedJson x =
+                        resp.getItem();
+                    return x;
+                }).flux();
+                createDocumentObservables.add(obs);
+            }
+        }
+
+        docsToRead = Flux.merge(Flux.fromIterable(createDocumentObservables), 100).collectList().block();
+//        docsToRead.add(
+//            BenchmarkHelper.generateDocument(
+//                "6a69f923-dcd8-4e19-8051-914f14789ecd",
+//                RandomStringUtils.randomAlphabetic(cfg.getDocumentDataFieldSize()),
+//                partitionKey,
+//                configuration.getDocumentDataFieldCount())
+//        );
         logger.info("Finished pre-populating {} documents", cfg.getNumberOfPreCreatedDocuments());
 
         init();

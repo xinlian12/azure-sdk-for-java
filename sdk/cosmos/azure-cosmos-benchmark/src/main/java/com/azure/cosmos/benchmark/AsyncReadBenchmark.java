@@ -52,11 +52,6 @@ class AsyncReadBenchmark extends AsyncBenchmark<PojoizedJson> {
 
     @Override
     protected void performWorkload(BaseSubscriber<PojoizedJson> baseSubscriber, long i) throws InterruptedException {
-
-        if (i > 1) {
-            return;
-        }
-
         int index = (int) (i % docsToRead.size());
         PojoizedJson doc = docsToRead.get(index);
         String partitionKeyValue = doc.getId();
