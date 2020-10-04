@@ -202,19 +202,20 @@ public class StoreReader {
             return Flux.error(new GoneException());
         }
         List<Pair<Flux<StoreResponse>, Uri>> readStoreTasks = new ArrayList<>();
-        int uriIndex = -1;
-        for (int i = 0; i < resolveApiResults.size(); i++) {
-            if (resolveApiResults.get(i).getURI().getPort() == 14306) {
-                uriIndex = i;
-                break;
-            }
-        }
-        if (uriIndex == -1) {
-            uriIndex = StoreReader.generateNextRandom(resolveApiResults.size());
-            if (readMode == ReadMode.Any) {
-                logger.warn("Annie 14306 does not exists {}", resolveApiResults);
-            }
-        }
+//        int uriIndex = -1;
+//        for (int i = 0; i < resolveApiResults.size(); i++) {
+//            if (resolveApiResults.get(i).getURI().getPort() == 14306) {
+//                uriIndex = i;
+//                break;
+//            }
+//        }
+//        if (uriIndex == -1) {
+//            uriIndex = StoreReader.generateNextRandom(resolveApiResults.size());
+//            if (readMode == ReadMode.Any) {
+//                logger.warn("Annie 14306 does not exists {}", resolveApiResults);
+//            }
+//        }
+        int uriIndex = StoreReader.generateNextRandom(resolveApiResults.size());
 
         // try not to use the same replica address as last retry
 
