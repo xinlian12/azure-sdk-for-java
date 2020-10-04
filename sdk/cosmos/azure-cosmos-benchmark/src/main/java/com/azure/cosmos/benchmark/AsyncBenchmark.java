@@ -232,7 +232,7 @@ abstract class AsyncBenchmark<T> {
                             logger.info("Warmup phase finished. Starting capturing perf numbers ....");
                             resetMeters();
                             initializeMeter();
-                           // reporter.start(configuration.getPrintingInterval(), TimeUnit.SECONDS);
+                            reporter.start(configuration.getPrintingInterval(), TimeUnit.SECONDS);
                             warmupMode.set(false);
                         }
                     }
@@ -289,7 +289,7 @@ abstract class AsyncBenchmark<T> {
             logger.info("Starting warm up phase. Executing {} operations to warm up ...", configuration.getSkipWarmUpOperations());
             warmupMode.set(true);
         } else {
-            // reporter.start(configuration.getPrintingInterval(), TimeUnit.SECONDS);
+            reporter.start(configuration.getPrintingInterval(), TimeUnit.SECONDS);
         }
 
         long startTime = System.currentTimeMillis();
