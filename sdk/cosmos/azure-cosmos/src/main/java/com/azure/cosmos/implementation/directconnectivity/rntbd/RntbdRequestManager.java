@@ -500,13 +500,11 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
             final RntbdRequestRecord record = (RntbdRequestRecord) message;
             this.timestamps.channelWriteAttempted();
-            logger.info("update channelWriteAttempted");
 
             context.write(this.addPendingRequestRecord(context, record), promise).addListener(completed -> {
                 record.stage(RntbdRequestRecord.Stage.SENT);
                 if (completed.isSuccess()) {
                     this.timestamps.channelWriteCompleted();
-                    logger.info("update channelWriteCompleted");
                 }
             });
 

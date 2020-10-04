@@ -50,7 +50,7 @@ public class RntbdConnectionStateListener {
             return;
         }
         if (exception instanceof ReplicaReconfigurationException) {
-            logger.warn(
+            logger.debug(
                 "dropping connection to {} because the service is being discontinued or reconfigured {}",
                 endpoint.remoteURI(),
                 request.getActivityId());
