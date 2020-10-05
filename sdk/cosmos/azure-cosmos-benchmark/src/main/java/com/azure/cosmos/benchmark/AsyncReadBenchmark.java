@@ -11,8 +11,6 @@ import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.time.Duration;
-
 class AsyncReadBenchmark extends AsyncBenchmark<PojoizedJson> {
 
     static class LatencySubscriber<T> extends BaseSubscriber<T> {
@@ -58,7 +56,7 @@ class AsyncReadBenchmark extends AsyncBenchmark<PojoizedJson> {
 
         Mono<PojoizedJson> result = cosmosAsyncContainer.readItem(doc.getId(),
             new PartitionKey(partitionKeyValue),
-            PojoizedJson.class).map(CosmosItemResponse::getItem).delayElement(Duration.ofSeconds(1));
+            PojoizedJson.class).map(CosmosItemResponse::getItem);
 
         concurrencyControlSemaphore.acquire();
 
