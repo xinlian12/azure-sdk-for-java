@@ -69,7 +69,8 @@ public class RntbdConnectionStateListener {
                     final Class<?> type = cause.getClass();
 
                     if (type == ClosedChannelException.class) {
-                        this.onConnectionEvent(RntbdConnectionEvent.READ_EOF, request, exception);
+                        this.onConnectionEvent(RntbdConnectionEvent.READ_EOF, request, cause);
+                        logger.warn("Channel is dropped due to {}", cause);
                     }
                     else {
                         if (logger.isDebugEnabled()) {
@@ -147,8 +148,8 @@ public class RntbdConnectionStateListener {
     private void updateAddressCache(final RxDocumentServiceRequest request) {
         try{
             if (this.updatingAddressCache.compareAndSet(false, true)) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug(
+                if (logger.isInfoEnabled()) {
+                    logger.info(
                         "updateAddressCache ({\"time\":{},\"endpoint\":{},\"partitionAddressCache\":{}})",
                         RntbdObjectMapper.toJson(Instant.now()),
                         RntbdObjectMapper.toJson(this.endpoint),
