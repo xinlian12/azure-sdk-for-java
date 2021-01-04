@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.cosmos.implementation.throughputBudget.controller.container;
+package com.azure.cosmos.implementation.throughputControl.controller.container;
 
 import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.ConnectionMode;
 import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.CosmosBridgeInternal;
 import com.azure.cosmos.CosmosException;
-import com.azure.cosmos.ThroughputBudgetGroupConfig;
+import com.azure.cosmos.ThroughputControlGroupConfig;
 import com.azure.cosmos.implementation.AsyncDocumentClient;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
@@ -17,10 +17,10 @@ import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
 import com.azure.cosmos.implementation.changefeed.CancellationToken;
 import com.azure.cosmos.implementation.changefeed.CancellationTokenSource;
-import com.azure.cosmos.implementation.throughputBudget.ThroughputResolveLevel;
-import com.azure.cosmos.implementation.throughputBudget.controller.IThroughputBudgetController;
-import com.azure.cosmos.implementation.throughputBudget.controller.group.ThroughputBudgetGroupControllerBase;
-import com.azure.cosmos.implementation.throughputBudget.controller.group.ThroughputBudgetGroupControllerFactory;
+import com.azure.cosmos.implementation.throughputControl.ThroughputResolveLevel;
+import com.azure.cosmos.implementation.throughputControl.controller.IThroughputController;
+import com.azure.cosmos.implementation.throughputControl.controller.group.ThroughputGroupControllerBase;
+import com.azure.cosmos.implementation.throughputControl.controller.group.ThroughputBudgetGroupControllerFactory;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.ModelBridgeInternal;
 import com.azure.cosmos.models.ThroughputProperties;
@@ -41,43 +41,39 @@ import java.util.concurrent.atomic.AtomicReference;
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkArgument;
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
 
-public class ThroughputBudgetContainerController implements IThroughputBudgetController {
-    private static final Logger logger = LoggerFactory.getLogger(ThroughputBudgetContainerController.class);
+public class ThroughputContainerController implements IThroughputController {
+    private static final Logger logger = LoggerFactory.getLogger(ThroughputContainerController.class);
 
     private final Duration DEFAULT_REFRESH_THROUGHPUT_INTERVAL = Duration.ofSeconds(60); //TODO: should this be longer time period?
 
     private final CancellationTokenSource cancellationTokenSource;
     private final AsyncDocumentClient client;
     private final ConnectionMode connectionMode;
-    private final ConcurrentHashMap<String, ThroughputBudgetGroupControllerBase> groupControllers;
-    private final List<ThroughputBudgetGroupConfig> groupConfigs;
-    private final String hostName;
+    private final ConcurrentHashMap<String, ThroughputGroupControllerBase> groupControllers;
+    private final List<ThroughputControlGroupConfig> groupConfigs;
     private final AtomicReference<Integer> maxContainerThroughput;
     private final RxPartitionKeyRangeCache partitionKeyRangeCache;
     private final Scheduler scheduler;
     private final CosmosAsyncContainer targetContainer;
 
-    private ThroughputBudgetGroupControllerBase defaultGroupController;
+    private ThroughputGroupControllerBase defaultGroupController;
     private String resolvedContainerRid;
     private String resolvedDatabaseRid;
     private ThroughputResolveLevel throughputResolveLevel;
 
 
-    public ThroughputBudgetContainerController(
+    public ThroughputContainerController(
         ConnectionMode connectionMode,
-        List<ThroughputBudgetGroupConfig> groups,
-        String hostName,
+        List<ThroughputControlGroupConfig> groups,
         RxPartitionKeyRangeCache partitionKeyRangeCache) {
 
         checkArgument(groups != null && groups.size() > 0, "Throughput budget groups can not be null or empty");
-        checkArgument(StringUtils.isNotEmpty(hostName), "Host name cannot be null or empty");
         checkNotNull(partitionKeyRangeCache, "PartitionKeyRange cache can not be null");
 
         this.cancellationTokenSource = new CancellationTokenSource();
         this.connectionMode = connectionMode;
         this.groupControllers = new ConcurrentHashMap<>();
         this.groupConfigs = groups;
-        this.hostName = hostName;
         this.maxContainerThroughput = new AtomicReference<>(null);
         this.partitionKeyRangeCache = partitionKeyRangeCache;
 
@@ -96,7 +92,7 @@ public class ThroughputBudgetContainerController implements IThroughputBudgetCon
             .then();
     }
 
-    public Mono<ThroughputBudgetContainerController> init() {
+    public Mono<ThroughputContainerController> init() {
         return this.resolveDatabaseResourceId()
             .then(this.resolveContainerResourceId())
             .then(this.resolveProvisionedThroughput())
@@ -151,14 +147,13 @@ public class ThroughputBudgetContainerController implements IThroughputBudgetCon
         return false;
     }
 
-    private Flux<ThroughputBudgetGroupControllerBase> createAndInitializeGroupControllers() {
+    private Flux<ThroughputGroupControllerBase> createAndInitializeGroupControllers() {
         return Flux.fromIterable(this.groupConfigs)
             .flatMap(groupConfig -> {
-                ThroughputBudgetGroupControllerBase groupController =
+                ThroughputGroupControllerBase groupController =
                     ThroughputBudgetGroupControllerFactory.createController(
                         this.connectionMode,
                         groupConfig,
-                        this.hostName,
                         this.maxContainerThroughput.get(),
                         this.partitionKeyRangeCache,
                         this.resolvedContainerRid);
@@ -176,8 +171,8 @@ public class ThroughputBudgetContainerController implements IThroughputBudgetCon
             .flatMap(groupController -> groupController.init());
     }
 
-    private ThroughputResolveLevel getThroughputRefreshLevel(List<ThroughputBudgetGroupConfig> groupConfigs) {
-        if (groupConfigs.stream().anyMatch(groupConfig -> groupConfig.getThroughputLimitThreshold() != null)) {
+    private ThroughputResolveLevel getThroughputRefreshLevel(List<ThroughputControlGroupConfig> groupConfigs) {
+        if (groupConfigs.stream().anyMatch(groupConfig -> groupConfig.getTargetThroughputThreshold() != null)) {
             // Throughput can be provisioned on container level or database level, will start from container
             return ThroughputResolveLevel.CONTAINER;
         } else {

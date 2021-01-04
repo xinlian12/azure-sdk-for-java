@@ -5,7 +5,7 @@ package com.azure.cosmos.implementation;
 import com.azure.core.credential.AzureKeyCredential;
 import com.azure.core.credential.TokenCredential;
 import com.azure.cosmos.ConsistencyLevel;
-import com.azure.cosmos.ThroughputBudgetGroupConfig;
+import com.azure.cosmos.ThroughputControlGroupConfig;
 import com.azure.cosmos.TransactionalBatchResponse;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.batch.ServerBatchRequest;
@@ -1479,10 +1479,9 @@ public interface AsyncDocumentClient {
     ItemDeserializer getItemDeserializer();
 
     /**
-     * Enable throughput budget control.
+     * Enable throughput control.
      *
-     * @param hostName the host name of the client.
-     * @param groupConfigs the throughput budget group configurations.
+     * @param groupConfigs the throughput group configurations.
      */
-    void enableThroughputBudgetControl(String hostName, Set<ThroughputBudgetGroupConfig> groupConfigs);
+    void enableThroughputControl(Set<ThroughputControlGroupConfig> groupConfigs);
 }

@@ -7,7 +7,7 @@ package com.azure.cosmos.implementation.directconnectivity;
 import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.implementation.*;
-import com.azure.cosmos.implementation.throughputBudget.ThroughputBudgetControlStore;
+import com.azure.cosmos.implementation.throughputControl.ThroughputControlStore;
 import reactor.core.publisher.Mono;
 
 public class ServerStoreModel implements RxStoreModel {
@@ -44,7 +44,7 @@ public class ServerStoreModel implements RxStoreModel {
     }
 
     @Override
-    public void enableThroughputBudgetControl(ThroughputBudgetControlStore throughputBudgetControlStore) {
-        this.storeClient.enableThroughputBudgetControl(throughputBudgetControlStore);
+    public void enableThroughputControl(ThroughputControlStore throughputControlStore) {
+        this.storeClient.enableThroughputBudgetControl(throughputControlStore);
     }
 }

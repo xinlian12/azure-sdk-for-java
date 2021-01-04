@@ -8,7 +8,6 @@ import com.azure.core.credential.TokenCredential;
 import com.azure.core.util.Context;
 import com.azure.core.util.tracing.Tracer;
 import com.azure.cosmos.implementation.*;
-import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdMetrics;
 import com.azure.cosmos.models.*;
 import com.azure.cosmos.util.CosmosPagedFlux;
@@ -458,19 +457,16 @@ public final class CosmosAsyncClient implements Closeable {
     }
 
     /**
-     * Enable throughput budget control by providing the configs. Each cosmos client can only enable one time.
+     * Enable throughput control by providing the configs. Each cosmos client can only enable throughout control one time.
      *
-     * @param hostName The host name. Usually this should be different across machines.
      * @param groupConfigs The throughput budget group configurations.
      */
-    public void enableThroughputBudgetControl(String hostName, ThroughputBudgetGroupConfig... groupConfigs) {
-        checkArgument(StringUtils.isNotEmpty(hostName), "Host name can not be empty");
-
+    public void enableThroughputControl(ThroughputControlGroupConfig... groupConfigs) {
         // Validate no duplicate group definition.
-        Set<ThroughputBudgetGroupConfig> groupConfigSet =
+        Set<ThroughputControlGroupConfig> groupConfigSet =
             Stream.of(groupConfigs)
                 .map(groupConfig -> {
-                    checkNotNull(groupConfig, "Throughout budget group config cannot be null");
+                    checkNotNull(groupConfig, "Throughout control group config cannot be null");
                     groupConfig.validate();
                     return groupConfig;
                 }).collect(Collectors.toSet());
@@ -480,7 +476,7 @@ public final class CosmosAsyncClient implements Closeable {
             throw new IllegalArgumentException("Only at most one group can be set as default");
         }
 
-        this.asyncDocumentClient.enableThroughputBudgetControl(hostName, groupConfigSet);
+        this.asyncDocumentClient.enableThroughputControl(groupConfigSet);
     }
 
     private CosmosPagedFlux<CosmosDatabaseProperties> queryDatabasesInternal(SqlQuerySpec querySpec, CosmosQueryRequestOptions options){

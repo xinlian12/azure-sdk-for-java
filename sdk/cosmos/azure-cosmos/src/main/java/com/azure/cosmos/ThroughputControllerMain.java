@@ -18,29 +18,36 @@ public class ThroughputControllerMain {
 
         CosmosAsyncDatabase database = client.getDatabase("testDB");
         CosmosAsyncContainer feedContainer = database.getContainer("testContainer");
-        CosmosAsyncContainer throughputBudgetControllerContainer = client.getDatabase("testDB").getContainer("throughputBudgetControllerContainer");
+        CosmosAsyncContainer throughputControlContainer = client.getDatabase("testDB").getContainer("throughputControlContainer");
 
-        ThroughputBudgetGroupConfig group1 =
-            new ThroughputBudgetGroupConfig()
+        // Throughput control group with hard limit and set by default
+        ThroughputControlGroupConfig group1 =
+            new ThroughputControlGroupConfig()
                 .groupName("group-1")
                 .targetContainer(feedContainer)
-                .throughputLimit(10000)
+                .targetThroughput(10000)
                 .localControlMode()
                 .useByDefault();
 
-        ThroughputBudgetGroupConfig group2 =
-            new ThroughputBudgetGroupConfig()
-                .groupName("group-2")
-                .targetContainer(feedContainer)
-                .throughputLimitThreshold(0.9)
-                .distributedControlMode(
-                    new ThroughputBudgetDistributedControlConfig()
-                    .controllerContainer(throughputBudgetControllerContainer) // can be under the same account as the feed container or different account
-                    .documentRenewalInterval(Duration.ofSeconds(10))
-                    .documentExpireInterval(Duration.ofSeconds(10))
-                    .documentTtl(Duration.ofMinutes(60)));
+        // Throughput control group with limit threshold
+        ThroughputControlGroupConfig group2 = new ThroughputControlGroupConfig()
+            .groupName("group-2")
+            .targetContainer(feedContainer)
+            .targetThroughputThreshold(0.9)
+            .localControlMode();
+
+//        ThroughputControlGroupConfig group3 =
+//            new ThroughputControlGroupConfig()
+//                .groupName("group-3")
+//                .targetContainer(feedContainer)
+//                .targetThroughputThreshold(0.9)
+//                .distributedControlMode(
+//                    new DistributedThroughputControlConfig()
+//                    .controlContainer(throughputControlContainer) // can be under the same account as the feed container or different account
+//                    .documentRenewalInterval(Duration.ofSeconds(10))
+//                    .documentExpireInterval(Duration.ofSeconds(10)));
 
         // after build, can use in the client
-        client.enableThroughputBudgetControl("host-1", group1, group2);
+        client.enableThroughputControl(group1, group2);
     }
 }

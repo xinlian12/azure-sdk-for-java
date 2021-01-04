@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.cosmos.implementation.throughputBudget.controller;
+package com.azure.cosmos.implementation.throughputControl.controller;
 
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
-import com.azure.cosmos.implementation.throughputBudget.ThroughputBudgetRequestAuthorizer;
+import com.azure.cosmos.implementation.throughputControl.ThroughputControlRequestAuthorizer;
 import reactor.core.publisher.Mono;
 
-public class GlobalThroughputBudgetRequestAuthorizerController implements ThroughputBudgetRequestAuthorizerController {
-    private ThroughputBudgetRequestAuthorizer requestAuthorizer;
+public class GlobalThroughputRequestController implements ThroughputRequestController {
+    private ThroughputControlRequestAuthorizer requestAuthorizer;
 
     @Override
     public Mono<Void> resetThroughput(double throughput) {
@@ -22,8 +22,8 @@ public class GlobalThroughputBudgetRequestAuthorizerController implements Throug
     }
 
     @Override
-    public Mono<ThroughputBudgetRequestAuthorizerController> init(double scheduledThroughput) {
-        this.requestAuthorizer= new ThroughputBudgetRequestAuthorizer(scheduledThroughput);
+    public Mono<ThroughputRequestController> init(double scheduledThroughput) {
+        this.requestAuthorizer= new ThroughputControlRequestAuthorizer(scheduledThroughput);
         return Mono.just(this);
     }
 

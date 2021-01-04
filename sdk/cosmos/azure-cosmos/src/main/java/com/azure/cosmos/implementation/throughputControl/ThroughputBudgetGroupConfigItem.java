@@ -1,4 +1,4 @@
-package com.azure.cosmos.implementation.throughputBudget;
+package com.azure.cosmos.implementation.throughputControl;
 
 import com.azure.cosmos.implementation.Constants;
 import com.fasterxml.jackson.core.JsonGenerator;

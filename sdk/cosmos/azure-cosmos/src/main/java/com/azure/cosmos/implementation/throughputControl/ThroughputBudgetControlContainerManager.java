@@ -1,4 +1,4 @@
-package com.azure.cosmos.implementation.throughputBudget;
+package com.azure.cosmos.implementation.throughputControl;
 
 import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.CosmosException;
@@ -25,7 +25,6 @@ public class ThroughputBudgetControlContainerManager {
     private final String groupConfigItemId;
     private final String groupClientItemId;
     private final String fullGroupName;
-    private final String hostName;
     private ThroughputBudgetGroupConfigItem groupConfigItem;
     private ThroughputBudgetGroupClientItem groupClientItem;
     private final Integer groupClientItemExpireInSeconds;
@@ -40,7 +39,6 @@ public class ThroughputBudgetControlContainerManager {
         this.fullGroupName = this.getFullGroupName();
         this.groupConfigItemId = fullGroupName + ".info";
         this.groupClientItemId = fullGroupName + "." + UUID.randomUUID();
-        this.hostName = this.groupConfig.getHostName();
         this.groupClientItemExpireInSeconds = (int)this.groupConfig.getDistributedControlConfig().getDocumentExpireInterval().getSeconds();
         this.groupConfigItem = new ThroughputBudgetGroupConfigItem(
             this.groupConfigItemId,
@@ -51,8 +49,7 @@ public class ThroughputBudgetControlContainerManager {
 
         this.groupClientItem = new ThroughputBudgetGroupClientItem(
             this.groupClientItemId,
-            this.fullGroupName,
-            this.hostName);
+            this.fullGroupName);
     }
 
     private String getFullGroupName() {

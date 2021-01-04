@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.cosmos.implementation.throughputBudget;
+package com.azure.cosmos.implementation.throughputControl;
 
 import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.implementation.HttpConstants;
@@ -17,15 +17,15 @@ import reactor.core.publisher.Mono;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class ThroughputBudgetRequestAuthorizer {
-    private static final Logger logger = LoggerFactory.getLogger(ThroughputBudgetRequestAuthorizer.class);
+public class ThroughputControlRequestAuthorizer {
+    private static final Logger logger = LoggerFactory.getLogger(ThroughputControlRequestAuthorizer.class);
 
     private final AtomicReference<Double> availableThroughput;
     private final AtomicReference<Double> scheduledThroughput;
     private final AtomicInteger rejectedRequests;
     private final AtomicInteger totalRequests;
 
-    public ThroughputBudgetRequestAuthorizer(double scheduledThroughput) {
+    public ThroughputControlRequestAuthorizer(double scheduledThroughput) {
         this.availableThroughput = new AtomicReference<>(scheduledThroughput);
         this.scheduledThroughput = new AtomicReference<>(scheduledThroughput);
         this.rejectedRequests = new AtomicInteger(0);

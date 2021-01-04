@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.cosmos.implementation.throughputBudget;
+package com.azure.cosmos.implementation.throughputControl;
 
 import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.ConnectionMode;
 import com.azure.cosmos.CosmosException;
-import com.azure.cosmos.ThroughputBudgetGroupConfig;
+import com.azure.cosmos.ThroughputControlGroupConfig;
 import com.azure.cosmos.implementation.Exceptions;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.ResourceType;
@@ -16,8 +16,8 @@ import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.caches.AsyncCache;
 import com.azure.cosmos.implementation.caches.RxClientCollectionCache;
 import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
-import com.azure.cosmos.implementation.throughputBudget.controller.IThroughputBudgetController;
-import com.azure.cosmos.implementation.throughputBudget.controller.container.ThroughputBudgetContainerController;
+import com.azure.cosmos.implementation.throughputControl.controller.IThroughputController;
+import com.azure.cosmos.implementation.throughputControl.controller.container.ThroughputContainerController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -33,8 +33,8 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkAr
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
 
 /**
- * This is the entrance class for the whole throughput budget control work flow pipeline.
- * The pipeline will consist of controllers which is implementation of {@link IThroughputBudgetController} and {@link ThroughputBudgetRequestAuthorizer}.
+ * This is the entrance class for the whole throughput control work flow pipeline.
+ * The pipeline will consist of controllers which is implementation of {@link IThroughputController} and {@link ThroughputControlRequestAuthorizer}.
  *
  * Following is a high-level diagram of the pipeline:
  *
@@ -45,7 +45,7 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
  *                                                 |
  *                                                 |
  *                       +---------------------------------------------------------+
- *                       |              ThroughputBudgetControlStore               |
+ *                       |                    ThroughputControlStore               |
  *                       +---------------------------------------------------------+
  *                      /                                                           \
  *                     /                                                             \
@@ -74,26 +74,23 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
  *
  *
   */
-public class ThroughputBudgetControlStore {
+public class ThroughputControlStore {
 
-    private static final Logger logger = LoggerFactory.getLogger(ThroughputBudgetControlStore.class);
+    private static final Logger logger = LoggerFactory.getLogger(ThroughputControlStore.class);
     private final RxClientCollectionCache collectionCache;
-    private final ConcurrentHashMap<String, List<ThroughputBudgetGroupConfig>> configMapByContainer;
+    private final ConcurrentHashMap<String, List<ThroughputControlGroupConfig>> configMapByContainer;
     private final ConnectionMode connectionMode;
-    private final AsyncCache<String, ThroughputBudgetContainerController> containerControllerCache;
-    private final String hostName;
+    private final AsyncCache<String, ThroughputContainerController> containerControllerCache;
     private final RxPartitionKeyRangeCache partitionKeyRangeCache;
 
-    public ThroughputBudgetControlStore(
+    public ThroughputControlStore(
         RxClientCollectionCache collectionCache,
         ConnectionMode connectionMode,
-        Set<ThroughputBudgetGroupConfig> groupConfigs,
-        String hostName,
+        Set<ThroughputControlGroupConfig> groupConfigs,
         RxPartitionKeyRangeCache partitionKeyRangeCache) {
 
         checkNotNull(collectionCache,"RxClientCollectionCache can not be null");
         checkNotNull(groupConfigs, "Throughput budget group configs can not be null");
-        checkArgument(StringUtils.isNotEmpty(hostName), "Host name can not be null or empty");
         checkNotNull(partitionKeyRangeCache, "PartitionKeyRangeCache can not be null");
 
         this.collectionCache = collectionCache;
@@ -108,7 +105,6 @@ public class ThroughputBudgetControlStore {
 
         this.connectionMode = connectionMode;
         this.containerControllerCache = new AsyncCache<>();
-        this.hostName = hostName;
         this.partitionKeyRangeCache = partitionKeyRangeCache;
     }
 
@@ -161,24 +157,23 @@ public class ThroughputBudgetControlStore {
 
     }
 
-    private Mono<ThroughputBudgetContainerController> createAndInitContainerController(String collectionLink) {
+    private Mono<ThroughputContainerController> createAndInitContainerController(String collectionLink) {
         checkArgument(StringUtils.isNotEmpty(collectionLink), "Collection link should not be null or empty");
 
         return Mono.justOrEmpty(this.configMapByContainer.get(collectionLink))
             .flatMap(groupConfigs -> {
                 // Only create container controller when the owner resource exists
                 // TODO: populate diagnostics context
-                ThroughputBudgetContainerController containerController =
-                    new ThroughputBudgetContainerController(
+                ThroughputContainerController containerController =
+                    new ThroughputContainerController(
                         this.connectionMode,
                         this.configMapByContainer.get(collectionLink),
-                        this.hostName,
                         this.partitionKeyRangeCache);
                 return containerController.init();
             });
     }
 
-    private void doOnError(RxDocumentServiceRequest request, IThroughputBudgetController controller, Throwable throwable) {
+    private void doOnError(RxDocumentServiceRequest request, IThroughputController controller, Throwable throwable) {
         checkNotNull(request, "Request can not be null");
         checkNotNull(controller, "Container controller can not be null");
         checkNotNull(throwable, "Exception can not be null");
@@ -209,7 +204,7 @@ public class ThroughputBudgetControlStore {
             Exceptions.isSubStatusCode(cosmosException, HttpConstants.SubStatusCodes.PARTITION_KEY_MISMATCH);
     }
 
-    private Mono<ThroughputBudgetContainerController> resolveContainerController(String collectionLink) {
+    private Mono<ThroughputContainerController> resolveContainerController(String collectionLink) {
         checkArgument(StringUtils.isNotEmpty(collectionLink), "Collection link can not be null or empty");
 
         return this.containerControllerCache.getAsync(
@@ -219,7 +214,7 @@ public class ThroughputBudgetControlStore {
         );
     }
 
-    private Mono<Boolean> shouldRefreshContainerController(String containerLink, ThroughputBudgetContainerController containerController) {
+    private Mono<Boolean> shouldRefreshContainerController(String containerLink, ThroughputContainerController containerController) {
         return this.collectionCache.resolveByNameAsync(null, containerLink, null)
             .flatMap(documentCollection ->
                 Mono.just(StringUtils.equals(documentCollection.getResourceId(), containerController.getResolvedContainerRid())));

@@ -11,7 +11,7 @@ import com.azure.cosmos.implementation.directconnectivity.HttpUtils;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
 import com.azure.cosmos.implementation.directconnectivity.WebExceptionUtility;
 import com.azure.cosmos.implementation.http.*;
-import com.azure.cosmos.implementation.throughputBudget.ThroughputBudgetControlStore;
+import com.azure.cosmos.implementation.throughputControl.ThroughputControlStore;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -45,7 +45,7 @@ class RxGatewayStoreModel implements RxStoreModel {
     private final GlobalEndpointManager globalEndpointManager;
     private ConsistencyLevel defaultConsistencyLevel;
     private ISessionContainer sessionContainer;
-    private ThroughputBudgetControlStore throughputBudgetControlStore;
+    private ThroughputControlStore throughputControlStore;
 
     public RxGatewayStoreModel(
             DiagnosticsClientContext clientContext,
@@ -132,7 +132,7 @@ class RxGatewayStoreModel implements RxStoreModel {
 
 
     public Mono<RxDocumentServiceResponse> performRequest(RxDocumentServiceRequest request, HttpMethod method) {
-        return this.throughputBudgetControlStore.processRequest(request, performRequest(request, method));
+        return this.throughputControlStore.processRequest(request, performRequest(request, method));
     }
 
     /**
@@ -420,8 +420,8 @@ class RxGatewayStoreModel implements RxStoreModel {
     }
 
     @Override
-    public void enableThroughputBudgetControl(ThroughputBudgetControlStore throughputBudgetControlStore) {
-        this.throughputBudgetControlStore = throughputBudgetControlStore;
+    public void enableThroughputControl(ThroughputControlStore throughputControlStore) {
+        this.throughputControlStore = throughputControlStore;
     }
 
     private void captureSessionToken(RxDocumentServiceRequest request, Map<String, String> responseHeaders) {

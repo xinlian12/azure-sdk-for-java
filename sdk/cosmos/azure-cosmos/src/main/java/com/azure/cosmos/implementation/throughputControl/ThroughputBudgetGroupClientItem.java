@@ -1,4 +1,4 @@
-package com.azure.cosmos.implementation.throughputBudget;
+package com.azure.cosmos.implementation.throughputControl;
 
 import com.azure.cosmos.implementation.Constants;
 import com.fasterxml.jackson.core.JsonGenerator;
@@ -19,24 +19,17 @@ public class ThroughputBudgetGroupClientItem extends ThroughputBudgetControlCont
 
     private static final ZonedDateTime UNIX_START_TIME = ZonedDateTime.parse("1970-01-01T00:00:00.0Z[UTC]");
 
-    private final String hostName;
     private final String initializeTime;
     private double loadFactor;
     private Integer ttl;
 
     public ThroughputBudgetGroupClientItem(
         String id,
-        String group,
-        String hostName) {
+        String group) {
         super(id, group);
-        this.hostName = hostName;
 
         ZonedDateTime currentTime = ZonedDateTime.now(ZoneId.of("UTC"));
         this.initializeTime = currentTime.toString();
-    }
-
-    public String getHostName() {
-        return hostName;
     }
 
     public String getInitializeTime() {
@@ -76,7 +69,6 @@ public class ThroughputBudgetGroupClientItem extends ThroughputBudgetControlCont
                 writer.writeStringField(Constants.Properties.ID, item.getId());
                 writer.writeStringField(Constants.Properties.E_TAG, item.getEtag());
                 writer.writeStringField(PROPERTY_NAME_GROUP, item.getGroup());
-                writer.writeStringField(PROPERTY_NAME_HOSTNAME, item.hostName);
                 writer.writeStringField(PROPERTY_NAME_INITIALIZATION_TIME, item.initializeTime);
                 writer.writeStringField(PROPERTY_NAME_LOAD_FACTOR, String.valueOf(item.loadFactor));
                 writer.writeEndObject();

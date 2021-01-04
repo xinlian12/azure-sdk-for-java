@@ -27,28 +27,27 @@ public class ThroughputBudgetControlTest extends TestSuiteBase {
     public <T> void readItem() throws Exception {
         CosmosAsyncContainer controllerContainer = this.client.getDatabase("controllerDatabase").getContainer("controllerContainer");
 
-        ThroughputBudgetGroupConfig group1 =
-            new ThroughputBudgetGroupConfig()
+        ThroughputControlGroupConfig group1 =
+            new ThroughputControlGroupConfig()
                 .groupName("group-1")
                 .targetContainer(container)
-                .throughputLimit(1)
+                .targetThroughput(1)
                 .localControlMode()
                 .useByDefault(); //change to use as default // necessary parameters in the constructors
 
-        ThroughputBudgetGroupConfig group2 =
-            new ThroughputBudgetGroupConfig()
+        ThroughputControlGroupConfig group2 =
+            new ThroughputControlGroupConfig()
                 .groupName("group-2")
                 .targetContainer(container)
-                .throughputLimit(1)
+                .targetThroughput(1)
                 .distributedControlMode(
-                    new ThroughputBudgetDistributedControlConfig()
-                        .controllerContainer(controllerContainer)
+                    new DistributedThroughputControlConfig()
+                        .controlContainer(controllerContainer)
                         .documentRenewalInterval(Duration.ofSeconds(1))
                         .documentExpireInterval(Duration.ofSeconds(10))
                 );
 
-        this.client.enableThroughputBudgetControl("localHost", group1, group2);
-
+        this.client.enableThroughputControl(group1, group2);
 
         CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions();
         requestOptions.setThroughputBudgetGroupName(group1.getGroupName());

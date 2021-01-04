@@ -26,7 +26,7 @@ import com.azure.cosmos.implementation.http.HttpHeaders;
 import com.azure.cosmos.implementation.http.SharedGatewayHttpClient;
 import com.azure.cosmos.implementation.query.*;
 import com.azure.cosmos.implementation.routing.*;
-import com.azure.cosmos.implementation.throughputBudget.ThroughputBudgetControlStore;
+import com.azure.cosmos.implementation.throughputControl.ThroughputControlStore;
 import com.azure.cosmos.models.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -3619,24 +3619,24 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
     }
 
     @Override
-    public void enableThroughputBudgetControl(String hostName, Set<ThroughputBudgetGroupConfig> groupConfigs) {
-        checkArgument(StringUtils.isNotEmpty(hostName), "Host name can not be null or empty");
-        checkNotNull(groupConfigs, "Throughput budget group configs can not be null");
+    public void enableThroughputControl(Set<ThroughputControlGroupConfig> groupConfigs) {
+        checkNotNull(groupConfigs, "Throughput control group configs can not be null");
 
         if (this.throughputBudgetControlEnabled.compareAndSet(false, true)) {
-            ThroughputBudgetControlStore throughputBudgetControlStore =
-                new ThroughputBudgetControlStore(
+            ThroughputControlStore throughputControlStore =
+                new ThroughputControlStore(
                     this.collectionCache,
                     this.connectionPolicy.getConnectionMode(),
                     groupConfigs,
-                    hostName,
                     this.partitionKeyRangeCache);
 
-            this.storeModel.enableThroughputBudgetControl(throughputBudgetControlStore);
             //Non-blocking
-            throughputBudgetControlStore.init().subscribeOn(Schedulers.elastic());
+            throughputControlStore.init().subscribeOn(Schedulers.elastic());
+
+            this.storeModel.enableThroughputControl(throughputControlStore);
+
         } else {
-            throw new IllegalArgumentException("Throughput budget control already enabled");
+            throw new IllegalArgumentException("Throughput control already enabled");
         }
     }
 

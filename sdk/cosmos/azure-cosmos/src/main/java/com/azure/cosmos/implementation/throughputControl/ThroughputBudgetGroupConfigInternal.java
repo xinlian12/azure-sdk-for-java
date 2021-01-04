@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.cosmos.implementation.throughputBudget;
+package com.azure.cosmos.implementation.throughputControl;
 
 import com.azure.cosmos.CosmosAsyncContainer;
-import com.azure.cosmos.ThroughputBudgetDistributedControlConfig;
-import com.azure.cosmos.ThroughputBudgetGroupConfig;
+import com.azure.cosmos.DistributedThroughputControlConfig;
+import com.azure.cosmos.ThroughputControlGroupConfig;
 import com.azure.cosmos.ThroughputBudgetGroupControlMode;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 
@@ -14,9 +14,8 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
 
 public class ThroughputBudgetGroupConfigInternal {
     private final ThroughputBudgetGroupControlMode controlMode;
-    private final ThroughputBudgetDistributedControlConfig distributedControlConfig;
+    private final DistributedThroughputControlConfig distributedControlConfig;
     private final String groupName;
-    private final String hostName;
     private final CosmosAsyncContainer targetContainer;
     private final String targetContainerRid;
     private final Integer throughputLimit;
@@ -24,22 +23,19 @@ public class ThroughputBudgetGroupConfigInternal {
     private final boolean useByDefault;
 
     public ThroughputBudgetGroupConfigInternal(
-        ThroughputBudgetGroupConfig groupConfig,
-        String hostName,
+        ThroughputControlGroupConfig groupConfig,
         String targetContainerRid) {
 
-        checkArgument(StringUtils.isNotEmpty(hostName), "hostName can not be null or empty");
         checkArgument(StringUtils.isNotEmpty(targetContainerRid), "Target container rid cannot be null or empty");
         checkNotNull(groupConfig, "Group config can not be null");
 
         this.controlMode = groupConfig.getControlMode();
         this.distributedControlConfig = groupConfig.getDistributedControlConfig();
         this.groupName = groupConfig.getGroupName();
-        this.hostName = hostName;
         this.targetContainer = groupConfig.getTargetContainer();
         this.targetContainerRid = targetContainerRid;
-        this.throughputLimit = groupConfig.getThroughputLimit();
-        this.throughputLimitThreshold = groupConfig.getThroughputLimitThreshold();
+        this.throughputLimit = groupConfig.getTargetThroughput();
+        this.throughputLimitThreshold = groupConfig.getTargetThroughputThreshold();
         this.useByDefault = groupConfig.isUseByDefault();
     }
 
@@ -47,16 +43,12 @@ public class ThroughputBudgetGroupConfigInternal {
         return controlMode;
     }
 
-    public ThroughputBudgetDistributedControlConfig getDistributedControlConfig() {
+    public DistributedThroughputControlConfig getDistributedControlConfig() {
         return distributedControlConfig;
     }
 
     public String getGroupName() {
         return groupName;
-    }
-
-    public String getHostName() {
-        return hostName;
     }
 
     public CosmosAsyncContainer getTargetContainer() {

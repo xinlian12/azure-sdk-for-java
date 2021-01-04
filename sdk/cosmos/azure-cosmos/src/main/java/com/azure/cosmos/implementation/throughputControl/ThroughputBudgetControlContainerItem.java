@@ -1,4 +1,4 @@
-package com.azure.cosmos.implementation.throughputBudget;
+package com.azure.cosmos.implementation.throughputControl;
 
 public abstract class ThroughputBudgetControlContainerItem {
     private final String id;

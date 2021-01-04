@@ -1,18 +1,18 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.cosmos.implementation.throughputBudget.controller.group;
+package com.azure.cosmos.implementation.throughputControl.controller.group;
 
 import com.azure.cosmos.ConnectionMode;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
 import com.azure.cosmos.implementation.changefeed.CancellationToken;
 import com.azure.cosmos.implementation.changefeed.CancellationTokenSource;
-import com.azure.cosmos.implementation.throughputBudget.ThroughputBudgetGroupConfigInternal;
-import com.azure.cosmos.implementation.throughputBudget.controller.GlobalThroughputBudgetRequestAuthorizerController;
-import com.azure.cosmos.implementation.throughputBudget.controller.IThroughputBudgetController;
-import com.azure.cosmos.implementation.throughputBudget.controller.PkRangesThroughputBudgetRequestAuthorizerController;
-import com.azure.cosmos.implementation.throughputBudget.controller.ThroughputBudgetRequestAuthorizerController;
+import com.azure.cosmos.implementation.throughputControl.ThroughputBudgetGroupConfigInternal;
+import com.azure.cosmos.implementation.throughputControl.controller.GlobalThroughputRequestController;
+import com.azure.cosmos.implementation.throughputControl.controller.IThroughputController;
+import com.azure.cosmos.implementation.throughputControl.controller.PkRangesThroughputRequestController;
+import com.azure.cosmos.implementation.throughputControl.controller.ThroughputRequestController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -27,8 +27,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
 
-public abstract class ThroughputBudgetGroupControllerBase implements IThroughputBudgetController {
-    private final static Logger logger = LoggerFactory.getLogger(ThroughputBudgetGroupControllerBase.class);
+public abstract class ThroughputGroupControllerBase implements IThroughputController {
+    private final static Logger logger = LoggerFactory.getLogger(ThroughputGroupControllerBase.class);
     final Duration DEFAULT_THROUGHPUT_USAGE_RESET_DURATION = Duration.ofSeconds(1);
 
     final ConnectionMode connectionMode;
@@ -40,12 +40,12 @@ public abstract class ThroughputBudgetGroupControllerBase implements IThroughput
     final Scheduler scheduler;
     final CancellationTokenSource cancellationTokenSource;
 
-    ThroughputBudgetRequestAuthorizerController requestAuthorizerController;
+    ThroughputRequestController requestAuthorizerController;
 
     final List<Double> loadFactorHistory;
     final AtomicReference<Double> throughputPercentage;
 
-    public ThroughputBudgetGroupControllerBase(
+    public ThroughputGroupControllerBase(
         ConnectionMode connectionMode,
         ThroughputBudgetGroupConfigInternal groupConfig,
         Integer maxContainerThroughput,
@@ -59,7 +59,7 @@ public abstract class ThroughputBudgetGroupControllerBase implements IThroughput
         this.throughputPercentage = new AtomicReference<>(1.0);
 
         this.maxContainerThroughput = new AtomicReference<>(maxContainerThroughput);
-        this.groupThroughput = new AtomicReference(this.calculateGroupThroughput());
+        this.groupThroughput = new AtomicReference<Double>(this.calculateGroupThroughput());
 
         this.partitionKeyRangeCache = partitionKeyRangeCache;
         this.requestAuthorizerController = this.createRequestAuthorizerController();
@@ -69,7 +69,7 @@ public abstract class ThroughputBudgetGroupControllerBase implements IThroughput
         this.loadFactorHistory = new ArrayList<>();
     }
 
-    public Mono<ThroughputBudgetGroupControllerBase> init() {
+    public Mono<ThroughputGroupControllerBase> init() {
         return this.requestAuthorizerController.init(this.groupThroughput.get())
             .doOnSuccess(dummy -> {
                 scheduler.schedule(() -> this.resetThroughputTask(this.cancellationTokenSource.getToken()));
@@ -130,13 +130,13 @@ public abstract class ThroughputBudgetGroupControllerBase implements IThroughput
         return allocatedThroughput * this.throughputPercentage.get();
     }
 
-    private ThroughputBudgetRequestAuthorizerController createRequestAuthorizerController() {
+    private ThroughputRequestController createRequestAuthorizerController() {
         if (this.connectionMode == ConnectionMode.DIRECT) {
-            return new PkRangesThroughputBudgetRequestAuthorizerController(
+            return new PkRangesThroughputRequestController(
                 this.partitionKeyRangeCache,
                 this.groupConfig.getTargetContainerRid());
         } else if (this.connectionMode == ConnectionMode.GATEWAY) {
-            return new GlobalThroughputBudgetRequestAuthorizerController();
+            return new GlobalThroughputRequestController();
         }
 
         throw new IllegalArgumentException(String.format("Connection mode %s is not supported"));

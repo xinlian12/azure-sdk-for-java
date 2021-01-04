@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.cosmos.implementation.throughputBudget.controller.group;
+package com.azure.cosmos.implementation.throughputControl.controller.group;
 
 import com.azure.cosmos.ConnectionMode;
 import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
 import com.azure.cosmos.implementation.changefeed.CancellationToken;
-import com.azure.cosmos.implementation.throughputBudget.ThroughputBudgetControlContainerManager;
-import com.azure.cosmos.implementation.throughputBudget.ThroughputBudgetGroupConfigInternal;
+import com.azure.cosmos.implementation.throughputControl.ThroughputBudgetControlContainerManager;
+import com.azure.cosmos.implementation.throughputControl.ThroughputBudgetGroupConfigInternal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -16,14 +16,14 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 
-public class ThroughputBudgetGroupDistributedController extends ThroughputBudgetGroupControllerBase {
+public class ThroughputGroupDistributedController extends ThroughputGroupControllerBase {
 
-    private static Logger logger = LoggerFactory.getLogger(ThroughputBudgetGroupDistributedController.class);
+    private static Logger logger = LoggerFactory.getLogger(ThroughputGroupDistributedController.class);
     private final CosmosAsyncContainer targetControllerContainer;
     private final Duration documentRenewalInterval;
     private final ThroughputBudgetControlContainerManager containerManager;
 
-    public ThroughputBudgetGroupDistributedController(
+    public ThroughputGroupDistributedController(
         ConnectionMode connectionMode,
         ThroughputBudgetGroupConfigInternal groupConfig,
         Integer maxContainerThroughput,
@@ -39,7 +39,7 @@ public class ThroughputBudgetGroupDistributedController extends ThroughputBudget
     }
 
     @Override
-    public Mono<ThroughputBudgetGroupControllerBase> init() {
+    public Mono<ThroughputGroupControllerBase> init() {
         return super.init()
             .then(this.containerManager.validateControllerContainer())
             .then(this.containerManager.validateGroupConfigItem())
