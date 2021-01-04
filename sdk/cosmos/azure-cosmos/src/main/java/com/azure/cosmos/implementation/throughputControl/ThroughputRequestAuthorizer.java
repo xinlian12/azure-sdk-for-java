@@ -17,15 +17,15 @@ import reactor.core.publisher.Mono;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class ThroughputControlRequestAuthorizer {
-    private static final Logger logger = LoggerFactory.getLogger(ThroughputControlRequestAuthorizer.class);
+public class ThroughputRequestAuthorizer {
+    private static final Logger logger = LoggerFactory.getLogger(ThroughputRequestAuthorizer.class);
 
     private final AtomicReference<Double> availableThroughput;
     private final AtomicReference<Double> scheduledThroughput;
     private final AtomicInteger rejectedRequests;
     private final AtomicInteger totalRequests;
 
-    public ThroughputControlRequestAuthorizer(double scheduledThroughput) {
+    public ThroughputRequestAuthorizer(double scheduledThroughput) {
         this.availableThroughput = new AtomicReference<>(scheduledThroughput);
         this.scheduledThroughput = new AtomicReference<>(scheduledThroughput);
         this.rejectedRequests = new AtomicInteger(0);

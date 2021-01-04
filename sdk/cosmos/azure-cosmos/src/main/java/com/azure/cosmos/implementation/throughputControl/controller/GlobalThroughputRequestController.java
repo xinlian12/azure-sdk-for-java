@@ -4,11 +4,11 @@
 package com.azure.cosmos.implementation.throughputControl.controller;
 
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
-import com.azure.cosmos.implementation.throughputControl.ThroughputControlRequestAuthorizer;
+import com.azure.cosmos.implementation.throughputControl.ThroughputRequestAuthorizer;
 import reactor.core.publisher.Mono;
 
 public class GlobalThroughputRequestController implements ThroughputRequestController {
-    private ThroughputControlRequestAuthorizer requestAuthorizer;
+    private ThroughputRequestAuthorizer requestAuthorizer;
 
     @Override
     public Mono<Void> resetThroughput(double throughput) {
@@ -23,7 +23,7 @@ public class GlobalThroughputRequestController implements ThroughputRequestContr
 
     @Override
     public Mono<ThroughputRequestController> init(double scheduledThroughput) {
-        this.requestAuthorizer= new ThroughputControlRequestAuthorizer(scheduledThroughput);
+        this.requestAuthorizer= new ThroughputRequestAuthorizer(scheduledThroughput);
         return Mono.just(this);
     }
 

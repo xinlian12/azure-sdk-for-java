@@ -13,7 +13,7 @@ import com.azure.cosmos.implementation.apachecommons.lang.tuple.Pair;
 import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
 import com.azure.cosmos.implementation.routing.PartitionKeyInternalHelper;
 import com.azure.cosmos.implementation.routing.Range;
-import com.azure.cosmos.implementation.throughputControl.ThroughputControlRequestAuthorizer;
+import com.azure.cosmos.implementation.throughputControl.ThroughputRequestAuthorizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -33,7 +33,7 @@ public class PkRangesThroughputRequestController implements ThroughputRequestCon
         PartitionKeyInternalHelper.MaximumExclusiveEffectivePartitionKey, true, false);
 
     private final RxPartitionKeyRangeCache partitionKeyRangeCache;
-    private final ConcurrentHashMap<String, Pair<PartitionKeyRange, ThroughputControlRequestAuthorizer>> requestAuthorizerList;
+    private final ConcurrentHashMap<String, Pair<PartitionKeyRange, ThroughputRequestAuthorizer>> requestAuthorizerList;
     private final String resolvedContainerRid;
 
 
@@ -80,7 +80,7 @@ public class PkRangesThroughputRequestController implements ThroughputRequestCon
                     .map(pkRange -> Pair.of(pkRange, throughputPerPkRange));
             })
             .flatMap(pkRangePair -> {
-                ThroughputControlRequestAuthorizer requestAuthorizer = new ThroughputControlRequestAuthorizer(pkRangePair.getRight());
+                ThroughputRequestAuthorizer requestAuthorizer = new ThroughputRequestAuthorizer(pkRangePair.getRight());
                 requestAuthorizer.resetThroughput(pkRangePair.getRight());
                 this.requestAuthorizerList.put(pkRangePair.getLeft().getId(), Pair.of(pkRangePair.getLeft(), requestAuthorizer));
 
@@ -120,7 +120,7 @@ public class PkRangesThroughputRequestController implements ThroughputRequestCon
             .switchIfEmpty(nextRequestMono);
     }
 
-    private Mono<Void> addChildRequestAuthorizerForSplit(ThroughputControlRequestAuthorizer parent, List<PartitionKeyRange> childRanges) {
+    private Mono<Void> addChildRequestAuthorizerForSplit(ThroughputRequestAuthorizer parent, List<PartitionKeyRange> childRanges) {
 
         checkNotNull(parent, "Parent request authroizer cannot be null");
         checkArgument((childRanges != null && childRanges.size() > 0), "Child partition key ranges can not be null or empty");
@@ -134,12 +134,12 @@ public class PkRangesThroughputRequestController implements ThroughputRequestCon
             .flatMap(pkRange -> {
                 this.requestAuthorizerList.compute(pkRange.getId(), (pkRangeId, requestAuthroizer) -> {
                     if (requestAuthroizer == null) {
-                        ThroughputControlRequestAuthorizer childAuthorizer = new ThroughputControlRequestAuthorizer(scheduledThroughputPerChild);
+                        ThroughputRequestAuthorizer childAuthorizer = new ThroughputRequestAuthorizer(scheduledThroughputPerChild);
                         childAuthorizer.setAvailableThroughput(availabeThroughputPerChild);
                         childAuthorizer.setRejectedRequests(rejectedRequestsPerChild);
                         childAuthorizer.setTotalRequests(totalRequestsPerChild);
 
-                        return Pair.of(pkRange, new ThroughputControlRequestAuthorizer(availabeThroughputPerChild));
+                        return Pair.of(pkRange, new ThroughputRequestAuthorizer(availabeThroughputPerChild));
                     }
                     // the child pkRangeHandler may already added by another thread
                     return requestAuthroizer;
@@ -152,7 +152,7 @@ public class PkRangesThroughputRequestController implements ThroughputRequestCon
         return scheduledThroughput / ranges;
     }
 
-    private Mono<Void> doOnError(PartitionKeyRange pkRange, ThroughputControlRequestAuthorizer requestAuthorizer, Throwable throwable) {
+    private Mono<Void> doOnError(PartitionKeyRange pkRange, ThroughputRequestAuthorizer requestAuthorizer, Throwable throwable) {
         checkNotNull(throwable, "Exception cannot be null");
         CosmosException cosmosException = Utils.as(throwable, CosmosException.class);
 
@@ -175,7 +175,7 @@ public class PkRangesThroughputRequestController implements ThroughputRequestCon
             .map(partitionKeyRangesValueHolder -> partitionKeyRangesValueHolder.v);
     }
 
-    private Mono<Void> handleSplit(PartitionKeyRange pkRange, ThroughputControlRequestAuthorizer requestAuthorizer) {
+    private Mono<Void> handleSplit(PartitionKeyRange pkRange, ThroughputRequestAuthorizer requestAuthorizer) {
         return this.getPartitionKeyRanges(pkRange.toRange())
             .flatMap(pkRanges -> {
                 if (pkRanges.size() > 0) {

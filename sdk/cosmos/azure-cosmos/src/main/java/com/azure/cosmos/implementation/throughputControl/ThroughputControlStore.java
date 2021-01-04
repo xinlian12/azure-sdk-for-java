@@ -34,7 +34,7 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
 
 /**
  * This is the entrance class for the whole throughput control work flow pipeline.
- * The pipeline will consist of controllers which is implementation of {@link IThroughputController} and {@link ThroughputControlRequestAuthorizer}.
+ * The pipeline will consist of controllers which is implementation of {@link IThroughputController} and {@link ThroughputRequestAuthorizer}.
  *
  * Following is a high-level diagram of the pipeline:
  *
