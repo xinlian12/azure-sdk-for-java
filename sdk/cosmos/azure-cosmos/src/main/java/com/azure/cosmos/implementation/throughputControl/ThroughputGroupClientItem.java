@@ -10,8 +10,8 @@ import java.io.IOException;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-@JsonSerialize(using = ThroughputBudgetGroupClientItem.ThroughputBudgetGroupClientItemJsonSerializer.class)
-public class ThroughputBudgetGroupClientItem extends ThroughputBudgetControlContainerItem{
+@JsonSerialize(using = ThroughputGroupClientItem.ThroughputBudgetGroupClientItemJsonSerializer.class)
+public class ThroughputGroupClientItem extends ThroughputControlContainerItem {
     private static final String PROPERTY_NAME_GROUP = "group";
     private static final String PROPERTY_NAME_HOSTNAME = "hostname";
     private static final String PROPERTY_NAME_INITIALIZATION_TIME = "initializeTime";
@@ -23,7 +23,7 @@ public class ThroughputBudgetGroupClientItem extends ThroughputBudgetControlCont
     private double loadFactor;
     private Integer ttl;
 
-    public ThroughputBudgetGroupClientItem(
+    public ThroughputGroupClientItem(
         String id,
         String group) {
         super(id, group);
@@ -52,18 +52,18 @@ public class ThroughputBudgetGroupClientItem extends ThroughputBudgetControlCont
         this.ttl = ttl;
     }
 
-    static final class ThroughputBudgetGroupClientItemJsonSerializer extends StdSerializer<ThroughputBudgetGroupClientItem> {
+    static final class ThroughputBudgetGroupClientItemJsonSerializer extends StdSerializer<ThroughputGroupClientItem> {
         // this value should be incremented if changes are made to the ServiceItemLease class members
         private static final long serialVersionUID = 1L;
 
         protected ThroughputBudgetGroupClientItemJsonSerializer() { this(null); }
 
-        protected ThroughputBudgetGroupClientItemJsonSerializer(Class<ThroughputBudgetGroupClientItem> t) {
+        protected ThroughputBudgetGroupClientItemJsonSerializer(Class<ThroughputGroupClientItem> t) {
             super(t);
         }
 
         @Override
-        public void serialize(ThroughputBudgetGroupClientItem item, JsonGenerator writer, SerializerProvider serializerProvider) {
+        public void serialize(ThroughputGroupClientItem item, JsonGenerator writer, SerializerProvider serializerProvider) {
             try {
                 writer.writeStartObject();
                 writer.writeStringField(Constants.Properties.ID, item.getId());

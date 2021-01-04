@@ -8,7 +8,7 @@ import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
 import com.azure.cosmos.implementation.changefeed.CancellationToken;
 import com.azure.cosmos.implementation.changefeed.CancellationTokenSource;
-import com.azure.cosmos.implementation.throughputControl.ThroughputBudgetGroupConfigInternal;
+import com.azure.cosmos.implementation.throughputControl.ThroughputGroupConfigInternal;
 import com.azure.cosmos.implementation.throughputControl.controller.GlobalThroughputRequestController;
 import com.azure.cosmos.implementation.throughputControl.controller.IThroughputController;
 import com.azure.cosmos.implementation.throughputControl.controller.PkRangesThroughputRequestController;
@@ -32,7 +32,7 @@ public abstract class ThroughputGroupControllerBase implements IThroughputContro
     final Duration DEFAULT_THROUGHPUT_USAGE_RESET_DURATION = Duration.ofSeconds(1);
 
     final ConnectionMode connectionMode;
-    final ThroughputBudgetGroupConfigInternal groupConfig;
+    final ThroughputGroupConfigInternal groupConfig;
     final AtomicReference<Double> groupThroughput;
     final AtomicReference<Integer> maxContainerThroughput;
     final RxPartitionKeyRangeCache partitionKeyRangeCache;
@@ -47,7 +47,7 @@ public abstract class ThroughputGroupControllerBase implements IThroughputContro
 
     public ThroughputGroupControllerBase(
         ConnectionMode connectionMode,
-        ThroughputBudgetGroupConfigInternal groupConfig,
+        ThroughputGroupConfigInternal groupConfig,
         Integer maxContainerThroughput,
         RxPartitionKeyRangeCache partitionKeyRangeCache) {
 

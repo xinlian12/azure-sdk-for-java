@@ -6,7 +6,7 @@ package com.azure.cosmos.implementation.throughputControl.controller.group;
 import com.azure.cosmos.ConnectionMode;
 import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
 import com.azure.cosmos.implementation.changefeed.CancellationToken;
-import com.azure.cosmos.implementation.throughputControl.ThroughputBudgetGroupConfigInternal;
+import com.azure.cosmos.implementation.throughputControl.ThroughputGroupConfigInternal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -15,7 +15,7 @@ public class ThroughputGroupLocalController extends ThroughputGroupControllerBas
     private static final Logger logger = LoggerFactory.getLogger(ThroughputGroupLocalController.class);
     public ThroughputGroupLocalController(
         ConnectionMode connectionMode,
-        ThroughputBudgetGroupConfigInternal group,
+        ThroughputGroupConfigInternal group,
         Integer maxContainerThroughput,
         RxPartitionKeyRangeCache partitionKeyRangeCache) {
 

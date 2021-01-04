@@ -7,8 +7,8 @@ import com.azure.cosmos.ConnectionMode;
 import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
 import com.azure.cosmos.implementation.changefeed.CancellationToken;
-import com.azure.cosmos.implementation.throughputControl.ThroughputBudgetControlContainerManager;
-import com.azure.cosmos.implementation.throughputControl.ThroughputBudgetGroupConfigInternal;
+import com.azure.cosmos.implementation.throughputControl.ThroughputControlContainerManager;
+import com.azure.cosmos.implementation.throughputControl.ThroughputGroupConfigInternal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -21,11 +21,11 @@ public class ThroughputGroupDistributedController extends ThroughputGroupControl
     private static Logger logger = LoggerFactory.getLogger(ThroughputGroupDistributedController.class);
     private final CosmosAsyncContainer targetControllerContainer;
     private final Duration documentRenewalInterval;
-    private final ThroughputBudgetControlContainerManager containerManager;
+    private final ThroughputControlContainerManager containerManager;
 
     public ThroughputGroupDistributedController(
         ConnectionMode connectionMode,
-        ThroughputBudgetGroupConfigInternal groupConfig,
+        ThroughputGroupConfigInternal groupConfig,
         Integer maxContainerThroughput,
         RxPartitionKeyRangeCache partitionKeyRangeCache) {
 
@@ -33,7 +33,7 @@ public class ThroughputGroupDistributedController extends ThroughputGroupControl
         this.targetControllerContainer = groupConfig.getDistributedControlConfig().getControllerContainer();
         this.documentRenewalInterval = groupConfig.getDistributedControlConfig().getDocumentRenewalInterval();
 
-        this.containerManager = new ThroughputBudgetControlContainerManager(
+        this.containerManager = new ThroughputControlContainerManager(
             this.targetControllerContainer,
             groupConfig);
     }

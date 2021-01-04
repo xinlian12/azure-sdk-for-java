@@ -12,7 +12,7 @@ import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkArgument;
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
 
-public class ThroughputBudgetGroupConfigInternal {
+public class ThroughputGroupConfigInternal {
     private final ThroughputBudgetGroupControlMode controlMode;
     private final DistributedThroughputControlConfig distributedControlConfig;
     private final String groupName;
@@ -22,7 +22,7 @@ public class ThroughputBudgetGroupConfigInternal {
     private final Double throughputLimitThreshold;
     private final boolean useByDefault;
 
-    public ThroughputBudgetGroupConfigInternal(
+    public ThroughputGroupConfigInternal(
         ThroughputControlGroupConfig groupConfig,
         String targetContainerRid) {
 

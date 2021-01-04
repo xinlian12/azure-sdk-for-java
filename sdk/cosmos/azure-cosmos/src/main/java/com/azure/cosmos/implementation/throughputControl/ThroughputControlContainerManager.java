@@ -19,20 +19,20 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
-public class ThroughputBudgetControlContainerManager {
+public class ThroughputControlContainerManager {
     private final  CosmosAsyncContainer controlContainer;
-    private final ThroughputBudgetGroupConfigInternal groupConfig;
+    private final ThroughputGroupConfigInternal groupConfig;
     private final String groupConfigItemId;
     private final String groupClientItemId;
     private final String fullGroupName;
-    private ThroughputBudgetGroupConfigItem groupConfigItem;
-    private ThroughputBudgetGroupClientItem groupClientItem;
+    private ThroughputGroupConfigItem groupConfigItem;
+    private ThroughputGroupClientItem groupClientItem;
     private final Integer groupClientItemExpireInSeconds;
 
 
-    public ThroughputBudgetControlContainerManager(
+    public ThroughputControlContainerManager(
         CosmosAsyncContainer controlContainer,
-        ThroughputBudgetGroupConfigInternal groupConfig) {
+        ThroughputGroupConfigInternal groupConfig) {
         this.controlContainer = controlContainer;
         this.groupConfig = groupConfig;
 
@@ -40,14 +40,14 @@ public class ThroughputBudgetControlContainerManager {
         this.groupConfigItemId = fullGroupName + ".info";
         this.groupClientItemId = fullGroupName + "." + UUID.randomUUID();
         this.groupClientItemExpireInSeconds = (int)this.groupConfig.getDistributedControlConfig().getDocumentExpireInterval().getSeconds();
-        this.groupConfigItem = new ThroughputBudgetGroupConfigItem(
+        this.groupConfigItem = new ThroughputGroupConfigItem(
             this.groupConfigItemId,
             this.groupConfigItemId, // TODO: change to use fullGroupName
             this.groupConfig.getThroughputLimit() == null ? StringUtils.EMPTY : String.valueOf(this.groupConfig.getThroughputLimit()),
             this.groupConfig.getThroughputLimitThreshold() == null ? StringUtils.EMPTY : String.valueOf(this.groupConfig.getThroughputLimitThreshold()),
             this.groupConfig.isUseByDefault());
 
-        this.groupClientItem = new ThroughputBudgetGroupClientItem(
+        this.groupClientItem = new ThroughputGroupClientItem(
             this.groupClientItemId,
             this.fullGroupName);
     }
@@ -81,7 +81,7 @@ public class ThroughputBudgetControlContainerManager {
             this.groupConfigItemId,
             new PartitionKey(this.fullGroupName),
             new CosmosItemRequestOptions(),
-            ThroughputBudgetGroupConfigItem.class)
+            ThroughputGroupConfigItem.class)
             .flatMap(itemResponse -> {
                 if (this.groupConfigItem.equals(itemResponse)) {
                     return Mono.empty();
@@ -142,7 +142,7 @@ public class ThroughputBudgetControlContainerManager {
             .singletonList(new SqlParameter("@group", fullGroupName));
         querySpec.setParameters(parameters);
 
-        return this.controlContainer.readAllItems(new PartitionKey(this.fullGroupName), ThroughputBudgetGroupClientItem.class)
+        return this.controlContainer.readAllItems(new PartitionKey(this.fullGroupName), ThroughputGroupClientItem.class)
             .collectList()
             .flatMapMany(clientItemist -> Flux.fromIterable(clientItemist))
             .map(clientItem -> clientItem.getLoadFactor())

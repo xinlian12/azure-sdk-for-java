@@ -20,7 +20,7 @@ import com.azure.cosmos.implementation.changefeed.CancellationTokenSource;
 import com.azure.cosmos.implementation.throughputControl.ThroughputResolveLevel;
 import com.azure.cosmos.implementation.throughputControl.controller.IThroughputController;
 import com.azure.cosmos.implementation.throughputControl.controller.group.ThroughputGroupControllerBase;
-import com.azure.cosmos.implementation.throughputControl.controller.group.ThroughputBudgetGroupControllerFactory;
+import com.azure.cosmos.implementation.throughputControl.controller.group.ThroughputGroupControllerFactory;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.ModelBridgeInternal;
 import com.azure.cosmos.models.ThroughputProperties;
@@ -151,7 +151,7 @@ public class ThroughputContainerController implements IThroughputController {
         return Flux.fromIterable(this.groupConfigs)
             .flatMap(groupConfig -> {
                 ThroughputGroupControllerBase groupController =
-                    ThroughputBudgetGroupControllerFactory.createController(
+                    ThroughputGroupControllerFactory.createController(
                         this.connectionMode,
                         groupConfig,
                         this.maxContainerThroughput.get(),

@@ -9,8 +9,8 @@ import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import java.io.IOException;
 import java.time.ZonedDateTime;
 
-@JsonSerialize(using = ThroughputBudgetGroupConfigItem.ThroughputBudgetGroupConfigItemJsonSerializer.class)
-public class ThroughputBudgetGroupConfigItem extends ThroughputBudgetControlContainerItem {
+@JsonSerialize(using = ThroughputGroupConfigItem.ThroughputBudgetGroupConfigItemJsonSerializer.class)
+public class ThroughputGroupConfigItem extends ThroughputControlContainerItem {
 
     private static final ZonedDateTime UNIX_START_TIME = ZonedDateTime.parse("1970-01-01T00:00:00.0Z[UTC]");
     private static final String PROPERTY_NAME_GROUP = "group";
@@ -22,7 +22,7 @@ public class ThroughputBudgetGroupConfigItem extends ThroughputBudgetControlCont
     private final String throughputLimitThreshold;
     private final boolean useByDefault;
 
-    public ThroughputBudgetGroupConfigItem(
+    public ThroughputGroupConfigItem(
         String id,
         String group,
         String throughputLimit,
@@ -44,7 +44,7 @@ public class ThroughputBudgetGroupConfigItem extends ThroughputBudgetControlCont
             return false;
         }
 
-        ThroughputBudgetGroupConfigItem that = (ThroughputBudgetGroupConfigItem) other;
+        ThroughputGroupConfigItem that = (ThroughputGroupConfigItem) other;
 
         return this.getId().equals(that.getId())
             && this.getGroup().equals(that.getGroup())
@@ -64,18 +64,18 @@ public class ThroughputBudgetGroupConfigItem extends ThroughputBudgetControlCont
             ^ throughputLimitThresholdHashCode;
     }
 
-    static final class ThroughputBudgetGroupConfigItemJsonSerializer extends StdSerializer<ThroughputBudgetGroupConfigItem> {
+    static final class ThroughputBudgetGroupConfigItemJsonSerializer extends StdSerializer<ThroughputGroupConfigItem> {
         // this value should be incremented if changes are made to the ServiceItemLease class members
         private static final long serialVersionUID = 1L;
 
         protected ThroughputBudgetGroupConfigItemJsonSerializer() { this(null); }
 
-        protected ThroughputBudgetGroupConfigItemJsonSerializer(Class<ThroughputBudgetGroupConfigItem> t) {
+        protected ThroughputBudgetGroupConfigItemJsonSerializer(Class<ThroughputGroupConfigItem> t) {
             super(t);
         }
 
         @Override
-        public void serialize(ThroughputBudgetGroupConfigItem item, JsonGenerator writer, SerializerProvider serializerProvider) {
+        public void serialize(ThroughputGroupConfigItem item, JsonGenerator writer, SerializerProvider serializerProvider) {
             try {
                 writer.writeStartObject();
                 writer.writeStringField(Constants.Properties.ID, item.getId());

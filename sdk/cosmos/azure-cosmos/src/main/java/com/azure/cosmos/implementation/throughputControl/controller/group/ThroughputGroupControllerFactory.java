@@ -7,9 +7,9 @@ import com.azure.cosmos.ConnectionMode;
 import com.azure.cosmos.ThroughputControlGroupConfig;
 import com.azure.cosmos.ThroughputBudgetGroupControlMode;
 import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
-import com.azure.cosmos.implementation.throughputControl.ThroughputBudgetGroupConfigInternal;
+import com.azure.cosmos.implementation.throughputControl.ThroughputGroupConfigInternal;
 
-public class ThroughputBudgetGroupControllerFactory {
+public class ThroughputGroupControllerFactory {
 
     public static ThroughputGroupControllerBase createController(
         ConnectionMode connectionMode,
@@ -18,7 +18,7 @@ public class ThroughputBudgetGroupControllerFactory {
         RxPartitionKeyRangeCache partitionKeyRangeCache,
         String targetCollectionRid) {
 
-        ThroughputBudgetGroupConfigInternal groupConfigInternal = new ThroughputBudgetGroupConfigInternal(groupConfig, targetCollectionRid);
+        ThroughputGroupConfigInternal groupConfigInternal = new ThroughputGroupConfigInternal(groupConfig, targetCollectionRid);
 
         if (groupConfig.getControlMode() == ThroughputBudgetGroupControlMode.LOCAL) {
             return new ThroughputGroupLocalController(
