@@ -109,6 +109,12 @@ abstract class AsyncBenchmark<T> {
         try {
             cosmosAsyncContainer = cosmosAsyncDatabase.getContainer(this.configuration.getCollectionId());
 
+            // For write test, delete the container first
+            if (configuration.getOperationType() == Configuration.Operation.WriteThroughput ||
+            configuration.getOperationType() == Configuration.Operation.WriteLatency) {
+                cosmosAsyncContainer.delete().block();
+            }
+
             cosmosAsyncContainer.read().block();
 
         } catch (CosmosException e) {
