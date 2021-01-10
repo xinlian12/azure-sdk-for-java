@@ -98,7 +98,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         this.serverKey = RntbdUtils.getServerKey(physicalAddress);
 
         final Bootstrap bootstrap = new Bootstrap()
-            .channel(EpollSocketChannel.class)
+            .channel(NioSocketChannel.class)
             .group(group)
             .option(ChannelOption.ALLOCATOR, config.allocator())
             .option(ChannelOption.AUTO_READ, true)
@@ -485,7 +485,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
                 config.requestTimeoutInNanos(),
                 config.requestTimerResolutionInNanos());
 
-            this.eventLoopGroup = new EpollEventLoopGroup(options.threadCount(), threadFactory);
+            this.eventLoopGroup = new NioEventLoopGroup(options.threadCount(), threadFactory);
             this.endpoints = new ConcurrentHashMap<>();
             this.evictions = new AtomicInteger();
             this.closed = new AtomicBoolean();
