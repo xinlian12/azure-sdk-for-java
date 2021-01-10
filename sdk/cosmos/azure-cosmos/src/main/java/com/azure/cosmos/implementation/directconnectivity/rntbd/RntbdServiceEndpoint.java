@@ -22,6 +22,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.logging.LogLevel;
@@ -97,7 +98,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         this.serverKey = RntbdUtils.getServerKey(physicalAddress);
 
         final Bootstrap bootstrap = new Bootstrap()
-            .channel(NioSocketChannel.class)
+            .channel(EpollSocketChannel.class)
             .group(group)
             .option(ChannelOption.ALLOCATOR, config.allocator())
             .option(ChannelOption.AUTO_READ, true)
