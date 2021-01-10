@@ -161,6 +161,142 @@ public class Configuration {
     @Parameter(names = {"-h", "-help", "--help"}, description = "Help", help = true)
     private boolean help = false;
 
+    public void setAzureMonitorMeterRegistry(MeterRegistry azureMonitorMeterRegistry) {
+        this.azureMonitorMeterRegistry = azureMonitorMeterRegistry;
+    }
+
+    public void setGraphiteMeterRegistry(MeterRegistry graphiteMeterRegistry) {
+        this.graphiteMeterRegistry = graphiteMeterRegistry;
+    }
+
+    public void setServiceEndpoint(String serviceEndpoint) {
+        this.serviceEndpoint = serviceEndpoint;
+    }
+
+    public void setMasterKey(String masterKey) {
+        this.masterKey = masterKey;
+    }
+
+    public void setDatabaseId(String databaseId) {
+        this.databaseId = databaseId;
+    }
+
+    public void setCollectionId(String collectionId) {
+        this.collectionId = collectionId;
+    }
+
+    public void setUseNameLink(boolean useNameLink) {
+        this.useNameLink = useNameLink;
+    }
+
+    public void setDocumentDataFieldSize(int documentDataFieldSize) {
+        this.documentDataFieldSize = documentDataFieldSize;
+    }
+
+    public void setDocumentDataFieldCount(int documentDataFieldCount) {
+        this.documentDataFieldCount = documentDataFieldCount;
+    }
+
+    public void setMaxConnectionPoolSize(Integer maxConnectionPoolSize) {
+        this.maxConnectionPoolSize = maxConnectionPoolSize;
+    }
+
+    public void setDiagnosticsThresholdDuration(Duration diagnosticsThresholdDuration) {
+        this.diagnosticsThresholdDuration = diagnosticsThresholdDuration;
+    }
+
+    public void setDisablePassingPartitionKeyAsOptionOnWrite(boolean disablePassingPartitionKeyAsOptionOnWrite) {
+        this.disablePassingPartitionKeyAsOptionOnWrite = disablePassingPartitionKeyAsOptionOnWrite;
+    }
+
+    public void setConsistencyLevel(ConsistencyLevel consistencyLevel) {
+        this.consistencyLevel = consistencyLevel;
+    }
+
+    public void setConnectionMode(ConnectionMode connectionMode) {
+        this.connectionMode = connectionMode;
+    }
+
+    public void setGraphiteEndpoint(String graphiteEndpoint) {
+        this.graphiteEndpoint = graphiteEndpoint;
+    }
+
+    public void setEnableJvmStats(boolean enableJvmStats) {
+        this.enableJvmStats = enableJvmStats;
+    }
+
+    public void setThroughput(int throughput) {
+        this.throughput = throughput;
+    }
+
+    public void setNumberOfCollectionForCtl(int numberOfCollectionForCtl) {
+        this.numberOfCollectionForCtl = numberOfCollectionForCtl;
+    }
+
+    public void setReadWriteQueryPct(String readWriteQueryPct) {
+        this.readWriteQueryPct = readWriteQueryPct;
+    }
+
+    public Operation getOperation() {
+        return operation;
+    }
+
+    public void setOperation(Operation operation) {
+        this.operation = operation;
+    }
+
+    public void setConcurrency(Integer concurrency) {
+        this.concurrency = concurrency;
+    }
+
+    public void setNumberOfOperations(int numberOfOperations) {
+        this.numberOfOperations = numberOfOperations;
+    }
+
+    public void setMaxRunningTimeDuration(Duration maxRunningTimeDuration) {
+        this.maxRunningTimeDuration = maxRunningTimeDuration;
+    }
+
+    public void setPrintingInterval(int printingInterval) {
+        this.printingInterval = printingInterval;
+    }
+
+    public void setReportingDirectory(String reportingDirectory) {
+        this.reportingDirectory = reportingDirectory;
+    }
+
+    public void setNumberOfPreCreatedDocuments(int numberOfPreCreatedDocuments) {
+        this.numberOfPreCreatedDocuments = numberOfPreCreatedDocuments;
+    }
+
+    public void setSparsityWaitTime(Duration sparsityWaitTime) {
+        this.sparsityWaitTime = sparsityWaitTime;
+    }
+
+    public void setSkipWarmUpOperations(int skipWarmUpOperations) {
+        this.skipWarmUpOperations = skipWarmUpOperations;
+    }
+
+    public boolean isUseSync() {
+        return useSync;
+    }
+
+    public void setUseSync(boolean useSync) {
+        this.useSync = useSync;
+    }
+
+    public String getContentResponseOnWriteEnabled() {
+        return contentResponseOnWriteEnabled;
+    }
+
+    public void setContentResponseOnWriteEnabled(String contentResponseOnWriteEnabled) {
+        this.contentResponseOnWriteEnabled = contentResponseOnWriteEnabled;
+    }
+
+    public void setHelp(boolean help) {
+        this.help = help;
+    }
+
     public enum Operation {
         ReadThroughput,
         WriteThroughput,

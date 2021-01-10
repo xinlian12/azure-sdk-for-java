@@ -3,6 +3,8 @@
 
 package com.azure.cosmos.benchmark;
 
+import com.azure.cosmos.ConnectionMode;
+import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.benchmark.ctl.AsyncCtlWorkload;
 import com.azure.cosmos.benchmark.linkedin.LICtlWorkload;
 import com.beust.jcommander.JCommander;
@@ -24,6 +26,15 @@ public class Main {
             LOGGER.debug("Parsing the arguments ...");
             Configuration cfg = new Configuration();
             cfg.tryGetValuesFromSystem();
+
+
+            cfg.setConnectionMode(ConnectionMode.GATEWAY);
+            cfg.setConsistencyLevel(ConsistencyLevel.EVENTUAL);
+            cfg.setCollectionId("testdb");
+            cfg.setDatabaseId("testContainer");
+            cfg.setOperation(Configuration.Operation.WriteLatency);
+            cfg.setConcurrency(32);
+            cfg.setNumberOfOperations(1000000000);
 
             JCommander jcommander = new JCommander(cfg, args);
             if (cfg.isHelp()) {
