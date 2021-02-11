@@ -29,10 +29,10 @@ public class ThroughputGroupLocalController extends ThroughputGroupControllerBas
     @SuppressWarnings("unchecked")
     public <T> Mono<T> init() {
         return this.resolveRequestController()
-            .doOnSuccess(dummy -> {
-                this.throughputUsageCycleRenewTask(this.cancellationTokenSource.getToken()).publishOn(Schedulers.parallel()).subscribe();
-            })
-            .thenReturn((T)this);
+                   .then(Mono.fromRunnable(() -> {
+                       this.throughputUsageCycleRenewTask(this.cancellationTokenSource.getToken()).publishOn(Schedulers.parallel()).subscribe();
+                   }))
+                   .thenReturn((T) this);
     }
 
     @Override
@@ -42,6 +42,6 @@ public class ThroughputGroupLocalController extends ThroughputGroupControllerBas
 
     @Override
     public void recordThroughputUsage(double loadFactor) {
-        return;
+        //  No-op
     }
 }

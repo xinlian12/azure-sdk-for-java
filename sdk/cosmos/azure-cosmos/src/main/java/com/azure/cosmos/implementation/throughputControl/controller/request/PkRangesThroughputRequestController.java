@@ -93,11 +93,11 @@ public class PkRangesThroughputRequestController implements IThroughputRequestCo
     @SuppressWarnings("unchecked")
     public <T> Mono<T> init() {
         return this.getPartitionKeyRanges(RANGE_INCLUDING_ALL_PARTITION_KEY_RANGES)
-            .doOnSuccess(pkRanges -> {
+            .flatMap(pkRanges -> {
                 this.pkRanges = pkRanges;
                 this.createRequestThrottlers();
-            })
-            .then(Mono.just((T)this));
+                return Mono.just((T)this);
+            });
     }
 
     private void createRequestThrottlers() {

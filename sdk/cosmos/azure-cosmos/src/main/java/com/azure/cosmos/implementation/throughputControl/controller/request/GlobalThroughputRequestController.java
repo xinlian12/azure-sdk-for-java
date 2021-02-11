@@ -35,9 +35,8 @@ public class GlobalThroughputRequestController implements IThroughputRequestCont
         return Flux.fromIterable(this.globalEndpointManager.getReadEndpoints())
             .flatMap(endpoint -> {
                 requestThrottlerMapByRegion.computeIfAbsent(endpoint, key -> new ThroughputRequestThrottler(this.scheduledThroughput.get()));
-                return Mono.empty();
-            })
-            .then(Mono.just((T)this));
+                return Mono.just((T)this);
+            }).single();
     }
 
     @Override

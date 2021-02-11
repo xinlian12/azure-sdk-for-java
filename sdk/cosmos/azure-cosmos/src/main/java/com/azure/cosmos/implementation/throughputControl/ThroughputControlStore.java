@@ -204,20 +204,17 @@ public class ThroughputControlStore {
         checkArgument(StringUtils.isNotEmpty(containerLink), "Container link should not be null or empty");
 
         if (this.groupMapByContainer.containsKey(containerLink)) {
-            return Mono.just(this.groupMapByContainer.get(containerLink))
-                .flatMap(groups -> {
-                    ThroughputContainerController containerController =
-                        new ThroughputContainerController(
-                            this.connectionMode,
-                            this.globalEndpointManager,
-                            groups,
-                            this.partitionKeyRangeCache);
-
-                    return containerController.init();
-                });
+            Set<ThroughputControlGroupInternal> groups =
+                this.groupMapByContainer.get(containerLink);
+            ThroughputContainerController containerController =
+                new ThroughputContainerController(
+                    this.connectionMode,
+                    this.globalEndpointManager,
+                    groups,
+                    this.partitionKeyRangeCache);
+            return containerController.init();
         } else {
-            return Mono.just(new EmptyThroughputContainerController())
-                .flatMap(EmptyThroughputContainerController::init);
+            return Mono.just(new EmptyThroughputContainerController());
         }
     }
 
