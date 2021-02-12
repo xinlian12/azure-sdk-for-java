@@ -225,15 +225,14 @@ public class ThroughputContainerController implements IThroughputContainerContro
         checkNotNull(request, "Request can not be null");
         checkNotNull(originalRequestMono, "Original request mono can not be null");
 
-        return originalRequestMono;
-//        return this.getOrCreateThroughputGroupController(request.getThroughputControlGroupName())
-//            .flatMap(groupController -> {
-//                if (groupController.v != null) {
-//                    return groupController.v.processRequest(request, originalRequestMono);
-//                }
-//
-//                return originalRequestMono;
-//            });
+        return this.getOrCreateThroughputGroupController(request.getThroughputControlGroupName())
+            .flatMap(groupController -> {
+                if (groupController.v != null) {
+                    return groupController.v.processRequest(request, originalRequestMono);
+                }
+
+                return originalRequestMono;
+            });
     }
 
     // TODO: a better way to handle throughput control group enabled after the container initialization
