@@ -160,20 +160,19 @@ public abstract class ThroughputGroupControllerBase implements IThroughputContro
 
     @Override
     public <T> Mono<T> processRequest(RxDocumentServiceRequest request, Mono<T> originalRequestMono) {
-        return originalRequestMono;
-//        return this.resolveRequestController()
-//            .flatMap(requestController -> {
-//                if (requestController.canHandleRequest(request)) {
-//                    return requestController.processRequest(request, originalRequestMono)
-//                        .doOnError(throwable -> this.handleException(throwable));
-//                }
-//
-//                // We can not find the matching pkRange, it is because either the group control is out of sync
-//                // or the request has staled info.
-//                // We will handle the first scenario by creating a new request controller,
-//                // while for second scenario, we will go to the original request mono, which will eventually get exception from server
-//                return this.updateControllerAndRetry(requestController, request, originalRequestMono);
-//            });
+        return this.resolveRequestController()
+            .flatMap(requestController -> {
+                if (requestController.canHandleRequest(request)) {
+                    return requestController.processRequest(request, originalRequestMono)
+                        .doOnError(throwable -> this.handleException(throwable));
+                }
+
+                // We can not find the matching pkRange, it is because either the group control is out of sync
+                // or the request has staled info.
+                // We will handle the first scenario by creating a new request controller,
+                // while for second scenario, we will go to the original request mono, which will eventually get exception from server
+                return this.updateControllerAndRetry(requestController, request, originalRequestMono);
+            });
     }
 
     private <T> Mono<T> updateControllerAndRetry(
