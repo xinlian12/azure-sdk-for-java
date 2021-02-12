@@ -109,11 +109,11 @@ public class ThroughputContainerController implements IThroughputContainerContro
     @SuppressWarnings("unchecked")
     public <T> Mono<T> init() {
         return this.resolveContainerMaxThroughput()
-            .flatMap(controller -> this.createAndInitializeGroupControllers())
-            .doOnSuccess(controller -> {
-                Schedulers.parallel().schedule(() -> this.refreshContainerMaxThroughputTask(this.cancellationTokenSource.getToken()).subscribe());
-            })
-            .thenReturn((T) this);
+                   .then(this.createAndInitializeGroupControllers())
+                   .then(Mono.fromRunnable(() -> {
+                       this.refreshContainerMaxThroughputTask(this.cancellationTokenSource.getToken()).publishOn(Schedulers.parallel()).subscribe();
+                   }))
+                   .thenReturn((T) this);
     }
 
     private Mono<String> resolveDatabaseResourceId() {
@@ -145,41 +145,33 @@ public class ThroughputContainerController implements IThroughputContainerContro
     }
 
     private Mono<ThroughputContainerController> resolveContainerMaxThroughput() {
-        return Mono.just(this.throughputResolveLevel) // TODO: ---> test whether it works without defer
-            .flatMap(throughputResolveLevel -> {
-                if (throughputResolveLevel == ThroughputResolveLevel.CONTAINER) {
-                    return this.resolveContainerThroughput()
-                        .onErrorResume(throwable -> {
-                            if (this.isOfferNotConfiguredException(throwable)) {
-                                this.throughputResolveLevel = ThroughputResolveLevel.DATABASE;
-                            }
-
-                            return Mono.error(throwable);
-                        });
-                } else if (throughputResolveLevel == ThroughputResolveLevel.DATABASE) {
-                    return this.resolveDatabaseThroughput()
-                        .onErrorResume(throwable -> {
-                            if (this.isOfferNotConfiguredException(throwable)) {
-                                this.throughputResolveLevel = ThroughputResolveLevel.CONTAINER;
-                            }
-
-                            return Mono.error(throwable);
-                        });
-                }
-
-                // All the underlying throughput control groups are using target throughput,
-                // which is constant value, hence no need to resolve throughput
-                return Mono.empty();
-            })
-            .flatMap(throughputResponse -> {
-                this.updateMaxContainerThroughput(throughputResponse);
-                return Mono.empty();
-            })
-            .retryWhen(
-                // Throughput can be configured on database level or container level
-                // Retry at most 1 time so we can try on database and container both
-                RetrySpec.max(1).filter(throwable -> this.isOfferNotConfiguredException(throwable))
-            ).thenReturn(this);
+        if (ThroughputResolveLevel.NONE.equals(throughputResolveLevel)) {
+            return Mono.empty();
+        }
+        final Mono<ThroughputResponse> throughputResponseMono;
+        if (throughputResolveLevel == ThroughputResolveLevel.CONTAINER) {
+             throughputResponseMono = this.resolveContainerThroughput()
+                .onErrorResume(throwable -> {
+                    if (this.isOfferNotConfiguredException(throwable)) {
+                        this.throughputResolveLevel = ThroughputResolveLevel.DATABASE;
+                        return this.resolveDatabaseThroughput();
+                    }
+                  return Mono.error(throwable);
+                });
+        } else {
+            throughputResponseMono = this.resolveDatabaseThroughput()
+                .onErrorResume(throwable -> {
+                    if (this.isOfferNotConfiguredException(throwable)) {
+                        this.throughputResolveLevel = ThroughputResolveLevel.CONTAINER;
+                        return this.resolveContainerThroughput();
+                    }
+                    return Mono.error(throwable);
+                });
+        }
+        return throughputResponseMono.flatMap(throughputResponse -> {
+            this.updateMaxContainerThroughput(throughputResponse);
+            return Mono.just(this);
+        });
     }
 
     private Mono<ThroughputResponse> resolveThroughputByResourceId(String resourceId) {
@@ -298,15 +290,15 @@ public class ThroughputContainerController implements IThroughputContainerContro
 
     }
 
-    private Flux<Void> refreshContainerMaxThroughputTask(CancellationToken cancellationToken) {
+    private Mono<Void> refreshContainerMaxThroughputTask(CancellationToken cancellationToken) {
         checkNotNull(cancellationToken, "Cancellation token can not be null");
 
         if (this.throughputResolveLevel == ThroughputResolveLevel.NONE) {
-            return Flux.empty();
+            return Mono.empty();
         }
 
         return Mono.delay(DEFAULT_THROUGHPUT_REFRESH_INTERVAL)
-            .flatMap(t -> this.resolveContainerMaxThroughput())
+            .then(this.resolveContainerMaxThroughput())
             .flatMapIterable(controller -> this.groups)
             .flatMap(group -> this.resolveThroughputGroupController(group))
             .doOnNext(groupController -> groupController.onContainerMaxThroughputRefresh(this.maxContainerThroughput.get()))
@@ -314,8 +306,8 @@ public class ThroughputContainerController implements IThroughputContainerContro
                 logger.warn("Refresh throughput failed with reason %s", throwable);
                 return Mono.empty();
             })
-            .then()
-            .repeat(() -> !cancellationToken.isCancellationRequested());
+            .repeat(() -> !cancellationToken.isCancellationRequested())
+            .then();
     }
 
     @Override

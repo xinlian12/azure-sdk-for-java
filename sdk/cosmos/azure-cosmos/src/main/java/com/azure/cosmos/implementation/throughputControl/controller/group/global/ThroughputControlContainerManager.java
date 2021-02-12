@@ -8,6 +8,7 @@ import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.throughputControl.config.ThroughputGlobalControlGroup;
+import com.azure.cosmos.models.CosmosContainerProperties;
 import com.azure.cosmos.models.CosmosItemRequestOptions;
 import com.azure.cosmos.models.PartitionKey;
 import org.slf4j.Logger;
@@ -106,9 +107,8 @@ public class ThroughputControlContainerManager {
 
                 if (!expectedConfigItem.equals(configItem)) {
                     logger.warn(
-                        "Group config using by this client is different than the one in control container, will be ignored. Using following config: {}" +
-                            "targetThroughput: {}, targetThroughputThreshold: {}",
-                        this.configItem.toString());
+                        "Group config using by this client is different than the one in control container, will be ignored. "
+                            + "Using following config: {}", this.configItem);
                 }
 
                 return Mono.just(this.configItem);
@@ -166,8 +166,8 @@ public class ThroughputControlContainerManager {
      */
     public Mono<ThroughputControlContainerManager> validateControlContainer() {
         return this.globalControlContainer.read()
-            .map(containerResponse -> containerResponse.getProperties())
-            .flatMap(containerProperties -> {
+            .flatMap(containerResponse -> {
+                CosmosContainerProperties containerProperties = containerResponse.getProperties();
                 boolean isPartitioned =
                     containerProperties.getPartitionKeyDefinition() != null &&
                         containerProperties.getPartitionKeyDefinition().getPaths() != null &&
@@ -177,9 +177,7 @@ public class ThroughputControlContainerManager {
                         || !containerProperties.getPartitionKeyDefinition().getPaths().get(0).equals(PARTITION_KEY_PATH))) {
                     return Mono.error(new IllegalArgumentException("The control container must have partition key equal to " + PARTITION_KEY_PATH));
                 }
-
-                return Mono.empty();
-            })
-            .thenReturn(this);
+                return Mono.just(this);
+            });
     }
 }

@@ -53,19 +53,19 @@ public class ThroughputGroupGlobalController extends ThroughputGroupControllerBa
     @Override
     @SuppressWarnings("unchecked")
     public <T> Mono<T> init() {
-        return this.containerManager.validateControlContainer()
-            .flatMap(dummy -> this.containerManager.getOrCreateConfigItem())
-            .flatMap(dummy -> {
-                double loadFactor = this.calculateLoadFactor();
-                return this.containerManager.createGroupClientItem(loadFactor)
-                    .flatMap(clientItem -> this.calculateClientThroughputShare(loadFactor));
-            })
-            .flatMap(dummy -> this.resolveRequestController())
-            .doOnSuccess(dummy -> {
+        return this.containerManager
+            .validateControlContainer()
+            .then(this.containerManager.getOrCreateConfigItem())
+            .then(Mono.just(this.calculateLoadFactor()))
+            .flatMap(loadFactor -> this.containerManager
+                .createGroupClientItem(loadFactor)
+                .flatMap(clientItem -> this.calculateClientThroughputShare(loadFactor)))
+            .then(this.resolveRequestController())
+            .then(Mono.fromRunnable(() -> {
                 this.throughputUsageCycleRenewTask(this.cancellationTokenSource.getToken()).publishOn(Schedulers.parallel()).subscribe();
                 this.calculateClientThroughputShareTask(this.cancellationTokenSource.getToken()).publishOn(Schedulers.parallel()).subscribe();
-            })
-            .thenReturn((T)this);
+            }))
+            .thenReturn((T) this);
     }
 
     @Override
@@ -82,8 +82,10 @@ public class ThroughputGroupGlobalController extends ThroughputGroupControllerBa
 
     private Mono<ThroughputGroupGlobalController> calculateClientThroughputShare(double loadFactor) {
         return this.containerManager.queryLoadFactorFromAllClients()
-            .doOnSuccess(totalLoads -> this.clientThroughputShare.set(loadFactor / totalLoads))
-            .thenReturn(this);
+            .flatMap(totalLoads -> {
+                this.clientThroughputShare.set(loadFactor / totalLoads);
+                return Mono.just(this);
+            });
     }
 
     private double calculateLoadFactor() {

@@ -93,11 +93,11 @@ public class PkRangesThroughputRequestController implements IThroughputRequestCo
     @SuppressWarnings("unchecked")
     public <T> Mono<T> init() {
         return this.getPartitionKeyRanges(RANGE_INCLUDING_ALL_PARTITION_KEY_RANGES)
-            .doOnSuccess(pkRanges -> {
+            .flatMap(pkRanges -> {
                 this.pkRanges = pkRanges;
                 this.createRequestThrottlers();
-            })
-            .then(Mono.just((T)this));
+                return Mono.just((T)this);
+            });
     }
 
     private void createRequestThrottlers() {
@@ -128,7 +128,7 @@ public class PkRangesThroughputRequestController implements IThroughputRequestCo
         // If we reach here, it means we should find the mapping pkRange
         ThroughputRequestThrottler requestThrottler =
             this.getOrCreateRegionRequestThrottlers(this.globalEndpointManager.resolveServiceEndpoint(request))
-                .get(resolvedPkRange);
+                .get(resolvedPkRange.getId());
 
         if (requestThrottler != null) {
             return requestThrottler.processRequest(request, nextRequestMono);
