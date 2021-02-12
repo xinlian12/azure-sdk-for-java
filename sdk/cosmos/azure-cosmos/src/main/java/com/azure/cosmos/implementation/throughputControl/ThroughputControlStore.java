@@ -166,27 +166,30 @@ public class ThroughputControlStore {
 
         return this.shouldRefreshContainerController(collectionLink, request)
             .flatMap(shouldRefresh -> {
-                if (shouldRefresh) {
-                    currentContainerController.close().subscribeOn(Schedulers.parallel()).subscribe();
-                    this.containerControllerCache.refresh(collectionLink, () -> this.createAndInitContainerController(collectionLink));
-                    return this.resolveContainerController(collectionLink)
-                        .flatMap(updatedContainerController -> {
-                            if (updatedContainerController.canHandleRequest(request)) {
-                                return updatedContainerController.processRequest(request, originalRequestMono)
-                                    .doOnError(throwable -> this.handleException(request, updatedContainerController, throwable));
-                            } else {
-                                // still can not handle the request
-                                logger.warn(
-                                    "Can not find container controller to process request {} with collectionRid {} ",
-                                    request.getActivityId(),
-                                    request.requestContext.resolvedCollectionRid);
+                if (!shouldRefresh) {
+                    return originalRequestMono;
+                } else {
+                    return Mono.fromRunnable(() -> {
+                        currentContainerController.close().subscribeOn(Schedulers.parallel()).subscribe();
+                    }).then(Mono.defer(() -> {
+                        this.containerControllerCache.refresh(collectionLink, () -> this.createAndInitContainerController(collectionLink));
+                        return this.resolveContainerController(collectionLink)
+                                   .flatMap(updatedContainerController -> {
+                                       if (updatedContainerController.canHandleRequest(request)) {
+                                           return updatedContainerController.processRequest(request, originalRequestMono)
+                                                                            .doOnError(throwable -> this.handleException(request, updatedContainerController, throwable));
+                                       } else {
+                                           // still can not handle the request
+                                           logger.warn(
+                                               "Can not find container controller to process request {} with collectionRid {} ",
+                                               request.getActivityId(),
+                                               request.requestContext.resolvedCollectionRid);
 
-                                return originalRequestMono;
-                            }
-                        });
+                                           return originalRequestMono;
+                                       }
+                                   });
+                    }));
                 }
-
-                return originalRequestMono;
             });
     }
 

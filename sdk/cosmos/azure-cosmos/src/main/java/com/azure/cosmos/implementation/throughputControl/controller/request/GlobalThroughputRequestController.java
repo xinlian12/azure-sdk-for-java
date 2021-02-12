@@ -46,13 +46,9 @@ public class GlobalThroughputRequestController implements IThroughputRequestCont
 
     @Override
     public <T> Mono<T> processRequest(RxDocumentServiceRequest request, Mono<T> nextRequestMono) {
-        return Mono.defer(
-                () -> Mono.just(
-                    this.requestThrottlerMapByRegion.computeIfAbsent(
-                        this.globalEndpointManager.resolveServiceEndpoint(request),
-                        key -> new ThroughputRequestThrottler(this.scheduledThroughput.get())))
-            )
-            .flatMap(requestThrottler -> requestThrottler.processRequest(request, nextRequestMono));
+        return this.requestThrottlerMapByRegion
+            .computeIfAbsent(this.globalEndpointManager.resolveServiceEndpoint(request),
+                key -> new ThroughputRequestThrottler(this.scheduledThroughput.get())).processRequest(request, nextRequestMono);
     }
 
     @Override

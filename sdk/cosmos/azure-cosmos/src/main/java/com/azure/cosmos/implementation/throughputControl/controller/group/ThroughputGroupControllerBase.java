@@ -182,26 +182,29 @@ public abstract class ThroughputGroupControllerBase implements IThroughputContro
 
         return this.shouldUpdateRequestController(request)
             .flatMap(shouldUpdate -> {
-                if (shouldUpdate) {
-                    currentRequestController.close().subscribeOn(Schedulers.parallel()).subscribe();
-                    this.refreshRequestController();
-                    return this.resolveRequestController()
-                        .flatMap(updatedController -> {
-                            if (updatedController.canHandleRequest(request)) {
-                                return updatedController.processRequest(request, nextRequestMono)
-                                    .doOnError(throwable -> this.handleException(throwable));
-                            } else {
-                                // If we reach here and still can not handle the request, it should mean the request has staled info
-                                // and the request will fail by server
-                                logger.warn(
-                                    "Can not find request controller to handle request {} with pkRangeId {}",
-                                    request.getActivityId(),
-                                    request.requestContext.resolvedPartitionKeyRange.getId());
-                                return nextRequestMono;
-                            }
-                        });
-                } else {
+                if (!shouldUpdate) {
                     return nextRequestMono;
+                } else {
+                    return Mono.fromRunnable(() -> {
+                        currentRequestController.close().subscribeOn(Schedulers.parallel()).subscribe();
+                    }).then(Mono.defer(() -> {
+                        this.refreshRequestController();
+                        return this.resolveRequestController()
+                                   .flatMap(updatedController -> {
+                                       if (updatedController.canHandleRequest(request)) {
+                                           return updatedController.processRequest(request, nextRequestMono)
+                                                                   .doOnError(throwable -> this.handleException(throwable));
+                                       } else {
+                                           // If we reach here and still can not handle the request, it should mean the request has staled info
+                                           // and the request will fail by server
+                                           logger.warn(
+                                               "Can not find request controller to handle request {} with pkRangeId {}",
+                                               request.getActivityId(),
+                                               request.requestContext.resolvedPartitionKeyRange.getId());
+                                           return nextRequestMono;
+                                       }
+                                   });
+                    }));
                 }
             });
     }
@@ -209,13 +212,13 @@ public abstract class ThroughputGroupControllerBase implements IThroughputContro
     private Mono<Boolean> shouldUpdateRequestController(RxDocumentServiceRequest request) {
         return this.partitionKeyRangeCache.tryGetRangeByPartitionKeyRangeId(
                 null, request.requestContext.resolvedCollectionRid, request.requestContext.resolvedPartitionKeyRange.getId(), null)
-            .map(pkRangeHolder -> pkRangeHolder.v)
-            .flatMap(pkRange -> {
-                if (pkRange == null) {
+            .flatMap(pkRangeHolder -> {
+                if (pkRangeHolder.v == null) {
                     return Mono.just(Boolean.FALSE);
                 } else {
                     return Mono.just(Boolean.TRUE);
-                }});
+                }
+            });
     }
 
     protected Mono<IThroughputRequestController> resolveRequestController() {

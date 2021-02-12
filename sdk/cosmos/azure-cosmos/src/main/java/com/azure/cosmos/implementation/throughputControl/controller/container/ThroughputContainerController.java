@@ -174,44 +174,6 @@ public class ThroughputContainerController implements IThroughputContainerContro
         });
     }
 
-//    private Mono<ThroughputContainerController> resolveContainerMaxThroughput() {
-//        return Mono.just(this.throughputResolveLevel) // TODO: ---> test whether it works without defer
-//            .flatMap(throughputResolveLevel -> {
-//                if (throughputResolveLevel == ThroughputResolveLevel.CONTAINER) {
-//                    return this.resolveContainerThroughput()
-//                        .onErrorResume(throwable -> {
-//                            if (this.isOfferNotConfiguredException(throwable)) {
-//                                this.throughputResolveLevel = ThroughputResolveLevel.DATABASE;
-//                            }
-//
-//                            return Mono.error(throwable);
-//                        });
-//                } else if (throughputResolveLevel == ThroughputResolveLevel.DATABASE) {
-//                    return this.resolveDatabaseThroughput()
-//                        .onErrorResume(throwable -> {
-//                            if (this.isOfferNotConfiguredException(throwable)) {
-//                                this.throughputResolveLevel = ThroughputResolveLevel.CONTAINER;
-//                            }
-//
-//                            return Mono.error(throwable);
-//                        });
-//                }
-//
-//                // All the underlying throughput control groups are using target throughput,
-//                // which is constant value, hence no need to resolve throughput
-//                return Mono.empty();
-//            })
-//            .flatMap(throughputResponse -> {
-//                this.updateMaxContainerThroughput(throughputResponse);
-//                return Mono.empty();
-//            })
-//            .retryWhen(
-//                // Throughput can be configured on database level or container level
-//                // Retry at most 1 time so we can try on database and container both
-//                RetrySpec.max(1).filter(throwable -> this.isOfferNotConfiguredException(throwable))
-//            ).thenReturn(this);
-//    }
-
     private Mono<ThroughputResponse> resolveThroughputByResourceId(String resourceId) {
         // Note: for serverless account, when we trying to query offers,
         // we will get 400/0 with error message: Reading or replacing offers is not supported for serverless accounts.
