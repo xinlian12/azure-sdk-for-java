@@ -123,22 +123,23 @@ public class PkRangesThroughputRequestController implements IThroughputRequestCo
 
     @Override
     public <T> Mono<T> processRequest(RxDocumentServiceRequest request, Mono<T> nextRequestMono) {
-        PartitionKeyRange resolvedPkRange = request.requestContext.resolvedPartitionKeyRange;
-
-        // If we reach here, it means we should find the mapping pkRange
-        ThroughputRequestThrottler requestThrottler =
-            this.getOrCreateRegionRequestThrottlers(this.globalEndpointManager.resolveServiceEndpoint(request))
-                .get(resolvedPkRange.getId());
-
-        if (requestThrottler != null) {
-            return requestThrottler.processRequest(request, nextRequestMono);
-        } else {
-            logger.warn(
-                "Can not find matching request throttler to process request {} with pkRangeId {}",
-                request.getActivityId(),
-                resolvedPkRange.getId());
-            return nextRequestMono;
-        }
+        return nextRequestMono;
+//        PartitionKeyRange resolvedPkRange = request.requestContext.resolvedPartitionKeyRange;
+//
+//        // If we reach here, it means we should find the mapping pkRange
+//        ThroughputRequestThrottler requestThrottler =
+//            this.getOrCreateRegionRequestThrottlers(this.globalEndpointManager.resolveServiceEndpoint(request))
+//                .get(resolvedPkRange.getId());
+//
+//        if (requestThrottler != null) {
+//            return requestThrottler.processRequest(request, nextRequestMono);
+//        } else {
+//            logger.warn(
+//                "Can not find matching request throttler to process request {} with pkRangeId {}",
+//                request.getActivityId(),
+//                resolvedPkRange.getId());
+//            return nextRequestMono;
+//        }
     }
 
     private double calculateThroughputPerPkRange() {
