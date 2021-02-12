@@ -188,7 +188,8 @@ abstract class AsyncBenchmark<T> {
 
         docsToRead = Flux.merge(Flux.fromIterable(createDocumentObservables), 100).collectList().block();
         logger.info("Finished pre-populating {} documents", cfg.getNumberOfPreCreatedDocuments());
-
+        cosmosAsyncContainer.enableThroughputLocalControlGroup("default", 1.0, true);
+        
         init();
 
         if (configuration.isEnableJvmStats()) {
