@@ -10,12 +10,17 @@ import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.benchmark.ctl.AsyncCtlWorkload;
 import com.azure.cosmos.benchmark.linkedin.LICtlWorkload;
 import com.azure.cosmos.models.PartitionKey;
+import com.beust.jcommander.JCommander;
 import com.beust.jcommander.ParameterException;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
+
+import static com.azure.cosmos.benchmark.Configuration.Operation.CtlWorkload;
+import static com.azure.cosmos.benchmark.Configuration.Operation.LinkedInCtlWorkload;
+import static com.azure.cosmos.benchmark.Configuration.Operation.ReadThroughputWithMultipleClients;
 
 public class Main {
 
@@ -27,39 +32,29 @@ public class Main {
             Configuration cfg = new Configuration();
             cfg.tryGetValuesFromSystem();
 
-            CosmosAsyncClient cosmosAsyncClient = new CosmosClientBuilder()
-                .endpoint(cfg.getServiceEndpoint())
-                .key(cfg.getMasterKey())
-                .buildAsyncClient();
+            JCommander jcommander = new JCommander(cfg, args);
+            if (cfg.isHelp()) {
+                // prints out the usage help
+                jcommander.usage();
+                return;
+            }
 
-            //force an exception
-            CosmosAsyncDatabase database = cosmosAsyncClient.getDatabase("non_existing_database");
-            CosmosAsyncContainer container = database.getContainer("non_existing_container");
-            container.readItem("itemId", new PartitionKey("partitionKey"), JsonNode.class).block();
+            validateConfiguration(cfg);
 
-//            JCommander jcommander = new JCommander(cfg, args);
-//            if (cfg.isHelp()) {
-//                // prints out the usage help
-//                jcommander.usage();
-//                return;
-//            }
-//
-//            validateConfiguration(cfg);
-//
-//            if (cfg.isSync()) {
-//                syncBenchmark(cfg);
-//            } else {
-//                if(cfg.getOperationType().equals(ReadThroughputWithMultipleClients)) {
-//                    asyncMultiClientBenchmark(cfg);
-//                } else if(cfg.getOperationType().equals(CtlWorkload)) {
-//                    asyncCtlWorkload(cfg);
-//                } else if (cfg.getOperationType().equals(LinkedInCtlWorkload)) {
-//                    linkedInCtlWorkload(cfg);
-//                }
-//                else {
-//                    asyncBenchmark(cfg);
-//                }
-//            }
+            if (cfg.isSync()) {
+                syncBenchmark(cfg);
+            } else {
+                if(cfg.getOperationType().equals(ReadThroughputWithMultipleClients)) {
+                    asyncMultiClientBenchmark(cfg);
+                } else if(cfg.getOperationType().equals(CtlWorkload)) {
+                    asyncCtlWorkload(cfg);
+                } else if (cfg.getOperationType().equals(LinkedInCtlWorkload)) {
+                    linkedInCtlWorkload(cfg);
+                }
+                else {
+                    asyncBenchmark(cfg);
+                }
+            }
         } catch (ParameterException e) {
             // if any error in parsing the cmd-line options print out the usage help
             System.err.println("INVALID Usage: " + e.getMessage());

@@ -27,6 +27,7 @@ import com.codahale.metrics.graphite.GraphiteReporter;
 import com.codahale.metrics.jvm.CachedThreadStatesGaugeSet;
 import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.mpierce.metrics.reservoir.hdrhistogram.HdrHistogramResetOnSnapshotReservoir;
@@ -76,6 +77,18 @@ abstract class AsyncBenchmark<T> {
     private AtomicBoolean warmupMode = new AtomicBoolean(false);
 
     AsyncBenchmark(Configuration cfg) {
+        //Start testing
+        CosmosAsyncClient cosmosAsyncClient = new CosmosClientBuilder()
+            .endpoint(cfg.getServiceEndpoint())
+            .key(cfg.getMasterKey())
+            .buildAsyncClient();
+
+        //force an exception
+        CosmosAsyncDatabase database = cosmosAsyncClient.getDatabase("non_existing_database");
+        CosmosAsyncContainer container = database.getContainer("non_existing_container");
+        container.readItem("itemId", new PartitionKey("partitionKey"), JsonNode.class).block();
+        // end testing
+
         CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder()
             .endpoint(cfg.getServiceEndpoint())
             .key(cfg.getMasterKey())
