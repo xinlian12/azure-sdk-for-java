@@ -23,12 +23,12 @@ public abstract class TransportClient implements AutoCloseable {
 
     // Uses requests's ResourceOperation to determine the operation
     public Mono<StoreResponse> invokeResourceOperationAsync(Uri physicalAddress, RxDocumentServiceRequest request) {
-//        if (StringUtils.isEmpty(request.requestContext.resourcePhysicalAddress)) {
-//            request.requestContext.resourcePhysicalAddress = physicalAddress.toString();
-//        }
-//        if (this.throughputControlStore != null) {
-//            return this.throughputControlStore.processRequest(request, this.invokeStoreAsync(physicalAddress, request));
-//        }
+        if (StringUtils.isEmpty(request.requestContext.resourcePhysicalAddress)) {
+            request.requestContext.resourcePhysicalAddress = physicalAddress.toString();
+        }
+        if (this.throughputControlStore != null) {
+            return this.throughputControlStore.processRequest(request, this.invokeStoreAsync(physicalAddress, request));
+        }
 
         return this.invokeStoreAsync(physicalAddress, request);
     }
