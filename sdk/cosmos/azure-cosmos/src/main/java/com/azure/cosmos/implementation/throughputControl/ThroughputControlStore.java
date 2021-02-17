@@ -136,26 +136,27 @@ public class ThroughputControlStore {
         checkNotNull(request, "Request can not be null");
         checkNotNull(originalRequestMono, "originalRequestMono can not be null");
 
-        // Currently, we will only target two resource types.
-        // If in the future we find other useful scenarios for throughput control, add more resource type here.
-        if (request.getResourceType() != ResourceType.Document && request.getResourceType() != ResourceType.StoredProcedure) {
-            return originalRequestMono;
-        }
-
-        String collectionLink = Utils.getCollectionName(request.getResourceAddress());
-        return this.resolveContainerController(collectionLink)
-            .flatMap(containerController -> {
-                if (containerController.canHandleRequest(request)) {
-                    return containerController.processRequest(request, originalRequestMono)
-                        .doOnError(throwable -> this.handleException(request, containerController, throwable));
-                }
-
-                // Unable to find container controller to handle the request,
-                // It is caused by control store out of sync or the request has staled info.
-                // We will handle the first scenario by creating a new container controller,
-                // while fall back to original request Mono for the second scenario.
-                return this.updateControllerAndRetry(containerController, collectionLink, request, originalRequestMono);
-            });
+        return originalRequestMono;
+//        // Currently, we will only target two resource types.
+//        // If in the future we find other useful scenarios for throughput control, add more resource type here.
+//        if (request.getResourceType() != ResourceType.Document && request.getResourceType() != ResourceType.StoredProcedure) {
+//            return originalRequestMono;
+//        }
+//
+//        String collectionLink = Utils.getCollectionName(request.getResourceAddress());
+//        return this.resolveContainerController(collectionLink)
+//            .flatMap(containerController -> {
+//                if (containerController.canHandleRequest(request)) {
+//                    return containerController.processRequest(request, originalRequestMono)
+//                        .doOnError(throwable -> this.handleException(request, containerController, throwable));
+//                }
+//
+//                // Unable to find container controller to handle the request,
+//                // It is caused by control store out of sync or the request has staled info.
+//                // We will handle the first scenario by creating a new container controller,
+//                // while fall back to original request Mono for the second scenario.
+//                return this.updateControllerAndRetry(containerController, collectionLink, request, originalRequestMono);
+//            });
     }
 
     private <T> Mono<T> updateControllerAndRetry(
