@@ -14,6 +14,7 @@ import com.azure.cosmos.DirectConnectionConfig;
 import com.azure.cosmos.GatewayConnectionConfig;
 import com.azure.cosmos.ThroughputControlGroupConfig;
 import com.azure.cosmos.ThroughputControlGroupConfigBuilder;
+import com.azure.cosmos.ThroughputGlobalControlConfig;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.models.ThroughputProperties;
@@ -195,7 +196,13 @@ abstract class AsyncBenchmark<T> {
             .setTargetThroughputThreshold(1.0)
             .setDefault(true)
             .build();
-        cosmosAsyncContainer.enableThroughputLocalControlGroup(groupConfig);
+
+        ThroughputGlobalControlConfig globalControlConfig = cosmosClient.createThroughputGlobalControlConfigBuilder("Benchmark-1000000", "throughputControlContainer")
+            .setControlItemRenewInterval(Duration.ofSeconds(5))
+            .setControlItemExpireInterval(Duration.ofSeconds(20))
+            .build();
+
+        cosmosAsyncContainer.enableThroughputGlobalControlGroup(groupConfig, globalControlConfig);
 
         init();
 
