@@ -12,6 +12,8 @@ import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.DirectConnectionConfig;
 import com.azure.cosmos.GatewayConnectionConfig;
+import com.azure.cosmos.ThroughputControlGroupConfig;
+import com.azure.cosmos.ThroughputControlGroupConfigBuilder;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.models.ThroughputProperties;
@@ -188,7 +190,12 @@ abstract class AsyncBenchmark<T> {
 
         docsToRead = Flux.merge(Flux.fromIterable(createDocumentObservables), 100).collectList().block();
         logger.info("Finished pre-populating {} documents", cfg.getNumberOfPreCreatedDocuments());
-        cosmosAsyncContainer.enableThroughputLocalControlGroup("default", 1.0, true);
+        ThroughputControlGroupConfig groupConfig = new ThroughputControlGroupConfigBuilder()
+            .setGroupName("default")
+            .setTargetThroughputThreshold(1.0)
+            .setDefault(true)
+            .build();
+        cosmosAsyncContainer.enableThroughputLocalControlGroup(groupConfig);
 
         init();
 
