@@ -191,18 +191,18 @@ abstract class AsyncBenchmark<T> {
 
         docsToRead = Flux.merge(Flux.fromIterable(createDocumentObservables), 100).collectList().block();
         logger.info("Finished pre-populating {} documents", cfg.getNumberOfPreCreatedDocuments());
-//        ThroughputControlGroupConfig groupConfig = new ThroughputControlGroupConfigBuilder()
-//            .setGroupName("default")
-//            .setTargetThroughputThreshold(1.0)
-//            .setDefault(true)
-//            .build();
+        ThroughputControlGroupConfig groupConfig = new ThroughputControlGroupConfigBuilder()
+            .setGroupName("default")
+            .setTargetThroughputThreshold(1.0)
+            .setDefault(true)
+            .build();
 //
 //        ThroughputGlobalControlConfig globalControlConfig = cosmosClient.createThroughputGlobalControlConfigBuilder("Benchmark-1000000", "throughputControlContainer")
 //            .setControlItemRenewInterval(Duration.ofSeconds(5))
 //            .setControlItemExpireInterval(Duration.ofSeconds(20))
 //            .build();
 //
-//        cosmosAsyncContainer.enableThroughputGlobalControlGroup(groupConfig, globalControlConfig);
+        cosmosAsyncContainer.enableThroughputLocalControlGroup(groupConfig);
 
         init();
 
