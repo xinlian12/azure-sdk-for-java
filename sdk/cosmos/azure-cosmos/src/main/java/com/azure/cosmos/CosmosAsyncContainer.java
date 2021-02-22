@@ -21,6 +21,9 @@ import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.batch.BatchExecutor;
 import com.azure.cosmos.implementation.batch.BulkExecutor;
 import com.azure.cosmos.implementation.query.QueryInfo;
+import com.azure.cosmos.implementation.throughputControl.config.ThroughputControlGroupFactory;
+import com.azure.cosmos.implementation.throughputControl.config.ThroughputGlobalControlGroup;
+import com.azure.cosmos.implementation.throughputControl.config.ThroughputLocalControlGroup;
 import com.azure.cosmos.models.CosmosChangeFeedRequestOptions;
 import com.azure.cosmos.models.CosmosConflictProperties;
 import com.azure.cosmos.models.CosmosContainerProperties;
@@ -577,17 +580,19 @@ public class CosmosAsyncContainer {
                 ModelBridgeInternal.queryMetrics(response),
                 ModelBridgeInternal.getQueryPlanDiagnosticsContext(response),
                 useEtagAsContinuation,
-                isNoChangesResponse);
+                isNoChangesResponse,
+                response.getCosmosDiagnostics()                                                     );
 
         }
         return BridgeInternal.createFeedResponseWithQueryMetrics(
             (response.getResults().stream().map(document -> ModelBridgeInternal.toObjectFromJsonSerializable(document,
-                classType))
-                     .collect(Collectors.toList())), response.getResponseHeaders(),
+                                                                                                             classType))
+                 .collect(Collectors.toList())), response.getResponseHeaders(),
             ModelBridgeInternal.queryMetrics(response),
             ModelBridgeInternal.getQueryPlanDiagnosticsContext(response),
             useEtagAsContinuation,
-            isNoChangesResponse);
+            isNoChangesResponse,
+            response.getCosmosDiagnostics());
     }
 
     private <T> T transform(Object object, Class<T> classType) {
@@ -1403,5 +1408,34 @@ public class CosmosAsyncContainer {
     @Beta(value = Beta.SinceVersion.V4_9_0, warningText = Beta.PREVIEW_SUBJECT_TO_CHANGE_WARNING)
     public Mono<List<FeedRange>> getFeedRanges() {
         return this.getDatabase().getDocClientWrapper().getFeedRanges(getLink());
+    }
+
+    /**
+     * Enable the throughput control group with local control mode.
+     *
+     * @param groupConfig A {@link ThroughputControlGroupConfig}.
+     */
+    @Beta(value = Beta.SinceVersion.V4_13_0, warningText = Beta.PREVIEW_SUBJECT_TO_CHANGE_WARNING)
+    public void enableThroughputLocalControlGroup(ThroughputControlGroupConfig groupConfig) {
+        ThroughputLocalControlGroup localControlGroup = ThroughputControlGroupFactory.createThroughputLocalControlGroup(groupConfig, this);
+        this.database.getClient().enableThroughputControlGroup(localControlGroup);
+    }
+
+    /**
+     * Enable the throughput control group with global control mode.
+     * The defined throughput limit will be shared across different clients.
+     *
+     * @param groupConfig The throughput control group configuration, see {@link ThroughputGlobalControlGroup}.
+     * @param globalControlConfig The global throughput control configuration, see {@link GlobalThroughputControlConfig}.
+     */
+    @Beta(value = Beta.SinceVersion.V4_13_0, warningText = Beta.PREVIEW_SUBJECT_TO_CHANGE_WARNING)
+    public void enableThroughputGlobalControlGroup(
+        ThroughputControlGroupConfig groupConfig,
+        GlobalThroughputControlConfig globalControlConfig) {
+
+        ThroughputGlobalControlGroup globalControlGroup =
+            ThroughputControlGroupFactory.createThroughputGlobalControlGroup(groupConfig, globalControlConfig, this);
+
+        this.database.getClient().enableThroughputControlGroup(globalControlGroup);
     }
 }
