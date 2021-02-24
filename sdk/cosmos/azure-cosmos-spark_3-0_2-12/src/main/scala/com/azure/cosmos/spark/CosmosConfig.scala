@@ -3,12 +3,12 @@
 
 package com.azure.cosmos.spark
 
-import com.azure.cosmos.spark.ItemWriteStrategy.ItemWriteStrategy
-import com.azure.cosmos.spark.ChangeFeedModes.ChangeFeedMode
-import com.azure.cosmos.spark.CosmosWriteConfig.bulkEnabled
-
 import java.net.URL
+import java.time.Duration
 import java.util.Locale
+
+import com.azure.cosmos.spark.ChangeFeedModes.ChangeFeedMode
+import com.azure.cosmos.spark.ItemWriteStrategy.ItemWriteStrategy
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 
@@ -65,15 +65,7 @@ private object CosmosAccountConfig {
 
   private[spark] val CosmosAccountName = CosmosConfigEntry[String](key = "spark.cosmos.accountEndpoint",
     mandatory = true,
-    parseFromStringFunction = accountEndpointUri => {
-      val url = new URL(accountEndpointUri)
-      val separatorIndex = url.getHost.indexOf('.')
-      if (separatorIndex > 0) {
-          url.getHost.substring(0, separatorIndex)
-      } else {
-        url.getHost
-      }
-    },
+    parseFromStringFunction = accountEndpointUri => parseAccountName(accountEndpointUri),
     helpMessage = "Cosmos DB Account Name")
 
   private[spark] val ApplicationName = CosmosConfigEntry[String](key = "spark.cosmos.applicationName",
@@ -105,6 +97,16 @@ private object CosmosAccountConfig {
       accountName.get,
       applicationName,
       useGatewayMode.get)
+  }
+
+  private[spark] def parseAccountName(accountEndpointUri: String): String = {
+      val url = new URL(accountEndpointUri)
+      val separatorIndex = url.getHost.indexOf('.')
+      if (separatorIndex > 0) {
+          url.getHost.substring(0, separatorIndex)
+      } else {
+          url.getHost
+      }
   }
 }
 
@@ -263,6 +265,133 @@ private object CosmosChangeFeedConfig {
 
     CosmosChangeFeedConfig(changeFeedModeParsed.getOrElse(DefaultChangeFeedMode))
   }
+}
+
+private case class CosmosThroughputControlGroupConfig(
+                                               groupName: String,
+                                               targetThroughput: Option[Int],
+                                               targetThroughputThreshold: Option[Double],
+                                               isDefault: Boolean,
+                                               globalControlAccountConfig: CosmosAccountConfig,
+                                               globalControlContainerConfig: CosmosContainerConfig,
+                                               globalControlRenewInterval: Option[Duration],
+                                               globalControlExpireInterval: Option[Duration])
+
+
+private object CosmosThroughputControlGroupConfig {
+    private[spark] val ENABLE_THROUGHPUT_CONTROL_KEY = "spark.cosmos.enableThroughputControl"
+    private[spark] val NAME_KEY = "spark.cosmos.throughputControl.group.name"
+    private[spark] val TARGET_THROUGHPUT_KEY = "spark.cosmos.throughputControl.group.targetThroughput"
+    private[spark] val TARGET_THROUGHPUT_THRESHOLD_KEY = "spark.cosmos.throughputControl.group.targetThroughputThreshold"
+    private[spark] val GLOBAL_CONTROL_ACCOUNT_KEY = "spark.cosmos.throughputControl.group.globalControl.accountKey"
+    private[spark] val GLOBAL_CONTROL_ACCOUNT_ENDPOINT_KEY = "spark.cosmos.throughputControl.group.globalControl.accountEndpoint"
+    private[spark] val GLOBAL_CONTROL_USE_GATEWAY_MODE = "spark.cosmos.throughputControl.group.globalControl.useGatewayMode"
+    private[spark] val GLOBAL_CONTROL_DATABASE_NAME_KEY = "spark.cosmos.throughputControl.group.globalControl.database"
+    private[spark] val GLOBAL_CONTROL_CONTAINER_NAME_KEY = "spark.cosmos.throughputControl.group.globalControl.container"
+    private[spark] val GLOBAL_CONTROL_ITEM_RENEW_INTERVAL_IN_SECONDS_KEY =
+        "spark.cosmos.throughputControl.group.globalControl.renewIntervalInSeconds"
+    private[spark] val GLOBAL_CONTROL_ITEM_EXPIRE_INTERVAL_IN_SECONDS_KEY =
+        "spark.cosmos.throughputControl.group.globalControl.expireIntervalInSeconds"
+
+    private val enableThroughputControlSupplier = CosmosConfigEntry[Boolean](key = ENABLE_THROUGHPUT_CONTROL_KEY,
+        mandatory = false,
+        defaultValue = Some(false),
+        parseFromStringFunction = enableThroughputControl => enableThroughputControl.toBoolean,
+        helpMessage = "Enable throughput control")
+
+    private val groupNameSupplier = CosmosConfigEntry[String](key = NAME_KEY,
+        mandatory = false,
+        parseFromStringFunction = groupName => groupName,
+        helpMessage = "Throughput control group name")
+
+    private val targetThroughputSupplier = CosmosConfigEntry[Int](key = TARGET_THROUGHPUT_KEY,
+        mandatory = false,
+        parseFromStringFunction = targetThroughput => targetThroughput.toInt,
+        helpMessage = "Throughput control group target throughput")
+
+    private val targetThroughputThresholdSupplier = CosmosConfigEntry[Double](key = TARGET_THROUGHPUT_THRESHOLD_KEY,
+        mandatory = false,
+        parseFromStringFunction = targetThroughput => targetThroughput.toDouble,
+        helpMessage = "Throughput control group target throughput threshold")
+
+    private val globalControlAccountKeySupplier = CosmosConfigEntry[String](key = GLOBAL_CONTROL_ACCOUNT_KEY,
+        mandatory = false,
+        parseFromStringFunction = globalControlAccountKey => globalControlAccountKey,
+        helpMessage = "Throughput control group global control target account key")
+
+    private val globalControlAccountEndpointSupplier = CosmosConfigEntry[String](key = GLOBAL_CONTROL_ACCOUNT_ENDPOINT_KEY,
+        mandatory = false,
+        parseFromStringFunction = globalControlAccountEndpoint => globalControlAccountEndpoint,
+        helpMessage = "Throughput control group global control target account endpoint")
+
+    private val globalControlDatabaseSupplier = CosmosConfigEntry[String](key = GLOBAL_CONTROL_DATABASE_NAME_KEY,
+        mandatory = false,
+        parseFromStringFunction = globalControlDatabase => globalControlDatabase,
+        helpMessage = "Global throughput control group target database")
+
+    private val globalControlContainerSupplier = CosmosConfigEntry[String](key = GLOBAL_CONTROL_CONTAINER_NAME_KEY,
+        mandatory = false,
+        parseFromStringFunction = globalControlContainer => globalControlContainer,
+        helpMessage = "Global throughput control group target container")
+
+    private val globalControlUseGatewayModeSupplier = CosmosConfigEntry[Boolean](key = GLOBAL_CONTROL_USE_GATEWAY_MODE,
+        mandatory = false,
+        defaultValue = Some(false),
+        parseFromStringFunction = useGatewayMode => useGatewayMode.toBoolean,
+        helpMessage = "Global throughput control use gateway mode")
+
+    private val globalControlItemRenewIntervalSupplier = CosmosConfigEntry[Duration](key = GLOBAL_CONTROL_ITEM_RENEW_INTERVAL_IN_SECONDS_KEY,
+        mandatory = false,
+        parseFromStringFunction = renewIntervalInSeconds => Duration.ofSeconds(renewIntervalInSeconds.toInt),
+        helpMessage = "Global throughput control group control item renew interval")
+
+    private val globalControlItemExpireIntervalSupplier = CosmosConfigEntry[Duration](key = GLOBAL_CONTROL_ITEM_EXPIRE_INTERVAL_IN_SECONDS_KEY,
+        mandatory = false,
+        parseFromStringFunction = expireIntervalInSeconds => Duration.ofSeconds(expireIntervalInSeconds.toInt),
+        helpMessage = "Global throughput control group control item renew interval")
+
+
+    def parseThroughputControlGroupConfig(cfg: Map[String, String], accountName: Option[String]): Option[CosmosThroughputControlGroupConfig] = {
+        val enableThroughputControl = CosmosConfigEntry.parse(cfg, enableThroughputControlSupplier).get
+
+        if (enableThroughputControl) {
+            val groupName = CosmosConfigEntry.parse(cfg, groupNameSupplier)
+            val targetThroughput = CosmosConfigEntry.parse(cfg, targetThroughputSupplier)
+            val targetThroughputThreshold = CosmosConfigEntry.parse(cfg, targetThroughputThresholdSupplier)
+            val globalControlAccountKey = CosmosConfigEntry.parse(cfg, globalControlAccountKeySupplier)
+            val globalControlAccountEndpoint = CosmosConfigEntry.parse(cfg, globalControlAccountEndpointSupplier)
+            val globalControlUseGatewayMode= CosmosConfigEntry.parse(cfg, globalControlUseGatewayModeSupplier)
+            val globalControlDatabase = CosmosConfigEntry.parse(cfg, globalControlDatabaseSupplier)
+            val globalControlContainer = CosmosConfigEntry.parse(cfg, globalControlContainerSupplier)
+            val globalControlItemRenewInterval = CosmosConfigEntry.parse(cfg, globalControlItemRenewIntervalSupplier)
+            val globalControlItemExpireInterval = CosmosConfigEntry.parse(cfg, globalControlItemExpireIntervalSupplier)
+
+            assert(groupName.isDefined)
+            assert(targetThroughputThreshold.isDefined)
+            assert(globalControlAccountKey.isDefined)
+            assert(globalControlAccountKey.isDefined)
+            assert(globalControlAccountEndpoint.isDefined)
+            assert(globalControlDatabase.isDefined)
+            assert(globalControlContainer.isDefined)
+
+            Some(CosmosThroughputControlGroupConfig(
+                groupName.get,
+                targetThroughput,
+                targetThroughputThreshold,
+                true,
+                CosmosAccountConfig(
+                    globalControlAccountEndpoint.get,
+                    globalControlAccountKey.get,
+                    CosmosAccountConfig.parseAccountName(globalControlAccountEndpoint.get),
+                    None,
+                    globalControlUseGatewayMode.get),
+                CosmosContainerConfig(globalControlDatabase.get, globalControlContainer.get),
+                globalControlItemRenewInterval,
+                globalControlItemExpireInterval))
+        } else {
+            None
+        }
+    }
 }
 
 private case class CosmosConfigEntry[T](key: String,

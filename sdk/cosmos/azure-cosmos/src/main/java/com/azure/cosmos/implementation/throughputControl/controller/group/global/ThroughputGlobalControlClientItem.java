@@ -17,6 +17,9 @@ public class ThroughputGlobalControlClientItem extends ThroughputGlobalControlIt
     @JsonProperty(value = "loadFactor", required = true)
     private double loadFactor;
 
+    @JsonProperty(value = "allocatedThroughput", required = true)
+    private double allocatedThroughput;
+
     /**
      * Constructor used for Json deserialization
      */
@@ -28,10 +31,12 @@ public class ThroughputGlobalControlClientItem extends ThroughputGlobalControlIt
         String id,
         String partitionKeyValue,
         double loadFactor,
+        double allocatedThroughput,
         Duration clientItemExpireInterval) {
         super(id, partitionKeyValue);
 
         this.loadFactor = loadFactor;
+        this.allocatedThroughput = allocatedThroughput;
         this.initializeTime = ZonedDateTime.now(ZoneId.of("UTC")).toString();
         this.setTtl((int)clientItemExpireInterval.getSeconds());
     }
@@ -50,5 +55,13 @@ public class ThroughputGlobalControlClientItem extends ThroughputGlobalControlIt
 
     public void setLoadFactor(double loadFactor) {
         this.loadFactor = loadFactor;
+    }
+
+    public double getAllocatedThroughput() {
+        return allocatedThroughput;
+    }
+
+    public void setAllocatedThroughput(double allocatedThroughput) {
+        this.allocatedThroughput = allocatedThroughput;
     }
 }

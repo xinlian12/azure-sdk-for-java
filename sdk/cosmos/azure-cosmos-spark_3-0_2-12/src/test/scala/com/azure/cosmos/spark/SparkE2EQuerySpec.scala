@@ -27,7 +27,15 @@ class SparkE2EQuerySpec extends IntegrationSpec with Spark with CosmosClient wit
     val cfg = Map("spark.cosmos.accountEndpoint" -> cosmosEndpoint,
       "spark.cosmos.accountKey" -> cosmosMasterKey,
       "spark.cosmos.database" -> cosmosDatabase,
-      "spark.cosmos.container" -> cosmosContainer
+      "spark.cosmos.container" -> cosmosContainer,
+        "spark.cosmos.enableThroughputControl" -> "true",
+        "spark.cosmos.throughputControl.group.name" -> "test-group",
+        "spark.cosmos.throughputControl.group.targetThroughputThreshold" -> "1.0",
+        "spark.cosmos.throughputControl.group.globalControl.accountKey" ->
+            "ne7c3BVLRk60cqERjIPlllln5I8VSj7b8Y4lRQpXqLR8ikTixzZLsFEXdtKVroD2LfRImqE9MT4lwW8nellQ3w==",
+        "spark.cosmos.throughputControl.group.globalControl.accountEndpoint" -> "https://cosmos-sdk-tests-3.documents.azure.com:443/",
+        "spark.cosmos.throughputControl.group.globalControl.database" -> "SparkTestDB",
+        "spark.cosmos.throughputControl.group.globalControl.container" -> "ThroughputControlContainer"
     )
 
     // scalastyle:off underscore.import

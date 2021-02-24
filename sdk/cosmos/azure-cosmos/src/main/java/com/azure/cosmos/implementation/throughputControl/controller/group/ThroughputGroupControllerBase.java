@@ -45,7 +45,7 @@ public abstract class ThroughputGroupControllerBase implements IThroughputContro
     private final ConnectionMode connectionMode;
     private final GlobalEndpointManager globalEndpointManager;
     private final ThroughputControlGroupInternal group;
-    private final AtomicReference<Double> groupThroughput;
+    protected final AtomicReference<Double> groupThroughput;
     private final AtomicInteger maxContainerThroughput;
     private final RxPartitionKeyRangeCache partitionKeyRangeCache;
     private final AsyncCache<String, IThroughputRequestController> requestControllerAsyncCache;

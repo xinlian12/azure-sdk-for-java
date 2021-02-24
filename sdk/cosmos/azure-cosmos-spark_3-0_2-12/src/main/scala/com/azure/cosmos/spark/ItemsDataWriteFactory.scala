@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 package com.azure.cosmos.spark
 
-import com.azure.cosmos.CosmosException
+import com.azure.cosmos.{CosmosAsyncContainer, CosmosClientBuilder, CosmosException, ThroughputControlGroupConfigBuilder}
 import com.azure.cosmos.implementation.CosmosClientMetadataCachesSnapshot
 import com.azure.cosmos.models.{CosmosItemRequestOptions, PartitionKey}
 import com.fasterxml.jackson.databind.node.ObjectNode
@@ -29,13 +29,52 @@ private class ItemsDataWriteFactory(userConfig: Map[String, String],
 
     private val client = CosmosClientCache(CosmosClientConfiguration(userConfig, useEventualConsistency = true), Some(cosmosClientStateHandle))
 
-    private val container = client.getDatabase(cosmosTargetContainerConfig.database)
-      .getContainer(cosmosTargetContainerConfig.container)
+    private val container = getContainerWithThroughputControl
 
     private val containerDefinition = container.read().block().getProperties
     private val partitionKeyDefinition = containerDefinition.getPartitionKeyDefinition
 
     private lazy val bulkWriter = new BulkWriter(container, cosmosWriteConfig)
+
+      private def getContainerWithThroughputControl(): CosmosAsyncContainer = {
+          val container = client.getDatabase(cosmosTargetContainerConfig.database)
+              .getContainer(cosmosTargetContainerConfig.container)
+
+          val throughputControlGroupConfig = CosmosThroughputControlGroupConfig.parseThroughputControlGroupConfig(userConfig, None)
+
+          if (throughputControlGroupConfig.isDefined) {
+              val cosmosGroupConfig = throughputControlGroupConfig.get
+
+              val groupConfigBuilder = new ThroughputControlGroupConfigBuilder()
+                  .setGroupName(cosmosGroupConfig.groupName)
+                  .setDefault(true)
+
+              if (cosmosGroupConfig.targetThroughput.isDefined) {
+                  groupConfigBuilder.setTargetThroughput(cosmosGroupConfig.targetThroughput.get)
+              }
+              if (cosmosGroupConfig.targetThroughputThreshold.isDefined) {
+                  groupConfigBuilder.setTargetThroughputThreshold(cosmosGroupConfig.targetThroughputThreshold.get)
+              }
+
+              val globalControlClient = new CosmosClientBuilder()
+                  .endpoint(cosmosGroupConfig.globalControlAccountConfig.endpoint)
+                  .key(cosmosGroupConfig.globalControlAccountConfig.key)
+                  .buildAsyncClient()
+
+              val globalThroughputControlConfig =
+                  globalControlClient.createGlobalThroughputControlConfigBuilder(
+                      cosmosGroupConfig.globalControlContainerConfig.database,
+                      cosmosGroupConfig.globalControlContainerConfig.container)
+                      .build()
+
+              val groupConfigBase = groupConfigBuilder.build()
+              logInfo("GroupConfigBase-> " + groupConfigBase.toString)
+              logInfo("GlobalThroughputControlConfig-> " + globalThroughputControlConfig.toString)
+              container.enableThroughputGlobalControlGroup(groupConfigBase, globalThroughputControlConfig)
+          }
+
+          container
+      }
 
     override def write(internalRow: InternalRow): Unit = {
       val objectNode = CosmosRowConverter.fromInternalRowToObjectNode(internalRow, inputSchema)
@@ -70,6 +109,11 @@ private class ItemsDataWriteFactory(userConfig: Map[String, String],
             // TODO: what should we do on unique index violation? should we ignore or throw?
             // TODO moderakh we need to add log messages extract identifier (id, pk) and log
             return
+          case e: CosmosException if Exceptions.isRequestRateTooLargeException(e) =>
+              logWarning(
+                  s"create item attempt #$attempt max remaining retries"
+                      + s"${cosmosWriteConfig.maxRetryCount + 1 - attempt}, encountered ${e.getMessage}")
+              return
           case e: CosmosException if Exceptions.canBeTransientFailure(e) =>
             logWarning(
               s"create item attempt #$attempt max remaining retries"
@@ -79,7 +123,7 @@ private class ItemsDataWriteFactory(userConfig: Map[String, String],
       }
 
       assert(exceptionOpt.isDefined)
-      throw exceptionOpt.get
+     // throw exceptionOpt.get
     }
 
     private def upsertWithRetry(partitionKeyValue: PartitionKey,
@@ -91,6 +135,11 @@ private class ItemsDataWriteFactory(userConfig: Map[String, String],
           container.upsertItem(objectNode, partitionKeyValue, new CosmosItemRequestOptions()).block()
           return
         } catch {
+          case e: CosmosException if Exceptions.isRequestRateTooLargeException(e) =>
+                logWarning(
+                    s"create item attempt #$attempt max remaining retries"
+                        + s"${cosmosWriteConfig.maxRetryCount + 1 - attempt}, encountered ${e.getMessage}")
+                return
           case e: CosmosException if Exceptions.canBeTransientFailure(e) =>
             logWarning(
               s"upsert item attempt #$attempt max remaining retries "
@@ -100,7 +149,8 @@ private class ItemsDataWriteFactory(userConfig: Map[String, String],
       }
 
       assert(exceptionOpt.isDefined)
-      throw exceptionOpt.get
+      return
+     // throw exceptionOpt.get
     }
     // scalastyle:on return
 

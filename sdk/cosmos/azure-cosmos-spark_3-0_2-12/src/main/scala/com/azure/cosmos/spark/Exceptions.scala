@@ -18,4 +18,8 @@ private object Exceptions {
       cosmosException.getStatusCode == CosmosConstants.StatusCodes.InternalServerError ||
     cosmosException.getStatusCode == CosmosConstants.StatusCodes.Timeout
   }
+
+  def isRequestRateTooLargeException(cosmosException: CosmosException): Boolean = {
+      cosmosException.getStatusCode == CosmosConstants.StatusCodes.RequestRateTooLarge
+  }
 }

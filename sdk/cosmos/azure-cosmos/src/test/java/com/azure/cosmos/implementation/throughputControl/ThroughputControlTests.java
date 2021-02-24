@@ -54,11 +54,11 @@ public class ThroughputControlTests extends TestSuiteBase {
     @DataProvider
     public static Object[][] operationTypeProvider() {
         return new Object[][]{
-            { OperationType.Read },
-            { OperationType.Replace },
+//            { OperationType.Read },
+//            { OperationType.Replace },
             { OperationType.Create },
-            { OperationType.Delete },
-            { OperationType.Query },
+//            { OperationType.Delete },
+//            { OperationType.Query },
          //   { OperationType.ReadFeed } // changeFeed only go for gateway
         };
     }
@@ -90,7 +90,7 @@ public class ThroughputControlTests extends TestSuiteBase {
             BridgeInternal.getContextClient(client).getConnectionPolicy().getConnectionMode());
     }
 
-    @Test(groups = {"emulator"}, dataProvider = "operationTypeProvider", timeOut = TIMEOUT)
+    @Test(groups = {"emulator"}, dataProvider = "operationTypeProvider")
     public void throughputGlobalControl(OperationType operationType) {
         String controlContainerId = "throughputControlContainer";
         CosmosAsyncContainer controlContainer = database.getContainer(controlContainerId);
@@ -100,7 +100,7 @@ public class ThroughputControlTests extends TestSuiteBase {
         ThroughputControlGroupConfig groupConfig =
             new ThroughputControlGroupConfigBuilder()
                 .setGroupName("group-" + UUID.randomUUID())
-                .setTargetThroughput(6)
+                .setTargetThroughputThreshold(1.0)
                 .build();
 
         GlobalThroughputControlConfig globalControlConfig = this.client.createGlobalThroughputControlConfigBuilder(this.database.getId(), controlContainerId)
@@ -113,17 +113,20 @@ public class ThroughputControlTests extends TestSuiteBase {
         requestOptions.setContentResponseOnWriteEnabled(true);
         requestOptions.setThroughputControlGroupName(groupConfig.getGroupName());
 
-        CosmosItemResponse<TestItem> createItemResponse = container.createItem(getDocumentDefinition(), requestOptions).block();
-        TestItem createdItem = createItemResponse.getItem();
-        this.validateRequestNotThrottled(
-            createItemResponse.getDiagnostics().toString(),
-            BridgeInternal.getContextClient(client).getConnectionPolicy().getConnectionMode());
-
-        // second request to same group. which will get throttled
-        CosmosDiagnostics cosmosDiagnostics = performDocumentOperation(this.container, operationType, createdItem, groupConfig.getGroupName());
-        this.validateRequestThrottled(
-            cosmosDiagnostics.toString(),
-            BridgeInternal.getContextClient(client).getConnectionPolicy().getConnectionMode());
+        while(true) {
+            CosmosItemResponse<TestItem> createItemResponse = container.createItem(getDocumentDefinition(), requestOptions).block();
+        }
+//        CosmosItemResponse<TestItem> createItemResponse = container.createItem(getDocumentDefinition(), requestOptions).block();
+//        TestItem createdItem = createItemResponse.getItem();
+//        this.validateRequestNotThrottled(
+//            createItemResponse.getDiagnostics().toString(),
+//            BridgeInternal.getContextClient(client).getConnectionPolicy().getConnectionMode());
+//
+//        // second request to same group. which will get throttled
+//        CosmosDiagnostics cosmosDiagnostics = performDocumentOperation(this.container, operationType, createdItem, groupConfig.getGroupName());
+//        this.validateRequestThrottled(
+//            cosmosDiagnostics.toString(),
+//            BridgeInternal.getContextClient(client).getConnectionPolicy().getConnectionMode());
     }
 
     @Test(groups = {"emulator"}, dataProvider = "operationTypeProvider", timeOut = TIMEOUT)

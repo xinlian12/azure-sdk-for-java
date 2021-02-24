@@ -118,11 +118,11 @@ public class ThroughputControlStore {
                 groupSet = new HashSet<>();
             }
 
-            if (group.isDefault()) {
-                if (groupSet.stream().anyMatch(ThroughputControlGroupInternal::isDefault)) {
-                    throw new IllegalArgumentException("A default group already exists");
-                }
-            }
+//            if (group.isDefault()) {
+//                if (groupSet.stream().anyMatch(ThroughputControlGroupInternal::isDefault)) {
+//                    throw new IllegalArgumentException("A default group already exists");
+//                }
+//            }
 
             if (!groupSet.add(group)) {
                 logger.warn("Can not add duplicate group");

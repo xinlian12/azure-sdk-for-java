@@ -25,6 +25,7 @@ public class ThroughputGroupGlobalController extends ThroughputGroupControllerBa
     private static final double INITIAL_CLIENT_THROUGHPUT_RU_SHARE = 1.0;
     private static final double INITIAL_THROUGHPUT_USAGE = 1.0;
     private static final int DEFAULT_THROUGHPUT_USAGE_QUEUE_SIZE = 300; // 5 mins windows since we refresh ru usage every 1s
+    private static final double MIN_LOAD_FACTOR = 0.1;
 
     private final Duration controlItemRenewInterval;
     private final ThroughputControlContainerManager containerManager;
@@ -58,7 +59,8 @@ public class ThroughputGroupGlobalController extends ThroughputGroupControllerBa
             .flatMap(dummy -> this.containerManager.getOrCreateConfigItem())
             .flatMap(dummy -> {
                 double loadFactor = this.calculateLoadFactor();
-                return this.containerManager.createGroupClientItem(loadFactor)
+                double allocatedThroughput = this.groupThroughput.get() * this.getClientThroughputShare();
+                return this.containerManager.createGroupClientItem(loadFactor, allocatedThroughput)
                     .flatMap(clientItem -> this.calculateClientThroughputShare(loadFactor));
             })
             .flatMap(dummy -> this.resolveRequestController())
@@ -83,7 +85,9 @@ public class ThroughputGroupGlobalController extends ThroughputGroupControllerBa
 
     private Mono<ThroughputGroupGlobalController> calculateClientThroughputShare(double loadFactor) {
         return this.containerManager.queryLoadFactorFromAllClients()
-            .doOnSuccess(totalLoads -> this.clientThroughputShare.set(loadFactor / totalLoads))
+            .doOnSuccess(totalLoads -> {
+                this.clientThroughputShare.set(loadFactor / totalLoads);
+            })
             .thenReturn(this);
     }
 
@@ -101,7 +105,7 @@ public class ThroughputGroupGlobalController extends ThroughputGroupControllerBa
                 loadFactor += (throughputUsageSnapshot.getWeight() / totalWeight) * throughputUsageSnapshot.getThroughputUsage();
             }
 
-            return loadFactor;
+            return Math.max(MIN_LOAD_FACTOR, loadFactor);
         }
     }
 
@@ -109,7 +113,8 @@ public class ThroughputGroupGlobalController extends ThroughputGroupControllerBa
         return Mono.delay(controlItemRenewInterval)
             .flatMap(t -> {
                 double loadFactor = this.calculateLoadFactor();
-                return this.containerManager.replaceOrCreateGroupClientItem(loadFactor)
+                double allocatedThroughput = this.groupThroughput.get() * this.clientThroughputShare.get();
+                return this.containerManager.replaceOrCreateGroupClientItem(loadFactor, allocatedThroughput)
                     .flatMap(clientItem -> this.calculateClientThroughputShare(loadFactor));
             })
             .onErrorResume(throwable -> {

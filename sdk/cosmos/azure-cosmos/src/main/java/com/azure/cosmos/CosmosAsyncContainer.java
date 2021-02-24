@@ -43,6 +43,8 @@ import com.azure.cosmos.models.ThroughputResponse;
 import com.azure.cosmos.util.Beta;
 import com.azure.cosmos.util.CosmosPagedFlux;
 import com.azure.cosmos.util.UtilBridgeInternal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -60,7 +62,7 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
  * Provides methods for interacting with child resources (Items, Scripts, Conflicts)
  */
 public class CosmosAsyncContainer {
-
+    private static final Logger logger = LoggerFactory.getLogger(CosmosAsyncContainer.class);
     private final CosmosAsyncDatabase database;
     private final String id;
     private final String link;
@@ -1436,6 +1438,12 @@ public class CosmosAsyncContainer {
         ThroughputGlobalControlGroup globalControlGroup =
             ThroughputControlGroupFactory.createThroughputGlobalControlGroup(groupConfig, globalControlConfig, this);
 
+        if (this.database.getClient() == null) {
+            logger.warn("Database client is null");
+        }
+        if (globalControlGroup == null) {
+            logger.warn("globalControlGroup is null");
+        }
         this.database.getClient().enableThroughputControlGroup(globalControlGroup);
     }
 }
