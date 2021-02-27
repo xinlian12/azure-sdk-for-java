@@ -193,7 +193,7 @@ abstract class AsyncBenchmark<T> {
         logger.info("Finished pre-populating {} documents", cfg.getNumberOfPreCreatedDocuments());
 
         GlobalThroughputControlConfig globalControlConfig =
-            cosmosClient.createGlobalThroughputControlConfigBuilder(cosmosAsyncDatabase.getId(), cosmosAsyncContainer.getId()).build();
+            cosmosClient.createGlobalThroughputControlConfigBuilder(cosmosAsyncDatabase.getId(), "throughputControlContainer").build();
 
         ThroughputControlGroupConfig groupConfig = new ThroughputControlGroupConfigBuilder()
             .setGroupName("defaultGroup")
@@ -201,7 +201,7 @@ abstract class AsyncBenchmark<T> {
             .setDefault(true)
             .build();
 
-        cosmosAsyncContainer.enableLocalThroughputControlGroup(groupConfig);
+        cosmosAsyncContainer.enableGlobalThroughputControlGroup(groupConfig, globalControlConfig);
 
         init();
 
