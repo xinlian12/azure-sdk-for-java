@@ -201,7 +201,7 @@ abstract class AsyncBenchmark<T> {
             .setDefault(true)
             .build();
 
-        cosmosAsyncContainer.enableGlobalThroughputControlGroup(groupConfig, globalControlConfig);
+        cosmosAsyncContainer.enableLocalThroughputControlGroup(groupConfig);
 
         init();
 
