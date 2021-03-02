@@ -196,7 +196,7 @@ abstract class AsyncBenchmark<T> {
             cosmosClient.createGlobalThroughputControlConfigBuilder(cosmosAsyncDatabase.getId(), "throughputControlContainer").build();
 
         ThroughputControlGroupConfig groupConfig = new ThroughputControlGroupConfigBuilder()
-            .setGroupName("defaultGroup")
+            .setGroupName("defaultGroup-2")
             .setTargetThroughputThreshold(1.0)
             .setDefault(true)
             .build();
