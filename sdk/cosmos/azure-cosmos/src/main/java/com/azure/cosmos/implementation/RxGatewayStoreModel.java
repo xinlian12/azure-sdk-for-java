@@ -268,6 +268,7 @@ class RxGatewayStoreModel implements RxStoreModel {
      */
     private Mono<RxDocumentServiceResponse> toDocumentServiceResponse(Mono<HttpResponse> httpResponseMono,
                                                                       RxDocumentServiceRequest request) {
+        String path = PathsHelper.generatePath(request.getResourceType(), request, request.isFeed);
 
         return httpResponseMono.flatMap(httpResponse ->  {
 
@@ -302,6 +303,11 @@ class RxGatewayStoreModel implements RxStoreModel {
                                    BridgeInternal.recordGatewayResponse(request.requestContext.cosmosDiagnostics, request, rsp, null);
                                    DirectBridgeInternal.setCosmosDiagnostics(rsp, request.requestContext.cosmosDiagnostics);
                                }
+
+                               if (request.getResourceType() == ResourceType.PartitionKeyRange) {
+                                   logger.info(
+                                       "Resource token work: " + path + ":" + request.getHeaders().get(HttpConstants.HttpHeaders.AUTHORIZATION));
+                               }
                                return rsp;
                        })
                        .single();
@@ -324,6 +330,11 @@ class RxGatewayStoreModel implements RxStoreModel {
                            BridgeInternal.setRequestHeaders(dce, request.getHeaders());
                        } else {
                            dce = (CosmosException) exception;
+                       }
+
+                       if (dce.getStatusCode() == HttpConstants.StatusCodes.FORBIDDEN) {
+                           logger.info(
+                               "Resource token does not work: " + path + ":" + request.getHeaders().get(HttpConstants.HttpHeaders.AUTHORIZATION));
                        }
 
                        if (WebExceptionUtility.isNetworkFailure(dce)) {

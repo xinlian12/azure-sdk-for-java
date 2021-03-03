@@ -233,6 +233,7 @@ public class RxPartitionKeyRangeCache implements IPartitionKeyRangeCache {
             }
             Instant addressCallStartTime = Instant.now();
             return client.readPartitionKeyRanges(coll.getSelfLink(), cosmosQueryRequestOptions)
+                    .flatMap(p -> client.readPartitionKeyRanges(coll.getAltLink(), cosmosQueryRequestOptions))
                     // maxConcurrent = 1 to makes it in the right getOrder
                     .flatMap(p -> {
                         if(metaDataDiagnosticsContext != null) {

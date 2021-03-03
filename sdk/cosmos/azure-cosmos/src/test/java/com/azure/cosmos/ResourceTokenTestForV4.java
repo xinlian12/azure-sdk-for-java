@@ -6,6 +6,7 @@ package com.azure.cosmos;
 import com.azure.cosmos.implementation.DatabaseForTest;
 import com.azure.cosmos.implementation.FailureValidator;
 import com.azure.cosmos.implementation.FeedResponseListValidator;
+import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.TestConfigurations;
 import com.azure.cosmos.models.ContainerChildResourceType;
 import com.azure.cosmos.models.CosmosContainerProperties;
@@ -15,17 +16,18 @@ import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.CosmosPermissionProperties;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.CosmosUserProperties;
+import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.models.PermissionMode;
 import com.azure.cosmos.rx.CosmosItemResponseValidator;
 import com.azure.cosmos.rx.TestSuiteBase;
-import com.azure.cosmos.util.CosmosPagedFlux;
 import org.apache.commons.lang3.StringUtils;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
@@ -60,7 +62,7 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
     private static final String PARTITION_KEY_VALUE_2 = "2";
     private static final String USER_NAME = "TestUser";
 
-    @Factory(dataProvider = "clientBuilders")
+    @Factory(dataProvider = "clientBuildersWithSessionConsistency")
     public ResourceTokenTestForV4(CosmosClientBuilder clientBuilder) {
         super(clientBuilder);
     }
@@ -172,8 +174,8 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
                 PARTITION_KEY_VALUE},
 
             //These tests will try to read item from partition 2 with two container getPermissions having different partition keys and validate it.
-            {createdContainerWithPartitionKey.getId(), createdItemWithPartitionKey2.getId(), createdContainerPermissionWithPartitionKey, createdContainerPermissionWithPartitionKey2,
-                PARTITION_KEY_VALUE_2},
+//            {createdContainerWithPartitionKey.getId(), createdItemWithPartitionKey2.getId(), createdContainerPermissionWithPartitionKey, createdContainerPermissionWithPartitionKey2,
+//                PARTITION_KEY_VALUE_2},
         };
     }
 
@@ -181,7 +183,8 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
     public Object[][] resourceToken() {
         return new Object[][]{
             //This test will try to read item from its resource token directly and validate it.
-            {createdItemPermission.getToken()},
+          //  {createdItemPermissionWithPartitionKey.getToken()},
+          //  {createdItemPermissionWithPartitionKey.getToken()},
             //This test will try to read item from its parent container resource token directly and validate it.
             {createdContainerPermission.getToken()}
         };
@@ -192,7 +195,7 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
         return new Object[][]{
             //This test will try to query collection from its own getPermission and validate it
             { createdContainerWithPartitionKey, createdContainerPermissionWithPartitionKey, new PartitionKey(PARTITION_KEY_VALUE) },
-            { createdContainer, createdContainerPermission, PartitionKey.NONE },
+          //  { createdContainer, createdContainerPermission, PartitionKey.NONE },
         };
     }
 
@@ -204,11 +207,12 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
     @Test(groups = {"simple"}, dataProvider = "containerAndPermissionData", timeOut = TIMEOUT)
     public void readContainerFromPermissionFeed(String containerId, CosmosPermissionProperties permission) throws Exception {
         CosmosAsyncClient asyncClientResourceToken = null;
+        ConnectionMode connectionMode = client.getDocClientWrapper().getConnectionPolicy().getConnectionMode();
         try {
             List<CosmosPermissionProperties> permissionFeed = new ArrayList<>();
             permissionFeed.add(permission);
 
-            asyncClientResourceToken = this.createAsyncClientWithPermission(permissionFeed);
+            asyncClientResourceToken = this.createAsyncClientWithPermission(permissionFeed, connectionMode);
 
             Mono<CosmosContainerResponse> readObservable =
                 asyncClientResourceToken.getDatabase(createdDatabase.getId()).getContainer(containerId).read();
@@ -234,11 +238,13 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
         String partitionKey) throws Exception {
 
         CosmosAsyncClient asyncClientResourceToken = null;
+        ConnectionMode connectionMode = client.getDocClientWrapper().getConnectionPolicy().getConnectionMode();
+
         try {
             List<CosmosPermissionProperties> permissionFeed = new ArrayList<>();
             permissionFeed.add(permission);
 
-            asyncClientResourceToken = this.createAsyncClientWithPermission(permissionFeed);
+            asyncClientResourceToken = this.createAsyncClientWithPermission(permissionFeed, connectionMode);
             CosmosAsyncContainer container = asyncClientResourceToken.getDatabase(createdDatabase.getId()).getContainer(containerId);
 
             Mono<CosmosItemResponse<TestObject>> readObservable;
@@ -272,11 +278,10 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
                 .consistencyLevel(ConsistencyLevel.SESSION)
                 .buildAsyncClient();
 
+            CosmosAsyncContainer container =
+                asyncClientResourceToken.getDatabase(createdDatabase.getId()).getContainer(createdContainer.getId());
             Mono<CosmosItemResponse<TestObject>> readObservable =
-                asyncClientResourceToken
-                    .getDatabase(createdDatabase.getId())
-                    .getContainer(createdContainer.getId())
-                    .readItem(createdItem.getId(), PartitionKey.NONE, TestObject.class);
+                    container.readItem(createdItem.getId(), PartitionKey.NONE, TestObject.class);
 
             CosmosItemResponseValidator validator = new CosmosItemResponseValidator.Builder<CosmosItemResponse<TestObject>>()
                 .withId(createdItem.getId()).build();
@@ -300,12 +305,14 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
         String partitionKey) throws Exception {
 
         CosmosAsyncClient asyncClientResourceToken = null;
+        ConnectionMode connectionMode = client.getDocClientWrapper().getConnectionPolicy().getConnectionMode();
+
         try {
             List<CosmosPermissionProperties> permissionFeed = new ArrayList<>();
             permissionFeed.add(collPermission1);
             permissionFeed.add(collPermission2);
 
-            asyncClientResourceToken = this.createAsyncClientWithPermission(permissionFeed);
+            asyncClientResourceToken = this.createAsyncClientWithPermission(permissionFeed, connectionMode);
 
             Mono<CosmosItemResponse<TestObject>> readObservable =
                 asyncClientResourceToken
@@ -335,11 +342,13 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
         String partitionKey) throws Exception {
 
         CosmosAsyncClient asyncClientResourceToken = null;
+        ConnectionMode connectionMode = client.getDocClientWrapper().getConnectionPolicy().getConnectionMode();
+
         try {
             List<CosmosPermissionProperties> permissionFeed = new ArrayList<>();
             permissionFeed.add(permission);
 
-            asyncClientResourceToken = this.createAsyncClientWithPermission(permissionFeed);
+            asyncClientResourceToken = this.createAsyncClientWithPermission(permissionFeed, connectionMode);
 
             Mono<CosmosItemResponse<TestObject>> readObservable =
                 asyncClientResourceToken
@@ -362,11 +371,13 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
     @Test(groups = {"simple"}, timeOut = TIMEOUT)
     public void readItemFromCollPermissionWithDiffPartitionKey_WithException() throws Exception {
         CosmosAsyncClient asyncClientResourceToken = null;
+        ConnectionMode connectionMode = client.getDocClientWrapper().getConnectionPolicy().getConnectionMode();
+
         try {
             List<CosmosPermissionProperties> permissionFeed = new ArrayList<>();
             permissionFeed.add(createdContainerPermissionWithPartitionKey);
 
-            asyncClientResourceToken = this.createAsyncClientWithPermission(permissionFeed);
+            asyncClientResourceToken = this.createAsyncClientWithPermission(permissionFeed, connectionMode);
 
             Mono<CosmosItemResponse<TestObject>> readObservable =
                 asyncClientResourceToken
@@ -380,13 +391,15 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
         }
     }
 
-    @Test(groups = {"simple"}, dataProvider = "queryItemPermissionData", timeOut = TIMEOUT)
+    @Test(groups = {"simple"}, dataProvider = "queryItemPermissionData")
     public void queryItemFromResourceToken(
         CosmosAsyncContainer container,
         CosmosPermissionProperties permission,
         PartitionKey partitionKey) throws Exception {
 
         CosmosAsyncClient asyncClientResourceToken = null;
+        ConnectionMode connectionMode = client.getDocClientWrapper().getConnectionPolicy().getConnectionMode();
+
         try {
             asyncClientResourceToken = new CosmosClientBuilder()
                 .endpoint(TestConfigurations.HOST)
@@ -400,31 +413,88 @@ public class ResourceTokenTestForV4 extends TestSuiteBase {
                     .getDatabase(createdDatabase.getId())
                     .getContainer(container.getId());
 
-            CosmosPagedFlux<TestObject> queryObservable;
+
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions();
             queryRequestOptions.setPartitionKey(partitionKey);
 
-            queryObservable = asyncContainer.queryItems("select * from c", queryRequestOptions, TestObject.class);
-            FeedResponseListValidator<TestObject> validator = new FeedResponseListValidator.Builder<TestObject>()
-                .totalSize(1)
-                .numberOfPagesIsGreaterThanOrEqualTo(1)
-                .build();
+            Flux<FeedResponse<TestObject>> queryObservable =
+                asyncContainer.queryItems("select * from c", queryRequestOptions, TestObject.class).byPage();
 
-            validateQuerySuccess(queryObservable.byPage(100), validator);
+            if (partitionKey == PartitionKey.NONE) {
+                FeedResponseListValidator<TestObject> validator = new FeedResponseListValidator.Builder<TestObject>()
+                    .totalSize(1)
+                    .numberOfPagesIsGreaterThanOrEqualTo(1)
+                    .build();
+
+                validateQuerySuccess(queryObservable, validator);
+            } else {
+                FailureValidator validator = new FailureValidator.Builder().statusCode(HttpConstants.StatusCodes.FORBIDDEN).build();
+                validateQueryFailure(queryObservable, validator);
+            }
+
         } finally {
             safeClose(asyncClientResourceToken);
         }
     }
 
-    private CosmosAsyncClient createAsyncClientWithPermission(List<CosmosPermissionProperties> permissions) {
+    @Test(groups = {"simple"}, dataProvider = "queryItemPermissionData", timeOut = TIMEOUT)
+    public void queryItemWithPermission(
+        CosmosAsyncContainer container,
+        CosmosPermissionProperties permission,
+        PartitionKey partitionKey) throws Exception {
+
+        CosmosAsyncClient asyncClientResourceToken = null;
+        ConnectionMode connectionMode = client.getDocClientWrapper().getConnectionPolicy().getConnectionMode();
+
+        try {
+            List<CosmosPermissionProperties> permissionFeed = new ArrayList<>();
+            permissionFeed.add(permission);
+
+            asyncClientResourceToken = this.createAsyncClientWithPermission(permissionFeed, connectionMode);
+
+            CosmosAsyncContainer asyncContainer =
+                asyncClientResourceToken
+                    .getDatabase(createdDatabase.getId())
+                    .getContainer(container.getId());
+
+            CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions();
+            queryRequestOptions.setPartitionKey(partitionKey);
+
+            Flux<FeedResponse<TestObject>> queryObservable =
+                asyncContainer.queryItems("select * from c", queryRequestOptions, TestObject.class).byPage();
+
+            if (partitionKey == PartitionKey.NONE) {
+                FeedResponseListValidator<TestObject> validator = new FeedResponseListValidator.Builder<TestObject>()
+                    .totalSize(1)
+                    .numberOfPagesIsGreaterThanOrEqualTo(1)
+                    .build();
+
+                validateQuerySuccess(queryObservable, validator);
+            } else {
+                FailureValidator validator = new FailureValidator.Builder().statusCode(HttpConstants.StatusCodes.FORBIDDEN).build();
+                validateQueryFailure(queryObservable, validator);
+            }
+
+        } finally {
+            safeClose(asyncClientResourceToken);
+        }
+    }
+
+    private CosmosAsyncClient createAsyncClientWithPermission(
+        List<CosmosPermissionProperties> permissions, ConnectionMode connectionMode) {
+
         assertThat(permissions).isNotNull();
 
-        return new CosmosClientBuilder()
+        CosmosClientBuilder clientBuilder = new CosmosClientBuilder()
             .endpoint(TestConfigurations.HOST)
-            .gatewayMode()
             .consistencyLevel(ConsistencyLevel.SESSION)
-            .permissions(permissions)
-            .buildAsyncClient();
+            .permissions(permissions);
+
+        if (connectionMode == ConnectionMode.GATEWAY) {
+            clientBuilder.gatewayMode();
+        }
+
+        return clientBuilder.buildAsyncClient();
     }
 
     @AfterClass(groups = {"simple"}, timeOut = SHUTDOWN_TIMEOUT, alwaysRun = true)

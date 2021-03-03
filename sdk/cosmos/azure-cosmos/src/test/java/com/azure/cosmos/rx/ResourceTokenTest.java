@@ -238,8 +238,8 @@ public class ResourceTokenTest extends TestSuiteBase {
         return new Object[][]{
             //This test will try to query collection from its own getPermission and validate it, both with request Id and getName.
             { createdCollectionWithPartitionKey, createdColPermissionWithPartitionKey, new PartitionKey(PARTITION_KEY_VALUE) },
-            { createdCollectionWithPartitionKey, createdColPermissionWithPartitionKeyWithName, new PartitionKey(PARTITION_KEY_VALUE) },
-            { createdCollection, createdCollPermission, PartitionKey.NONE },
+           // { createdCollectionWithPartitionKey, createdColPermissionWithPartitionKeyWithName, new PartitionKey(PARTITION_KEY_VALUE) },
+           // { createdCollection, createdCollPermission, PartitionKey.NONE },
         };
     }
 

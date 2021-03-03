@@ -1402,6 +1402,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             String authorization = this.getUserAuthorizationToken(
                     resourceName, request.getResourceType(), httpMethod, request.getHeaders(),
                     AuthorizationTokenType.PrimaryMasterKey, request.properties);
+
             try {
                 authorization = URLEncoder.encode(authorization, "UTF-8");
             } catch (UnsupportedEncodingException e) {
@@ -2324,7 +2325,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
     @Override
     public Flux<FeedResponse<PartitionKeyRange>> readPartitionKeyRanges(final String collectionLink,
                                                                               CosmosQueryRequestOptions options) {
-
+        logger.info("come read partition key range" + collectionLink);
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }

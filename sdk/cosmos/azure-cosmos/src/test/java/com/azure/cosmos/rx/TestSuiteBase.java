@@ -856,9 +856,9 @@ public class TestSuiteBase extends CosmosAsyncClientTest {
     @DataProvider
     public static Object[][] clientBuildersWithSessionConsistency() {
         return new Object[][]{
-            {createDirectRxDocumentClient(ConsistencyLevel.SESSION, Protocol.HTTPS, false, null, true, true)},
+          //  {createDirectRxDocumentClient(ConsistencyLevel.SESSION, Protocol.HTTPS, false, null, true, true)},
             {createDirectRxDocumentClient(ConsistencyLevel.SESSION, Protocol.TCP, false, null, true, true)},
-            {createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null, true, true)}
+           // {createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null, true, true)}
         };
     }
 
