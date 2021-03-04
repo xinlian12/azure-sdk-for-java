@@ -28,6 +28,7 @@ public class CosmosQueryRequestOptions {
     private Map<String, Object> properties;
     private boolean emptyPagesAllowed;
     private String throughputControlGroupName;
+    private FeedRange feedRange;
 
     /**
      * Instantiates a new query request options.
@@ -395,5 +396,13 @@ public class CosmosQueryRequestOptions {
     public CosmosQueryRequestOptions setThroughputControlGroupName(String throughputControlGroupName) {
         this.throughputControlGroupName = throughputControlGroupName;
         return this;
+    }
+
+    FeedRange getFeedRange() {
+        return feedRange;
+    }
+
+    void setFeedRange(FeedRange feedRange) {
+        this.feedRange = feedRange;
     }
 }

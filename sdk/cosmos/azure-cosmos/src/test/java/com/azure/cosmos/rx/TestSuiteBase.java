@@ -920,6 +920,11 @@ public class TestSuiteBase extends CosmosAsyncClientTest {
     }
 
     @DataProvider
+    public static Object[][] simpleClientBuildersWithJustDirectTcp() {
+        return simpleClientBuildersWithDirect(false, true, Protocol.TCP);
+    }
+
+    @DataProvider
     public static Object[][] simpleClientBuildersWithDirectTcpWithContentResponseOnWriteDisabled() {
         return simpleClientBuildersWithDirect(false, true, Protocol.TCP);
     }
@@ -933,7 +938,19 @@ public class TestSuiteBase extends CosmosAsyncClientTest {
         };
     }
 
-    private static Object[][] simpleClientBuildersWithDirect(boolean contentResponseOnWriteEnabled, boolean retryOnThrottledRequests, Protocol... protocols) {
+    private static Object[][] simpleClientBuildersWithDirect(
+        boolean contentResponseOnWriteEnabled,
+        boolean retryOnThrottledRequests,
+        Protocol... protocols) {
+
+        return simpleClientBuildersWithDirect(true, contentResponseOnWriteEnabled, retryOnThrottledRequests, protocols);
+    }
+
+    private static Object[][] simpleClientBuildersWithDirect(
+        boolean includeGateway,
+        boolean contentResponseOnWriteEnabled,
+        boolean retryOnThrottledRequests,
+        Protocol... protocols) {
         logger.info("Max test consistency to use is [{}]", accountConsistency);
         List<ConsistencyLevel> testConsistencies = ImmutableList.of(ConsistencyLevel.EVENTUAL);
 
@@ -961,7 +978,15 @@ public class TestSuiteBase extends CosmosAsyncClientTest {
             );
         });
 
-        cosmosConfigurations.add(createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null, contentResponseOnWriteEnabled, retryOnThrottledRequests));
+        if (includeGateway) {
+            cosmosConfigurations.add(
+                createGatewayRxDocumentClient(
+                    ConsistencyLevel.SESSION,
+                    false,
+                    null,
+                    contentResponseOnWriteEnabled,
+                    retryOnThrottledRequests));
+        }
 
         return cosmosConfigurations.stream().map(b -> new Object[]{b}).collect(Collectors.toList()).toArray(new Object[0][]);
     }

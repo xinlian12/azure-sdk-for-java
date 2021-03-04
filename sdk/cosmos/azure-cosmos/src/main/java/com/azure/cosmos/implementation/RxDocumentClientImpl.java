@@ -971,7 +971,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
 
     Mono<RxDocumentServiceResponse> readFeed(RxDocumentServiceRequest request) {
         return populateHeaders(request, RequestVerb.GET)
-            .flatMap(gatewayProxy::processMessage);
+            .flatMap(requestPopulated -> getStoreProxy(requestPopulated).processMessage(requestPopulated));
     }
 
     private Mono<RxDocumentServiceResponse> query(RxDocumentServiceRequest request) {
@@ -1463,15 +1463,15 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
     }
 
     private boolean requiresFeedRangeFiltering(RxDocumentServiceRequest request) {
-        if (request.getResourceType() != ResourceType.Document) {
+        if (request.getResourceType() != ResourceType.Document &&
+                request.getResourceType() != ResourceType.Conflict) {
             return false;
         }
 
         switch (request.getOperationType()) {
             case ReadFeed:
-            // TODO fabianm add EPK filtering for query as well
-            // case Query:
-            // case SqlQuery:
+            case Query:
+            case SqlQuery:
                 return request.getFeedRange() != null;
             default:
                 return false;
@@ -3753,7 +3753,9 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
                 return this.storeModel;
             }
         } else {
-            if ((request.getOperationType() == OperationType.Query || request.getOperationType() == OperationType.SqlQuery) &&
+            if ((operationType == OperationType.Query ||
+                operationType == OperationType.SqlQuery ||
+                operationType == OperationType.ReadFeed) &&
                     Utils.isCollectionChild(request.getResourceType())) {
                 // Go to gateway only when partition key range and partition key are not set. This should be very rare
                 if (request.getPartitionKeyRangeIdentity() == null &&

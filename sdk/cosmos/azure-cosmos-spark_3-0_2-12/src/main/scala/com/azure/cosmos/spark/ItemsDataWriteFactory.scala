@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 package com.azure.cosmos.spark
 
-import com.azure.cosmos.{CosmosAsyncContainer, CosmosClientBuilder, CosmosException, ThroughputControlGroupConfigBuilder}
 import com.azure.cosmos.implementation.CosmosClientMetadataCachesSnapshot
 import com.azure.cosmos.models.{CosmosItemRequestOptions, PartitionKey}
+import com.azure.cosmos.{CosmosAsyncContainer, CosmosClientBuilder, CosmosException, ThroughputControlGroupConfigBuilder}
 import com.fasterxml.jackson.databind.node.ObjectNode
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow

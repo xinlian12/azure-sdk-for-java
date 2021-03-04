@@ -7,6 +7,7 @@ import com.azure.cosmos.implementation.AsyncDocumentClient;
 import com.azure.cosmos.implementation.Constants;
 import com.azure.cosmos.implementation.CosmosPagedFluxOptions;
 import com.azure.cosmos.implementation.Document;
+import com.azure.cosmos.implementation.DocumentCollection;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.InternalObjectNode;
 import com.azure.cosmos.implementation.ItemDeserializer;
@@ -20,6 +21,7 @@ import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.batch.BatchExecutor;
 import com.azure.cosmos.implementation.batch.BulkExecutor;
+import com.azure.cosmos.implementation.feedranges.FeedRangeInternal;
 import com.azure.cosmos.implementation.query.QueryInfo;
 import com.azure.cosmos.implementation.throughputControl.config.ThroughputControlGroupFactory;
 import com.azure.cosmos.implementation.throughputControl.config.ThroughputGlobalControlGroup;
@@ -463,6 +465,32 @@ public class CosmosAsyncContainer {
             options = new CosmosQueryRequestOptions();
         }
 
+        return queryItemsInternal(querySpec, options, classType);
+    }
+
+    /**
+     * Query for items in the current container using a {@link SqlQuerySpec} and {@link CosmosQueryRequestOptions}.
+     * <p>
+     * After subscription the operation will be performed. The {@link Flux} will
+     * contain one or several feed response of the obtained items. In case of
+     * failure the {@link CosmosPagedFlux} will error.
+     *
+     * @param <T> the type parameter.
+     * @param querySpec the SQL query specification.
+     * @param options the query request options.
+     * @param classType the class type.
+     * @param feedRange the feedrange to query
+     * @return a {@link CosmosPagedFlux} containing one or several feed response pages of the obtained items or an
+     * error.
+     */
+    @Beta(value = Beta.SinceVersion.V4_12_0, warningText = Beta.PREVIEW_SUBJECT_TO_CHANGE_WARNING)
+    public <T> CosmosPagedFlux<T> queryItems(SqlQuerySpec querySpec, CosmosQueryRequestOptions options,
+                                             Class<T> classType, FeedRange feedRange) {
+        if (options == null) {
+            options = new CosmosQueryRequestOptions();
+        }
+
+        ModelBridgeInternal.setFeedRange(options, feedRange);
         return queryItemsInternal(querySpec, options, classType);
     }
 
@@ -1413,7 +1441,37 @@ public class CosmosAsyncContainer {
     }
 
     /**
+<<<<<<< HEAD
      * Enable the throughput control group with local control mode.
+=======
+     * Attempts to split a feedrange into {@lparamtargetedCountAfterAplit} sub ranges. This is a best
+     * effort - it is possible that the list of feed ranges returned has less than {@lparamtargetedCountAfterAplit}
+     * sub ranges
+     * @param feedRange
+     * @param targetedCountAfterSplit
+     * @return list of feed ranges after attempted split operation
+     */
+    Mono<List<FeedRange>> trySplitFeedRange(FeedRange feedRange, int targetedCountAfterSplit) {
+        checkNotNull(feedRange, "Argument 'feedRange' must not be null.");
+
+        final AsyncDocumentClient clientWrapper = this.database.getDocClientWrapper();
+        Mono<Utils.ValueHolder<DocumentCollection>> getCollectionObservable = clientWrapper
+            .getCollectionCache()
+            .resolveByNameAsync(null, this.link, null)
+            .map(collection -> Utils.ValueHolder.initialize(collection));
+
+        return FeedRangeInternal
+            .convert(feedRange)
+            .trySplit(
+                clientWrapper.getPartitionKeyRangeCache(),
+                null,
+                getCollectionObservable,
+                targetedCountAfterSplit
+            );
+    }
+
+     /**
+>>>>>>> feature/cosmos/spark30
      *
      * @param groupConfig A {@link ThroughputControlGroupConfig}.
      */
