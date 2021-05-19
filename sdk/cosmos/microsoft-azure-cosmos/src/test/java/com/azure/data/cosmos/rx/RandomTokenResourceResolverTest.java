@@ -12,6 +12,7 @@ import com.azure.data.cosmos.PermissionMode;
 import com.azure.data.cosmos.internal.AsyncDocumentClient;
 import com.azure.data.cosmos.internal.AsyncDocumentClient.Builder;
 import com.azure.data.cosmos.internal.Database;
+import com.azure.data.cosmos.internal.Document;
 import com.azure.data.cosmos.internal.DocumentCollection;
 import com.azure.data.cosmos.internal.Permission;
 import com.azure.data.cosmos.internal.User;
@@ -33,8 +34,8 @@ public class RandomTokenResourceResolverTest {
         ConnectionPolicy connectionPolicy = new ConnectionPolicy();
         connectionPolicy.connectionMode(ConnectionMode.GATEWAY);
         AsyncDocumentClient client = new Builder()
-            .withServiceEndpoint("https://cosmos-sdk-test-southeastasia.documents.azure.com:443/")
-            .withMasterKeyOrResourceToken("WyKG1LSgX6mz9DKYqRkgGfPFMZChx4yYRl7gn89hLV70b7au6ecSbbEcKGsjKntgPDf1PQG0nxIGxsTIl6vXjA==")
+            .withServiceEndpoint("value")
+            .withMasterKeyOrResourceToken("key")
             .withConnectionPolicy(connectionPolicy)
             .build();
 
@@ -70,16 +71,21 @@ public class RandomTokenResourceResolverTest {
         // create second client with resource token
         AsyncDocumentClient client2 = new Builder()
             .withServiceEndpoint("https://cosmos-sdk-test-southeastasia.documents.azure.com:443/")
-            .withMasterKeyOrResourceToken("WyKG1LSgX6mz9DKYqRkgGfPFMZChx4yYRl7gn89hLV70b7au6ecSbbEcKGsjKntgPDf1PQG0nxIGxsTIl6vXjA==")
+            .withMasterKeyOrResourceToken(allPermission.getToken())
             .withConnectionPolicy(connectionPolicy)
             .build();
 
         FeedOptions options = new FeedOptions();
         options.maxItemCount(3);
         options.enableCrossPartitionQuery(true);
-        FeedResponse<Permission> permissions =
-            client2.queryPermissions("dbs/" + databaseId + "/users/" + userId, "Select * from root", options).blockLast();
-        System.out.println("get all permissions");
+        while(true) {
+            try{
+                client2.queryDocuments(getCollectionLink(collection, databaseId), "Select * from root", options).blockLast();
+                System.out.println("complete request");
+            } catch (Exception e) {
+                System.out.println(e.getMessage());
+            }
+        }
     }
 
 
