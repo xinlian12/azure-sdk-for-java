@@ -25,6 +25,7 @@ import com.azure.cosmos.implementation.RequestTimeoutException;
 import com.azure.cosmos.implementation.RetryWithException;
 import com.azure.cosmos.implementation.ServiceUnavailableException;
 import com.azure.cosmos.implementation.UnauthorizedException;
+import com.azure.cosmos.implementation.directconnectivity.AllRequestsDictionary;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -55,6 +56,7 @@ import org.slf4j.LoggerFactory;
 import javax.net.ssl.SSLException;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -514,8 +516,13 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             final RntbdRequestRecord record = (RntbdRequestRecord) message;
             this.timestamps.channelWriteAttempted();
             record.setSendingRequestHasStarted();
+            record.channel = context.channel();
 
             context.write(this.addPendingRequestRecord(context, record), promise).addListener(completed -> {
+                Channel channel = context.channel();
+                if (channel.attr(AllRequestsDictionary.shouldLog).get()) {
+                    logger.info("RntbdRequestManager WRITE:" + channel.id()  + "|" + channel.unsafe().recvBufAllocHandle().lastBytesRead() + "|" + record.transportRequestId());
+                }
                 record.stage(RntbdRequestRecord.Stage.SENT);
                 if (completed.isSuccess()) {
                     this.timestamps.channelWriteCompleted();
@@ -716,12 +723,16 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         }
 
         final RntbdRequestRecord requestRecord = this.pendingRequests.get(transportRequestId);
+        Channel channel = context.channel();
 
         if (requestRecord == null) {
             logger.debug("response {} ignored because its requestRecord is missing: {}", transportRequestId, response);
             return;
         }
 
+        if (channel.attr(AllRequestsDictionary.shouldLog).get()) {
+            logger.info("RntbdRequestManager WRITE:" + channel.id()  +"|" + transportRequestId + "|" + response.getMessageLength() + "|" + (Instant.now().toEpochMilli() - requestRecord.timeSent().toEpochMilli()));
+        }
         requestRecord.responseLength(response.getMessageLength());
         requestRecord.stage(RntbdRequestRecord.Stage.RECEIVED);
 

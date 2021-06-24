@@ -8,12 +8,14 @@ import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.implementation.GoneException;
 import com.azure.cosmos.implementation.RequestTimeline;
 import com.azure.cosmos.implementation.RequestTimeoutException;
+import com.azure.cosmos.implementation.directconnectivity.AllRequestsDictionary;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import io.micrometer.core.instrument.Timer;
+import io.netty.channel.Channel;
 import io.netty.util.Timeout;
 import io.netty.util.TimerTask;
 import org.slf4j.Logger;
@@ -65,6 +67,7 @@ public abstract class RntbdRequestRecord extends CompletableFuture<StoreResponse
     private volatile Instant timeSent;
     private volatile Instant timeReceived;
     private volatile boolean sendingRequestHasStarted;
+    public Channel channel;
 
     protected RntbdRequestRecord(final RntbdRequestArgs args) {
 
@@ -239,6 +242,9 @@ public abstract class RntbdRequestRecord extends CompletableFuture<StoreResponse
             error = new RequestTimeoutException(this.toString(), this.args.physicalAddress());
         }
 
+        if (channel.attr(AllRequestsDictionary.shouldLog).get()) {
+            logger.info("EXPIRE:" + channel.id()  + "|" + channel.unsafe().recvBufAllocHandle().lastBytesRead() + "|" + "|" + this.transportRequestId());
+        }
         BridgeInternal.setRequestHeaders(error, this.args.serviceRequest().getHeaders());
         return this.completeExceptionally(error);
     }

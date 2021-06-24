@@ -3,7 +3,9 @@
 
 package com.azure.cosmos.implementation.directconnectivity.rntbd;
 
+import com.azure.cosmos.implementation.directconnectivity.AllRequestsDictionary;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import org.slf4j.Logger;
@@ -26,13 +28,18 @@ public final class RntbdResponseDecoder extends ByteToMessageDecoder {
      */
     @Override
     protected void decode(final ChannelHandlerContext context, final ByteBuf in, final List<Object> out) {
-
+        Channel channel = context.channel();
+        if (channel.attr(AllRequestsDictionary.shouldLog).get()) {
+            logger.info("DECODE:" + channel.id() + "|" + in.capacity() + "|" + channel.unsafe().recvBufAllocHandle().lastBytesRead() + "|");
+        }
         if (RntbdFramer.canDecodeHead(in)) {
 
             final RntbdResponse response = RntbdResponse.decode(in);
 
             if (response != null) {
-                logger.debug("{} DECODE COMPLETE: {}", context.channel(), response);
+                if (channel.attr(AllRequestsDictionary.shouldLog).get()) {
+                    logger.info("DECODE:" + channel.id() + "|" + in.capacity() + "|" + channel.unsafe().recvBufAllocHandle().lastBytesRead() + "|" + response.getTransportRequestId() + "|" + channel.unsafe().recvBufAllocHandle().attemptedBytesRead());
+                }
                 in.discardReadBytes();
                 out.add(response.retain());
             }
