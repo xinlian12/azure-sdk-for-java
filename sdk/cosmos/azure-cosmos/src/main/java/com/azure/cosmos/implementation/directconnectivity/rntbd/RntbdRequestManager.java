@@ -51,10 +51,13 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.internal.ThrowableUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import javax.net.ssl.SSLException;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -171,7 +174,18 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
      */
     @Override
     public void channelRead(final ChannelHandlerContext context, final Object message) {
+//        Mono.just(this)
+//            .flatMap(t -> {
+//                this.processResponse(context, message);
+//                return Mono.empty();
+//            })
+//            .publishOn(Schedulers.boundedElastic())
+//            .subscribe();
 
+        this.processResponse(context, message);
+    }
+
+    private void processResponse(final ChannelHandlerContext context, final Object message) {
         this.traceOperation(context, "channelRead");
 
         try {
@@ -514,8 +528,12 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             final RntbdRequestRecord record = (RntbdRequestRecord) message;
             this.timestamps.channelWriteAttempted();
             record.setSendingRequestHasStarted();
+            record.channel = context.channel();
 
+            //logger.info("MESSAGE WRITE: " + context.channel().id() + "|" + record.transportRequestId());
             context.write(this.addPendingRequestRecord(context, record), promise).addListener(completed -> {
+              //  logger.info("MESSAGE WRITE FINISH: " + context.channel().id() + "|" + record.transportRequestId());
+
                 record.stage(RntbdRequestRecord.Stage.SENT);
                 if (completed.isSuccess()) {
                     this.timestamps.channelWriteCompleted();
@@ -593,15 +611,15 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             reportIssueUnless(current == null, context, "id: {}, current: {}, request: {}", record);
             record.pendingRequestQueueSize(pendingRequests.size());
 
-            final Timeout pendingRequestTimeout = record.newTimeout(timeout -> {
-
-                // We don't wish to complete on the timeout thread, but rather on a thread doled out by our executor
-                requestExpirationExecutor.execute(record::expire);
-            });
+//            final Timeout pendingRequestTimeout = record.newTimeout(timeout -> {
+//
+//                // We don't wish to complete on the timeout thread, but rather on a thread doled out by our executor
+//                requestExpirationExecutor.execute(record::expire);
+//            });
 
             record.whenComplete((response, error) -> {
                 this.pendingRequests.remove(id);
-                pendingRequestTimeout.cancel();
+           //     pendingRequestTimeout.cancel();
             });
 
             return record;
@@ -731,7 +749,8 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
         if ((HttpResponseStatus.OK.code() <= statusCode && statusCode < HttpResponseStatus.MULTIPLE_CHOICES.code()) ||
             statusCode == HttpResponseStatus.NOT_MODIFIED.code()) {
-
+            logger.info("MESSAGE RECEIVED OK: {} | {} | {}", context.channel().id(), requestRecord.transportRequestId(), (Instant.now().toEpochMilli()-requestRecord.timeSent().toEpochMilli()));
+            EventExecutorMonitor.trackLatency( StatusCodes.OK, (Instant.now().toEpochMilli() - requestRecord.timeSent().toEpochMilli()), context.executor(), context.channel().id());
             final StoreResponse storeResponse = response.toStoreResponse(this.contextFuture.getNow(null));
             requestRecord.complete(storeResponse);
 
@@ -762,6 +781,8 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
             final String resourceAddress = requestRecord.args().physicalAddress() != null ?
                 requestRecord.args().physicalAddress().toString() : null;
+            logger.info("MESSAGE RECEIVED WITH EXCEPTION: {} | {} | {} | {}", status.code(), context.channel().id(), requestRecord.transportRequestId(), (Instant.now().toEpochMilli()-requestRecord.timeSent().toEpochMilli()));
+            EventExecutorMonitor.trackLatency(status.code(), (Instant.now().toEpochMilli() - requestRecord.timeSent().toEpochMilli()), context.executor(), context.channel().id());
 
             switch (status.code()) {
 

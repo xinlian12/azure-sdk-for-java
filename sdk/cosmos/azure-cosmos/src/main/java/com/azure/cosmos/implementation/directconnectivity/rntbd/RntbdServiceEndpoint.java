@@ -61,6 +61,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
 
     private static final AtomicLong instanceCount = new AtomicLong();
     private static final Logger logger = LoggerFactory.getLogger(RntbdServiceEndpoint.class);
+   // private static final AdaptiveRecvByteBufAllocator receiveBufferAllocator = new AdaptiveRecvByteBufAllocator(1048576, 1048576, 1048576);
     private static final AdaptiveRecvByteBufAllocator receiveBufferAllocator = new AdaptiveRecvByteBufAllocator();
 
     private final RntbdClientChannelPool channelPool;
@@ -80,6 +81,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
     private final int maxConcurrentRequests;
 
     private final RntbdConnectionStateListener connectionStateListener;
+    private final NioEventLoopGroup otherGroup;
 
     // endregion
 
@@ -90,9 +92,11 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         final Config config,
         final NioEventLoopGroup group,
         final RntbdRequestTimer timer,
-        final URI physicalAddress) {
+        final URI physicalAddress,
+        final NioEventLoopGroup otherGroup) {
 
         this.serverKey = RntbdUtils.getServerKey(physicalAddress);
+        //receiveBufferAllocator.maxMessagesPerRead(16);
 
         final Bootstrap bootstrap = new Bootstrap()
             .channel(NioSocketChannel.class)
@@ -100,12 +104,14 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
             .option(ChannelOption.ALLOCATOR, config.allocator())
             .option(ChannelOption.AUTO_READ, true)
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.connectTimeoutInMillis())
+          //  .option(ChannelOption.SO_RCVBUF, 1048576)
             .option(ChannelOption.RCVBUF_ALLOCATOR, receiveBufferAllocator)
             .option(ChannelOption.SO_KEEPALIVE, true)
             .remoteAddress(this.serverKey.getHost(), this.serverKey.getPort());
 
+        this.otherGroup = otherGroup;
         this.createdTime = Instant.now();
-        this.channelPool = new RntbdClientChannelPool(this, bootstrap, config);
+        this.channelPool = new RntbdClientChannelPool(this, bootstrap, config, this.otherGroup);
         this.remoteAddress = bootstrap.config().remoteAddress();
         this.concurrentRequests = new AtomicInteger();
         // if no request has been sent over this endpoint we want to make sure we don't trigger a connection close
@@ -449,6 +455,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         private final Config config;
         private final ConcurrentHashMap<String, RntbdEndpoint> endpoints;
         private final NioEventLoopGroup eventLoopGroup;
+        private final NioEventLoopGroup otherEventLoopGroup;
         private final AtomicInteger evictions;
         private final RntbdEndpointMonitoringProvider monitoring;
         private final RntbdRequestTimer requestTimer;
@@ -483,11 +490,14 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
                 config.requestTimerResolutionInNanos());
 
             this.eventLoopGroup = new NioEventLoopGroup(options.threadCount(), threadFactory);
+            this.otherEventLoopGroup = new NioEventLoopGroup(options.threadCount(), threadFactory);
             this.endpoints = new ConcurrentHashMap<>();
             this.evictions = new AtomicInteger();
             this.closed = new AtomicBoolean();
             this.monitoring = new RntbdEndpointMonitoringProvider(this);
             this.monitoring.init();
+
+          //  this.eventLoopGroup.setIoRatio(20);
         }
 
         @Override
@@ -541,7 +551,8 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
                 this.config,
                 this.eventLoopGroup,
                 this.requestTimer,
-                physicalAddress));
+                physicalAddress,
+                this.otherEventLoopGroup));
         }
 
         @Override

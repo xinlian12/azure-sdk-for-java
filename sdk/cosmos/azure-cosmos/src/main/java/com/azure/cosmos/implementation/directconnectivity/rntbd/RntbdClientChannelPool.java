@@ -15,6 +15,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoop;
+import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.pool.ChannelHealthChecker;
 import io.netty.channel.pool.ChannelPool;
 import io.netty.channel.pool.ChannelPoolHandler;
@@ -166,6 +167,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
     private final int maxRequestsPerChannel;
     private final ChannelPoolHandler poolHandler;
     private final boolean releaseHealthCheck;
+    private final NioEventLoopGroup otherGroup;
 
     // Because state from these fields can be requested on any thread...
 
@@ -188,15 +190,16 @@ public final class RntbdClientChannelPool implements ChannelPool {
      * @param bootstrap the {@link Bootstrap} that is used for connections.
      * @param config the {@link Config} that is used for the channel pool instance created.
      */
-    RntbdClientChannelPool(final RntbdServiceEndpoint endpoint, final Bootstrap bootstrap, final Config config) {
-        this(endpoint, bootstrap, config, new RntbdClientChannelHealthChecker(config));
+    RntbdClientChannelPool(final RntbdServiceEndpoint endpoint, final Bootstrap bootstrap, final Config config, final NioEventLoopGroup otherGroup) {
+        this(endpoint, bootstrap, config, new RntbdClientChannelHealthChecker(config), otherGroup);
     }
 
     private RntbdClientChannelPool(
         final RntbdServiceEndpoint endpoint,
         final Bootstrap bootstrap,
         final Config config,
-        final RntbdClientChannelHealthChecker healthChecker) {
+        final RntbdClientChannelHealthChecker healthChecker,
+        final NioEventLoopGroup otherGroup) {
 
         checkNotNull(endpoint, "expected non-null endpoint");
         checkNotNull(bootstrap, "expected non-null bootstrap");
@@ -205,8 +208,10 @@ public final class RntbdClientChannelPool implements ChannelPool {
 
         this.endpoint = endpoint;
         this.poolHandler = new RntbdClientChannelHandler(config, healthChecker);
+        //this.executor = otherGroup.next();
         this.executor = bootstrap.config().group().next();
         this.healthChecker = healthChecker;
+        this.otherGroup = otherGroup;
 
         this.bootstrap = bootstrap.clone().handler(new ChannelInitializer<Channel>() {
             @Override
@@ -418,6 +423,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
     public Future<Channel> acquire() {
         return this.acquire(new ChannelPromiseWithExpiryTime(
             this.bootstrap.config().group().next().newPromise(),
+           // this.otherGroup.next().newPromise(),
             System.nanoTime() + this.acquisitionTimeoutInNanos));
     }
 

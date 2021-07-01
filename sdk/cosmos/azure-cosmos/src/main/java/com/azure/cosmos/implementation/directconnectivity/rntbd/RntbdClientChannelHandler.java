@@ -3,6 +3,7 @@
 
 package com.azure.cosmos.implementation.directconnectivity.rntbd;
 
+import com.azure.cosmos.implementation.RequestTimeline;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdEndpoint.Config;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
@@ -116,7 +117,7 @@ public class RntbdClientChannelHandler extends ChannelInitializer<Channel> imple
         pipeline.addFirst(
             // TODO (DANOBLE) Log an issue with netty
             // Initialize sslHandler with jdkCompatibilityMode = true for openssl context.
-            new SslHandler(this.config.sslContext().newEngine(channel.alloc())),
+            new RntbdSslHandler(this.config.sslContext().newEngine(channel.alloc())),
             new IdleStateHandler(
                 idleConnectionTimerResolutionInNanos,
                 idleConnectionTimerResolutionInNanos,
@@ -124,5 +125,7 @@ public class RntbdClientChannelHandler extends ChannelInitializer<Channel> imple
                 TimeUnit.NANOSECONDS));
 
         channel.attr(REQUEST_MANAGER).set(requestManager);
+
+        EventExecutorMonitor.registerChannel(channel.eventLoop(), Thread.currentThread().getName());
     }
 }

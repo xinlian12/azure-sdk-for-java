@@ -79,7 +79,7 @@ public class ResourceThrottleRetryPolicy extends DocumentClientRetryPolicy {
             return Mono.just(ShouldRetryResult.retryAfter(retryDelay));
         } else {
             if (retryDelay != null) {
-                logger.warn(
+                logger.debug(
                     "Operation will NOT be retried. Current attempt {}",
                     this.currentAttemptCount,
                     exception);
