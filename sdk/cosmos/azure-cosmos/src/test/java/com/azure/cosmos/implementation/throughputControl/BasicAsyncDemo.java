@@ -54,8 +54,6 @@ public class BasicAsyncDemo {
     private static final String DATABASE_NAME = "perfdb";
     private static final String READ_CONTAINER_NAME = "perfcontRead";
     private static final String QUERY_CONTAINER_NAME = "perfcontQuery";
-    public static final String RMW_HOST = "";
-    public static final String RMW_KEY = "";
     String HOST = RMW_HOST;
     String KEY = RMW_KEY;
     int itemCount = 0;
@@ -577,8 +575,7 @@ public class BasicAsyncDemo {
 
         // Get client
         DirectConnectionConfig directConnectionConfig = new DirectConnectionConfig();
-        directConnectionConfig.setMaxRequestsPerConnection(1);
-        directConnectionConfig.setMaxConnectionsPerEndpoint(1);
+//2
         GatewayConnectionConfig gatewayConnectionConfig = new GatewayConnectionConfig();
 //                                                              .setProxy(new ProxyOptions(ProxyOptions.Type.HTTP,
 //                                                                                         new InetSocketAddress(

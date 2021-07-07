@@ -126,6 +126,6 @@ public class RntbdClientChannelHandler extends ChannelInitializer<Channel> imple
 
         channel.attr(REQUEST_MANAGER).set(requestManager);
 
-        EventExecutorMonitor.registerChannel(channel.eventLoop(), Thread.currentThread().getName());
+        EventExecutorMonitor.registerChannel(channel.eventLoop(), channel.id());
     }
 }

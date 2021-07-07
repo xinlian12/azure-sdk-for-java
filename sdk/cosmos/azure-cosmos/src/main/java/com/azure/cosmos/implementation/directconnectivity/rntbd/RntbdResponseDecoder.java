@@ -11,6 +11,7 @@ import io.netty.handler.codec.CorruptedFrameException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.List;
 
 public final class RntbdResponseDecoder extends ByteToMessageDecoder {
@@ -19,6 +20,8 @@ public final class RntbdResponseDecoder extends ByteToMessageDecoder {
     private long packetLength = 0;
     private State state = State.NONE;
     private RntbdResponse rntbdResponse = null;
+    private Instant decodeStartTime;
+    private Instant decodeEndTime;
 
     /**
      * Deserialize from an input {@link ByteBuf} to an {@link RntbdResponse} instance.
@@ -31,10 +34,11 @@ public final class RntbdResponseDecoder extends ByteToMessageDecoder {
      */
     @Override
     protected void decode(final ChannelHandlerContext context, final ByteBuf in, final List<Object> out) {
-        logger.info("DECODE: {} | {}", context.channel().id(), in.readableBytes());
+       // logger.info("DECODE: {} | {}", context.channel().id(), in.readableBytes());
         long packetLength = this.packetLength;
         if (packetLength == 0) {
             packetLength = RntbdResponseStatus.LENGTH;
+            decodeStartTime = Instant.now();
         }
 
         if (in.readableBytes() < packetLength) {
@@ -78,12 +82,19 @@ public final class RntbdResponseDecoder extends ByteToMessageDecoder {
 
     private void outputRntbdResponse(final ChannelHandlerContext context, final ByteBuf in, final List<Object> out, RntbdResponse response) {
         logger.info("DECODE COMPLETE: {} | {}", context.channel().id(), response.getTransportRequestId());
+
+        decodeEndTime = Instant.now();
+        response.setDecodeStartTime(this.decodeStartTime);
+        response.setDecodeEndTime(this.decodeEndTime);
+
         in.discardReadBytes();
         out.add(response.retain());
 
         this.packetLength = 0;
         this.rntbdResponse = null;
         this.state = State.NONE;
+        this.decodeStartTime = null;
+        this.decodeEndTime = null;
     }
 
     private void checkPoint(State state) {

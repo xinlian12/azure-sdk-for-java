@@ -747,10 +747,24 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         final UUID activityId = response.getActivityId();
         final int statusCode = status.code();
 
+        long transitTime = response.getDecodeStartTime().toEpochMilli() - requestRecord.timeSent().toEpochMilli();
+        long decodeTime = response.getDecodeEndTime().toEpochMilli() - response.getDecodeStartTime().toEpochMilli();
+        Instant receive = Instant.now();
+        long receiveTime = receive.toEpochMilli() - response.getDecodeEndTime().toEpochMilli();
+        long aggregratedLatency = receive.toEpochMilli() - requestRecord.timeSent().toEpochMilli();
+        logger.info(
+            "MESSAGE RECEIVED {} for request {} : {}|{}|{}|{}|{}",
+            status,
+            response.getTransportRequestId(),
+            context.channel().id(),
+            transitTime,
+            decodeTime,
+            receiveTime,
+            aggregratedLatency);
+        EventExecutorMonitor.trackLatency( StatusCodes.OK, transitTime, decodeTime, receiveTime, aggregratedLatency, context.channel().id());
+
         if ((HttpResponseStatus.OK.code() <= statusCode && statusCode < HttpResponseStatus.MULTIPLE_CHOICES.code()) ||
             statusCode == HttpResponseStatus.NOT_MODIFIED.code()) {
-            logger.info("MESSAGE RECEIVED OK: {} | {} | {}", context.channel().id(), requestRecord.transportRequestId(), (Instant.now().toEpochMilli()-requestRecord.timeSent().toEpochMilli()));
-            EventExecutorMonitor.trackLatency( StatusCodes.OK, (Instant.now().toEpochMilli() - requestRecord.timeSent().toEpochMilli()), context.executor(), context.channel().id());
             final StoreResponse storeResponse = response.toStoreResponse(this.contextFuture.getNow(null));
             requestRecord.complete(storeResponse);
 
@@ -781,8 +795,6 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
             final String resourceAddress = requestRecord.args().physicalAddress() != null ?
                 requestRecord.args().physicalAddress().toString() : null;
-            logger.info("MESSAGE RECEIVED WITH EXCEPTION: {} | {} | {} | {}", status.code(), context.channel().id(), requestRecord.transportRequestId(), (Instant.now().toEpochMilli()-requestRecord.timeSent().toEpochMilli()));
-            EventExecutorMonitor.trackLatency(status.code(), (Instant.now().toEpochMilli() - requestRecord.timeSent().toEpochMilli()), context.executor(), context.channel().id());
 
             switch (status.code()) {
 
