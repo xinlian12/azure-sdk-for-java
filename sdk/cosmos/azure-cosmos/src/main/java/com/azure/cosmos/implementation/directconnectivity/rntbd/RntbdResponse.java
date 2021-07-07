@@ -3,6 +3,7 @@
 
 package com.azure.cosmos.implementation.directconnectivity.rntbd;
 
+import com.azure.cosmos.implementation.apachecommons.lang.tuple.Pair;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -294,7 +295,8 @@ public final class RntbdResponse implements ReferenceCounted {
         return this;
     }
 
-    static RntbdResponse decode(final ByteBuf in) {
+
+    static Pair<RntbdResponse, Long> decode(final ByteBuf in) {
 
         final int start = in.markReaderIndex().readerIndex();
 
@@ -305,9 +307,10 @@ public final class RntbdResponse implements ReferenceCounted {
 
         if (hasPayload) {
 
-            if (!RntbdFramer.canDecodePayload(in)) {
+            Pair<Boolean, Long> decodeResult = RntbdFramer.canDecodePayload(in);
+            if (!decodeResult.getLeft()) {
                 in.resetReaderIndex();
-                return null;
+                return Pair.of(null, decodeResult.getRight());
             }
 
             content = in.readSlice(in.readIntLE());
@@ -320,7 +323,8 @@ public final class RntbdResponse implements ReferenceCounted {
         final int end = in.readerIndex();
         in.resetReaderIndex();
 
-        return new RntbdResponse(in.readSlice(end - start), frame, headers, content);
+        // there is nothing left to read, so use 0 for the length
+        return Pair.of(new RntbdResponse(in.readSlice(end - start), frame, headers, content),0l);
     }
 
     StoreResponse toStoreResponse(final RntbdContext context) {

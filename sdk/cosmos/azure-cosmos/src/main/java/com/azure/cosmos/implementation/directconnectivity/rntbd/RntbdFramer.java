@@ -3,6 +3,7 @@
 
 package com.azure.cosmos.implementation.directconnectivity.rntbd;
 
+import com.azure.cosmos.implementation.apachecommons.lang.tuple.Pair;
 import com.azure.cosmos.implementation.guava27.Strings;
 import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.CorruptedFrameException;
@@ -14,13 +15,8 @@ final class RntbdFramer {
     private RntbdFramer() {
     }
 
-    static boolean canDecodeHead(final ByteBuf in) throws CorruptedFrameException {
-
+    static long getHeadLength(final ByteBuf in) throws CorruptedFrameException {
         checkNotNull(in, "in");
-
-        if (in.readableBytes() < RntbdResponseStatus.LENGTH) {
-            return false;
-        }
 
         final int start = in.readerIndex();
         final long length = in.getUnsignedIntLE(start);
@@ -39,10 +35,10 @@ final class RntbdFramer {
             throw new CorruptedFrameException(reason);
         }
 
-        return length <= in.readableBytes();
+        return length;
     }
 
-    static boolean canDecodePayload(final ByteBuf in, final int start) {
+    static Pair<Boolean, Long> canDecodePayload(final ByteBuf in, final int start) {
 
         checkNotNull(in, "in");
 
@@ -55,7 +51,7 @@ final class RntbdFramer {
         final int offset = start - readerIndex;
 
         if (in.readableBytes() - offset < Integer.BYTES) {
-            return false;
+            return Pair.of(false, Long.valueOf(offset + Integer.BYTES));
         }
 
         final long length = in.getUnsignedIntLE(start);
@@ -67,10 +63,11 @@ final class RntbdFramer {
             throw new CorruptedFrameException(reason);
         }
 
-        return offset + Integer.BYTES + length <= in.readableBytes();
+        long totalLength = offset + Integer.BYTES + length;
+        return Pair.of(totalLength <= in.readableBytes(), totalLength);
     }
 
-    static boolean canDecodePayload(final ByteBuf in) {
+    static Pair<Boolean, Long> canDecodePayload(final ByteBuf in) {
         return canDecodePayload(in, in.readerIndex());
     }
 }
