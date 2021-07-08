@@ -688,7 +688,7 @@ public class BasicAsyncDemo {
         AtomicInteger failedRequests = new AtomicInteger(0);
 
         for(int k = 0; k < 1; k++) {
-            for(int i = 0; i < 500; i++) {
+            for(int i = 0; i < 2; i++) {
              //   int index = random.nextInt(largeDocuments.size());
                 String readId = largeDocuments.get(i);
 //            container.readItem("a659e646-6aca-4a37-aa30-18a1766284d6", new PartitionKey("a659e646-6aca-4a37-aa30-18a1766284d6"), ObjectNode.class)

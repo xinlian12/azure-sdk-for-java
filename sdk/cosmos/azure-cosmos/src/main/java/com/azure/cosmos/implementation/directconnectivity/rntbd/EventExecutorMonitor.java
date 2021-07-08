@@ -1,7 +1,6 @@
 package com.azure.cosmos.implementation.directconnectivity.rntbd;
 
 import com.azure.cosmos.implementation.HttpConstants;
-import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.Channel;
@@ -10,14 +9,11 @@ import io.netty.util.concurrent.EventExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class EventExecutorMonitor {
@@ -42,13 +38,13 @@ public class EventExecutorMonitor {
        });
     }
 
-    public static void trackLatency(int statusCode, long transitTime, long decodeTime, long receiveTime, long aggregratedLatency, ChannelId channelId, int pendingRequests) {
+    public static void trackLatency(int statusCode, long transitTime, long decodeTime, long receiveTime, long aggregratedLatency, ChannelId channelId, int pendingRequests, long timesentString) {
         int requestIndex = totalRequests.incrementAndGet();
         if (requestIndex <= warmup) {
             return;
         }
 
-        String trackingText = String.format("%s: %s|%s|%s|%s|%s", statusCode, transitTime, decodeTime, receiveTime, aggregratedLatency, pendingRequests);
+        String trackingText = String.format("%s: %s|%s|%s|%s|%s|%s", statusCode, transitTime, decodeTime, receiveTime, aggregratedLatency, pendingRequests, timesentString);
         if (statusCode == HttpConstants.StatusCodes.OK) {
             succeeded.incrementAndGet();
             totalLatency.accumulateAndGet(aggregratedLatency, (currentLatency, newLatency) -> currentLatency + newLatency);

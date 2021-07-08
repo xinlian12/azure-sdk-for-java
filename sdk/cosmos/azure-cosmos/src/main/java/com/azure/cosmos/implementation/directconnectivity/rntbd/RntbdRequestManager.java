@@ -44,15 +44,12 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCounted;
-import io.netty.util.Timeout;
 import io.netty.util.concurrent.DefaultEventExecutor;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
 import io.netty.util.internal.ThrowableUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import javax.net.ssl.SSLException;
 import java.net.SocketAddress;
@@ -64,6 +61,7 @@ import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.azure.cosmos.implementation.HttpConstants.StatusCodes;
 import static com.azure.cosmos.implementation.HttpConstants.SubStatusCodes;
@@ -102,6 +100,8 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
     private boolean closingExceptionally = false;
     private CoalescingBufferQueue pendingWrites;
+    private AtomicInteger pendingWritesCnt = new AtomicInteger(0);
+
 
     // endregion
 
@@ -594,6 +594,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
     void pendWrite(final ByteBuf out, final ChannelPromise promise) {
         this.pendingWrites.add(out, promise);
+        this.pendingWritesCnt.incrementAndGet();
     }
 
     Timestamps snapshotTimestamps() {
@@ -886,7 +887,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         long parsingTime = completedTime.toEpochMilli() - requestRecord.timeReceived().toEpochMilli();
 
         logger.info(
-            "MESSAGE RECEIVED {} for request {} : {}|{}|{}|{}|{}|Pending:{}",
+            "MESSAGE RECEIVED {} for request {} : {}|{}|{}|{}|{}|{}|Pending:{}",
             status,
             response.getTransportRequestId(),
             context.channel().id(),
@@ -894,8 +895,9 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             decodeTime,
             receiveTime,
             aggregratedLatency,
+            parsingTime,
             requestRecord.pendingRequestQueueSize());
-        EventExecutorMonitor.trackLatency( statusCode, transitTime, decodeTime, receiveTime, aggregratedLatency, context.channel().id(), requestRecord.pendingRequestQueueSize());
+        EventExecutorMonitor.trackLatency( statusCode, transitTime, decodeTime, receiveTime, aggregratedLatency, context.channel().id(), requestRecord.pendingRequestQueueSize(), parsingTime);
 
     }
 
@@ -907,6 +909,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
         if (!this.pendingWrites.isEmpty()) {
             this.pendingWrites.writeAndRemoveAll(context);
+            this.pendingWritesCnt.set(0);
             context.flush();
         }
     }

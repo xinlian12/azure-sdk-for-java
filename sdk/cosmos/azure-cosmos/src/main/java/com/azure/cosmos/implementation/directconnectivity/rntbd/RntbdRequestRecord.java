@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZonedDateTime;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -64,6 +65,7 @@ public abstract class RntbdRequestRecord extends CompletableFuture<StoreResponse
     private volatile Instant timePipelined;
     private final Instant timeQueued;
     private volatile Instant timeSent;
+    private volatile ZonedDateTime timeSentDateTime;
     private volatile Instant timeReceived;
     private volatile boolean sendingRequestHasStarted;
 
@@ -143,6 +145,7 @@ public abstract class RntbdRequestRecord extends CompletableFuture<StoreResponse
                         break;
                     }
                     this.timeSent = time;
+                    this.timeSentDateTime = ZonedDateTime.now();
                     break;
                 case RECEIVED:
                     if (current != Stage.SENT) {
@@ -196,6 +199,10 @@ public abstract class RntbdRequestRecord extends CompletableFuture<StoreResponse
 
     public Instant timeSent() {
         return this.timeSent;
+    }
+
+    public String timeSentDateTime() {
+        return this.timeSentDateTime.toString();
     }
 
     public void serviceEndpointStatistics(RntbdEndpointStatistics endpointMetrics) {

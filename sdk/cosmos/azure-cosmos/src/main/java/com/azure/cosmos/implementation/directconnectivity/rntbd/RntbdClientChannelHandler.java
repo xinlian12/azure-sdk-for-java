@@ -117,6 +117,7 @@ public class RntbdClientChannelHandler extends ChannelInitializer<Channel> imple
         pipeline.addFirst(
             // TODO (DANOBLE) Log an issue with netty
             // Initialize sslHandler with jdkCompatibilityMode = true for openssl context.
+           // new LoggingHandler(LogLevel.DEBUG),
             new RntbdSslHandler(this.config.sslContext().newEngine(channel.alloc())),
             new IdleStateHandler(
                 idleConnectionTimerResolutionInNanos,

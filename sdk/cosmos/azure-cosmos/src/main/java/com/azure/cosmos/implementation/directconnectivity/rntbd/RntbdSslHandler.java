@@ -20,6 +20,6 @@ public class RntbdSslHandler extends SslHandler {
 
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws SSLException {
-       // logger.info("RntbdSSlHandler DECODE: {} | {}", ctx.channel().id(), in.readableBytes());
+        logger.info("RntbdSSlHandler DECODE: {} | {}", ctx.channel().id(), in.readableBytes());
         super.decode(ctx, in, out);
     }}
