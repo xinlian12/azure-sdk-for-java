@@ -42,13 +42,13 @@ public class EventExecutorMonitor {
        });
     }
 
-    public static void trackLatency(int statusCode, long transitTime, long decodeTime, long receiveTime, long aggregratedLatency, ChannelId channelId) {
+    public static void trackLatency(int statusCode, long transitTime, long decodeTime, long receiveTime, long aggregratedLatency, ChannelId channelId, int pendingRequests) {
         int requestIndex = totalRequests.incrementAndGet();
         if (requestIndex <= warmup) {
             return;
         }
 
-        String trackingText = String.format("%s: %s|%s|%s|%s", statusCode, transitTime, decodeTime, receiveTime, aggregratedLatency);
+        String trackingText = String.format("%s: %s|%s|%s|%s|%s", statusCode, transitTime, decodeTime, receiveTime, aggregratedLatency, pendingRequests);
         if (statusCode == HttpConstants.StatusCodes.OK) {
             succeeded.incrementAndGet();
             totalLatency.accumulateAndGet(aggregratedLatency, (currentLatency, newLatency) -> currentLatency + newLatency);
@@ -117,7 +117,7 @@ public class EventExecutorMonitor {
 //                }
 //            }
 
-            logger.info("There are "  + eventExecutorLatency.size() + " executor assigned with channel");
+            logger.info("There are "  + eventExecutorChannelMonitor.size() + " executor assigned with channel");
 
             ConcurrentHashMap<Integer, ConcurrentHashMap<ChannelId, List<String>>> aggregrated = new ConcurrentHashMap<>();
             for (Integer executorId : Collections.list(eventExecutorChannelMonitor.keys())) {

@@ -423,7 +423,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
     public Future<Channel> acquire() {
         return this.acquire(new ChannelPromiseWithExpiryTime(
             this.bootstrap.config().group().next().newPromise(),
-           // this.otherGroup.next().newPromise(),
+          //  this.otherGroup.next().newPromise(),
             System.nanoTime() + this.acquisitionTimeoutInNanos));
     }
 

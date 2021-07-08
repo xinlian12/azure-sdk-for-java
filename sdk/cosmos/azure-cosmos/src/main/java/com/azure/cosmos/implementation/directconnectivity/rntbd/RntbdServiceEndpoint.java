@@ -104,7 +104,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
             .option(ChannelOption.ALLOCATOR, config.allocator())
             .option(ChannelOption.AUTO_READ, true)
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.connectTimeoutInMillis())
-          //  .option(ChannelOption.SO_RCVBUF, 1048576)
+           // .option(ChannelOption.SO_RCVBUF, 1048576*1024)
             .option(ChannelOption.RCVBUF_ALLOCATOR, receiveBufferAllocator)
             .option(ChannelOption.SO_KEEPALIVE, true)
             .remoteAddress(this.serverKey.getHost(), this.serverKey.getPort());
@@ -379,7 +379,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         if (connected.isSuccess()) {
             final Channel channel = (Channel) connected.getNow();
             assert channel != null : "impossible";
-           // this.releaseToPool(channel);
+            //this.releaseToPool(channel);
             requestRecord.channelTaskQueueLength(RntbdUtils.tryGetExecutorTaskQueueSize(channel.eventLoop()));
             channel.write(requestRecord.stage(RntbdRequestRecord.Stage.PIPELINED));
             this.releaseToPool(channel);

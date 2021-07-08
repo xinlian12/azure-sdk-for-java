@@ -752,20 +752,12 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         Instant receive = Instant.now();
         long receiveTime = receive.toEpochMilli() - response.getDecodeEndTime().toEpochMilli();
         long aggregratedLatency = receive.toEpochMilli() - requestRecord.timeSent().toEpochMilli();
-        logger.info(
-            "MESSAGE RECEIVED {} for request {} : {}|{}|{}|{}|{}",
-            status,
-            response.getTransportRequestId(),
-            context.channel().id(),
-            transitTime,
-            decodeTime,
-            receiveTime,
-            aggregratedLatency);
-        EventExecutorMonitor.trackLatency( StatusCodes.OK, transitTime, decodeTime, receiveTime, aggregratedLatency, context.channel().id());
 
+        Instant completedTime = null;
         if ((HttpResponseStatus.OK.code() <= statusCode && statusCode < HttpResponseStatus.MULTIPLE_CHOICES.code()) ||
             statusCode == HttpResponseStatus.NOT_MODIFIED.code()) {
             final StoreResponse storeResponse = response.toStoreResponse(this.contextFuture.getNow(null));
+            completedTime = Instant.now();
             requestRecord.complete(storeResponse);
 
         } else {
@@ -888,7 +880,23 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             BridgeInternal.setResourceAddress(cause, resourceAddress);
 
             requestRecord.completeExceptionally(cause);
+            completedTime = Instant.now();
         }
+
+        long parsingTime = completedTime.toEpochMilli() - requestRecord.timeReceived().toEpochMilli();
+
+        logger.info(
+            "MESSAGE RECEIVED {} for request {} : {}|{}|{}|{}|{}|Pending:{}",
+            status,
+            response.getTransportRequestId(),
+            context.channel().id(),
+            transitTime,
+            decodeTime,
+            receiveTime,
+            aggregratedLatency,
+            requestRecord.pendingRequestQueueSize());
+        EventExecutorMonitor.trackLatency( statusCode, transitTime, decodeTime, receiveTime, aggregratedLatency, context.channel().id(), requestRecord.pendingRequestQueueSize());
+
     }
 
     private void removeContextNegotiatorAndFlushPendingWrites(final ChannelHandlerContext context) {

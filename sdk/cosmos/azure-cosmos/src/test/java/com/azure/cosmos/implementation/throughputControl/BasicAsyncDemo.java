@@ -575,6 +575,8 @@ public class BasicAsyncDemo {
 
         // Get client
         DirectConnectionConfig directConnectionConfig = new DirectConnectionConfig();
+        directConnectionConfig.setMaxConnectionsPerEndpoint(1);
+        directConnectionConfig.setMaxRequestsPerConnection(1);
 //2
         GatewayConnectionConfig gatewayConnectionConfig = new GatewayConnectionConfig();
 //                                                              .setProxy(new ProxyOptions(ProxyOptions.Type.HTTP,
