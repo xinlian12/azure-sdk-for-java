@@ -18,6 +18,7 @@ import java.util.Map.Entry;
  * Used internally to represents a response from the store.
  */
 public class StoreResponse {
+    private final Logger logger = LoggerFactory.getLogger(StoreResponse.class);
     final static Logger LOGGER = LoggerFactory.getLogger(StoreResponse.class);
     final private int status;
     final private String[] responseHeaderNames;
@@ -40,14 +41,12 @@ public class StoreResponse {
 
         requestTimeline = RequestTimeline.empty();
         responseHeaderNames = new String[headerEntries.size()];
+
         responseHeaderValues = new String[headerEntries.size()];
 
-        int i = 0;
-
-        for(Entry<String, String> headerEntry: headerEntries) {
-            responseHeaderNames[i] = headerEntry.getKey();
-            responseHeaderValues[i] = headerEntry.getValue();
-            i++;
+        for(int i = 0; i< headerEntries.size(); i++) {
+            responseHeaderNames[i] = headerEntries.get(i).getKey();
+            responseHeaderValues[i] = headerEntries.get(i).getValue();
         }
 
         this.status = status;

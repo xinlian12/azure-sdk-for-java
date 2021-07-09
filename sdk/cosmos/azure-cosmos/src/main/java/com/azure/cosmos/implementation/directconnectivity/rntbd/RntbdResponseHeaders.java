@@ -12,6 +12,8 @@ import com.fasterxml.jackson.databind.ObjectWriter;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.CorruptedFrameException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -31,6 +33,7 @@ import static com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdCons
 @JsonFilter("RntbdToken")
 class RntbdResponseHeaders extends RntbdTokenStream<RntbdResponseHeader> {
 
+    private final static Logger logger = LoggerFactory.getLogger(RntbdResponseHeader.class);
     // region Fields
 
     @JsonProperty

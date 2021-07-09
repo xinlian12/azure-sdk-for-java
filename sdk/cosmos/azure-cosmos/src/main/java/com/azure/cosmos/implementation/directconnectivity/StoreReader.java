@@ -208,7 +208,7 @@ public class StoreReader {
 
         while (resolveApiResults.size() > 0) {
             uriIndex = uriIndex % resolveApiResults.size();
-            //uriIndex = 0;
+           // uriIndex = 0;
             Uri uri = resolveApiResults.get(uriIndex);
             Pair<Mono<StoreResponse>, Uri> res;
             try {

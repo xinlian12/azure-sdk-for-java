@@ -3,6 +3,7 @@
 
 package com.azure.cosmos.implementation.directconnectivity;
 
+import com.azure.cosmos.implementation.CosmosSchedulers;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.throughputControl.ThroughputControlStore;
@@ -32,7 +33,8 @@ public abstract class TransportClient implements AutoCloseable {
                 Mono.defer(() -> this.invokeStoreAsync(physicalAddress, request)));
         }
 
-        return this.invokeStoreAsync(physicalAddress, request);
+        return this.invokeStoreAsync(physicalAddress, request)
+            .publishOn(CosmosSchedulers.COSMOS_PARALLEL);
     }
 
     protected abstract Mono<StoreResponse> invokeStoreAsync(

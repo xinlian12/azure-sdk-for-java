@@ -19,10 +19,13 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.util.IllegalReferenceCountException;
 import io.netty.util.ReferenceCounted;
 import io.netty.util.ResourceLeakDetector;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
@@ -35,6 +38,7 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkSt
 @JsonPropertyOrder({ "messageLength", "referenceCount", "frame", "headers", "content" })
 public final class RntbdResponse implements ReferenceCounted {
 
+    private static final Logger logger = LoggerFactory.getLogger(RntbdResponse.class);
     // region Fields
 
     private static final AtomicIntegerFieldUpdater<RntbdResponse> REFERENCE_COUNT =
@@ -358,6 +362,7 @@ public final class RntbdResponse implements ReferenceCounted {
 
         checkNotNull(context, "expected non-null context");
 
+//        logger.info("start content copy");
         final int length = this.content.writerIndex();
         final byte[] content;
 

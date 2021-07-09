@@ -81,7 +81,7 @@ public final class RntbdResponseDecoder extends ByteToMessageDecoder {
     }
 
     private void outputRntbdResponse(final ChannelHandlerContext context, final ByteBuf in, final List<Object> out, RntbdResponse response) {
-        logger.info("DECODE COMPLETE: {} | {}", context.channel().id(), response.getTransportRequestId());
+        logger.debug("DECODE COMPLETE: {} | {}", context.channel().id(), response.getTransportRequestId());
 
         decodeEndTime = Instant.now();
         response.setDecodeStartTime(this.decodeStartTime);

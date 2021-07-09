@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class EventExecutorMonitor {
@@ -28,6 +29,16 @@ public class EventExecutorMonitor {
     private static final AtomicInteger succeeded = new AtomicInteger(0);
     private static final AtomicReference<Long> totalLatency = new AtomicReference<>(0L);
 
+    private static final AtomicLong totalCreated = new AtomicLong(0);
+    private static final AtomicLong totalQueued = new AtomicLong(0);
+    private static final AtomicLong totalChannelAcquisitionStarted = new AtomicLong(0);
+    private static final AtomicLong totalPipelined = new AtomicLong(0);
+    private static final AtomicLong totalTransitTime = new AtomicLong(0);
+    private static final AtomicLong totalReceived = new AtomicLong(0);
+    private static final AtomicLong totalDecode = new AtomicLong(0);
+    private static final AtomicLong totalCompleted = new AtomicLong(0);
+    private static final AtomicInteger totalRecords = new AtomicInteger(0);
+
     public static void registerChannel(EventExecutor executor, ChannelId channelId) {
        eventExecutorChannelMonitor.compute(System.identityHashCode(executor), (id, channelList) -> {
            if (channelList == null) {
@@ -38,13 +49,23 @@ public class EventExecutorMonitor {
        });
     }
 
-    public static void trackLatency(int statusCode, long transitTime, long decodeTime, long receiveTime, long aggregratedLatency, ChannelId channelId, int pendingRequests, long timesentString) {
+    public static void trackLatency(
+        int statusCode,
+        long transitTime,
+        long decodeTime,
+        long receiveTime,
+        long aggregratedLatency,
+        ChannelId channelId,
+        int pendingRequests,
+        long parsingTime,
+        long timePipelined,
+        long timeOnContext) {
         int requestIndex = totalRequests.incrementAndGet();
         if (requestIndex <= warmup) {
             return;
         }
 
-        String trackingText = String.format("%s: %s|%s|%s|%s|%s|%s", statusCode, transitTime, decodeTime, receiveTime, aggregratedLatency, pendingRequests, timesentString);
+        String trackingText = String.format("%s: context:%s|pipelined:%s|Transit:%s|Decode:%s|Receive:%s|parsing:%s|total:%s|pending:%s", statusCode, timeOnContext, timePipelined, transitTime, decodeTime, receiveTime, parsingTime, aggregratedLatency,pendingRequests);
         if (statusCode == HttpConstants.StatusCodes.OK) {
             succeeded.incrementAndGet();
             totalLatency.accumulateAndGet(aggregratedLatency, (currentLatency, newLatency) -> currentLatency + newLatency);
@@ -62,6 +83,7 @@ public class EventExecutorMonitor {
 
         if (requestIndex == expected + warmup) {
             log();
+            logRecords();
         }
     }
 
@@ -87,7 +109,40 @@ public class EventExecutorMonitor {
 
         if (requestIndex == expected + warmup) {
             log();
+            logRecords();
         }
+    }
+
+    public static void trackRecord(RntbdRequestRecord record) {
+        long created = record.timeQueued().toEpochMilli() - record.timeCreated().toEpochMilli();
+        long queued = record.timeChannelAcquisitionStarted().toEpochMilli() - record.timeQueued().toEpochMilli();
+        long channelAcquisition = record.timePipelined().toEpochMilli() - record.timeChannelAcquisitionStarted().toEpochMilli();
+        long pipelined = record.timeSent().toEpochMilli() - record.timePipelined().toEpochMilli();
+        long transit = record.timeDecodeStarted().toEpochMilli() - record.timeSent().toEpochMilli();
+        long decode = record.timeReceived().toEpochMilli() - record.timeDecodeStarted().toEpochMilli();
+        long receive = record.timeCompleted().toEpochMilli() - record.timeReceived().toEpochMilli();
+
+        totalRecords.incrementAndGet();
+        totalCreated.accumulateAndGet(created, (newValue, oldValue) -> newValue + oldValue);
+        totalQueued.accumulateAndGet(queued, (newValue, oldValue) -> newValue + oldValue);
+        totalChannelAcquisitionStarted.accumulateAndGet(channelAcquisition, (newValue, oldValue) -> newValue + oldValue);
+        totalPipelined.accumulateAndGet(pipelined, (newValue, oldValue) -> newValue + oldValue);
+        totalTransitTime.accumulateAndGet(transit, (newValue, oldValue) -> newValue + oldValue);
+        totalDecode.accumulateAndGet(decode, (newValue, oldValue) -> newValue + oldValue);
+        totalReceived.accumulateAndGet(receive, (newValue, oldValue) -> newValue + oldValue);
+    }
+
+    private static void logRecords() {
+        logger.info(
+            "Avg latency for {} requests: [created: {}, queued, {}, channelAcquisition: {}, pipelined: {}, transitTime: {}, decode: {}, received: {}]",
+            totalRecords.get(),
+            totalCreated.get()/totalRecords.get(),
+            totalQueued.get()/totalRecords.get(),
+            totalChannelAcquisitionStarted.get()/totalRecords.get(),
+            totalPipelined.get()/totalRecords.get(),
+            totalTransitTime.get()/totalRecords.get(),
+            totalDecode.get()/totalRecords.get(),
+            totalReceived.get()/totalRecords.get());
     }
 
     public static void log() {
@@ -126,15 +181,17 @@ public class EventExecutorMonitor {
                 });
 
                 for(ChannelId channelId : eventExecutorChannelMonitor.get(executorId)) {
-                    latencyMap.compute(channelId, (id, latencyList) -> {
-                        if (latencyList == null) {
-                            latencyList = new ArrayList<>();
-                        }
+                    if (eventExecutorLatency.containsKey(channelId)) {
+                        latencyMap.compute(channelId, (id, latencyList) -> {
+                            if (latencyList == null) {
+                                latencyList = new ArrayList<>();
+                            }
 
-                        latencyList.addAll(eventExecutorLatency.get(channelId));
+                            latencyList.addAll(eventExecutorLatency.get(channelId));
 
-                        return latencyList;
-                    });
+                            return latencyList;
+                        });
+                    }
                 }
             }
             logger.info("eventExecutorLatency:" + objectmapper.writeValueAsString(aggregrated));

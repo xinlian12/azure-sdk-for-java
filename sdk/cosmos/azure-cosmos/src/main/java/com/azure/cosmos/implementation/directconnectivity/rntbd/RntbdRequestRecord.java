@@ -66,8 +66,10 @@ public abstract class RntbdRequestRecord extends CompletableFuture<StoreResponse
     private final Instant timeQueued;
     private volatile Instant timeSent;
     private volatile ZonedDateTime timeSentDateTime;
+    private volatile Instant timeDecodeStarted;
     private volatile Instant timeReceived;
     private volatile boolean sendingRequestHasStarted;
+    private volatile Instant timeCompletedOnContext;
 
     public Channel channel;
 
@@ -119,8 +121,10 @@ public abstract class RntbdRequestRecord extends CompletableFuture<StoreResponse
     }
 
     public RntbdRequestRecord stage(final Stage value) {
+        return this.stage(value, Instant.now());
+    }
 
-        final Instant time = Instant.now();
+    public RntbdRequestRecord stage(final Stage value, Instant time) {
 
         STAGE.updateAndGet(this, current -> {
 
@@ -147,9 +151,16 @@ public abstract class RntbdRequestRecord extends CompletableFuture<StoreResponse
                     this.timeSent = time;
                     this.timeSentDateTime = ZonedDateTime.now();
                     break;
-                case RECEIVED:
+                case DECODE_STARTED:
                     if (current != Stage.SENT) {
-                        logger.debug("Expected transition from SENT to RECEIVED, not {} to RECEIVED", current);
+                        logger.debug("Expected transition from SENT to DECODE_STARTED, not {} to DECODE_STARTED", current);
+                        break;
+                    }
+                    this.timeDecodeStarted = time;
+                    break;
+                case RECEIVED:
+                    if (current != Stage.DECODE_STARTED) {
+                        logger.debug("Expected transition from DECODE_STARTED to RECEIVED, not {} to RECEIVED", current);
                         break;
                     }
                     this.timeReceived = time;
@@ -197,6 +208,10 @@ public abstract class RntbdRequestRecord extends CompletableFuture<StoreResponse
         return this.timeReceived;
     }
 
+    public Instant timeDecodeStarted() {
+        return this.timeDecodeStarted;
+    }
+
     public Instant timeSent() {
         return this.timeSent;
     }
@@ -233,7 +248,16 @@ public abstract class RntbdRequestRecord extends CompletableFuture<StoreResponse
         return this.args.transportRequestId();
     }
 
-    // endregion
+    public Instant getTimeCompletedOnContext() {
+        return timeCompletedOnContext;
+    }
+
+    public void setTimeCompletedOnContext(Instant timeCompletedOnContext) {
+        this.timeCompletedOnContext = timeCompletedOnContext;
+    }
+
+
+// endregion
 
     // region Methods
 
@@ -312,7 +336,7 @@ public abstract class RntbdRequestRecord extends CompletableFuture<StoreResponse
     // region Types
 
     public enum Stage {
-        QUEUED, CHANNEL_ACQUISITION_STARTED, PIPELINED, SENT, RECEIVED, COMPLETED
+        QUEUED, CHANNEL_ACQUISITION_STARTED, PIPELINED, SENT, DECODE_STARTED, RECEIVED, COMPLETED
     }
 
     static final class JsonSerializer extends StdSerializer<RntbdRequestRecord> {

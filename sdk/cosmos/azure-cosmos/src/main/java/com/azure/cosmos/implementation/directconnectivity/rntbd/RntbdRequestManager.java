@@ -8,6 +8,7 @@ import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.implementation.BadRequestException;
 import com.azure.cosmos.implementation.ConflictException;
 import com.azure.cosmos.implementation.CosmosError;
+import com.azure.cosmos.implementation.CosmosSchedulers;
 import com.azure.cosmos.implementation.ForbiddenException;
 import com.azure.cosmos.implementation.GoneException;
 import com.azure.cosmos.implementation.InternalServerErrorException;
@@ -50,11 +51,15 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.internal.ThrowableUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
 import javax.net.ssl.SSLException;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -62,6 +67,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.azure.cosmos.implementation.HttpConstants.StatusCodes;
 import static com.azure.cosmos.implementation.HttpConstants.SubStatusCodes;
@@ -96,6 +102,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
     private final ChannelHealthChecker healthChecker;
     private final int pendingRequestLimit;
     private final ConcurrentHashMap<Long, RntbdRequestRecord> pendingRequests;
+    private final List<RntbdRequestRecord> pendingRequestsList;
     private final Timestamps timestamps = new Timestamps();
 
     private boolean closingExceptionally = false;
@@ -111,6 +118,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         checkNotNull(healthChecker, "healthChecker");
 
         this.pendingRequests = new ConcurrentHashMap<>(pendingRequestLimit);
+        this.pendingRequestsList = new ArrayList<>();
         this.pendingRequestLimit = pendingRequestLimit;
         this.healthChecker = healthChecker;
     }
@@ -533,7 +541,6 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             //logger.info("MESSAGE WRITE: " + context.channel().id() + "|" + record.transportRequestId());
             context.write(this.addPendingRequestRecord(context, record), promise).addListener(completed -> {
               //  logger.info("MESSAGE WRITE FINISH: " + context.channel().id() + "|" + record.transportRequestId());
-
                 record.stage(RntbdRequestRecord.Stage.SENT);
                 if (completed.isSuccess()) {
                     this.timestamps.channelWriteCompleted();
@@ -589,7 +596,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
     boolean isServiceable(final int demand) {
         reportIssueUnless(this.hasRequestedRntbdContext(), this, "Direct TCP context request was not issued");
         final int limit = this.hasRntbdContext() ? this.pendingRequestLimit : Math.min(this.pendingRequestLimit, demand);
-        return this.pendingRequests.size() < limit;
+        return this.pendingRequests.size() < limit && this.hasRntbdContext();
     }
 
     void pendWrite(final ByteBuf out, final ChannelPromise promise) {
@@ -611,6 +618,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
             reportIssueUnless(current == null, context, "id: {}, current: {}, request: {}", record);
             record.pendingRequestQueueSize(pendingRequests.size());
+            this.pendingRequestsList.add(record);
 
 //            final Timeout pendingRequestTimeout = record.newTimeout(timeout -> {
 //
@@ -741,6 +749,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             return;
         }
 
+        requestRecord.stage(RntbdRequestRecord.Stage.DECODE_STARTED, response.getDecodeStartTime());
         requestRecord.responseLength(response.getMessageLength());
         requestRecord.stage(RntbdRequestRecord.Stage.RECEIVED);
 
@@ -752,13 +761,11 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         long decodeTime = response.getDecodeEndTime().toEpochMilli() - response.getDecodeStartTime().toEpochMilli();
         Instant receive = Instant.now();
         long receiveTime = receive.toEpochMilli() - response.getDecodeEndTime().toEpochMilli();
-        long aggregratedLatency = receive.toEpochMilli() - requestRecord.timeSent().toEpochMilli();
+        long totalLatency = receive.toEpochMilli() - requestRecord.timePipelined().toEpochMilli();
 
-        Instant completedTime = null;
         if ((HttpResponseStatus.OK.code() <= statusCode && statusCode < HttpResponseStatus.MULTIPLE_CHOICES.code()) ||
             statusCode == HttpResponseStatus.NOT_MODIFIED.code()) {
             final StoreResponse storeResponse = response.toStoreResponse(this.contextFuture.getNow(null));
-            completedTime = Instant.now();
             requestRecord.complete(storeResponse);
 
         } else {
@@ -881,23 +888,30 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             BridgeInternal.setResourceAddress(cause, resourceAddress);
 
             requestRecord.completeExceptionally(cause);
-            completedTime = Instant.now();
         }
 
-        long parsingTime = completedTime.toEpochMilli() - requestRecord.timeReceived().toEpochMilli();
+        Instant completeTime = Instant.now();
+        final long parsingTime = completeTime.toEpochMilli() - requestRecord.timeReceived().toEpochMilli();
+        long timePipelined = requestRecord.timeSent().toEpochMilli() - requestRecord.timePipelined().toEpochMilli();
+        AtomicLong timeOnContext = new AtomicLong(-1);
+        if (requestRecord.getTimeCompletedOnContext() != null) {
+            timeOnContext.set(requestRecord.getTimeCompletedOnContext().toEpochMilli() - requestRecord.timePipelined().toEpochMilli());
+        }
 
         logger.info(
-            "MESSAGE RECEIVED {} for request {} : {}|{}|{}|{}|{}|{}|Pending:{}",
+            "MESSAGE RECEIVED {} for request {} : {}|Transit:{}|Decode:{}|Receive:{}|total:{}|parsing:{}|pipeline:{}|context:{}|Pending:{}",
             status,
             response.getTransportRequestId(),
             context.channel().id(),
             transitTime,
             decodeTime,
             receiveTime,
-            aggregratedLatency,
+            totalLatency,
             parsingTime,
+            timePipelined,
+            timeOnContext.get(),
             requestRecord.pendingRequestQueueSize());
-        EventExecutorMonitor.trackLatency( statusCode, transitTime, decodeTime, receiveTime, aggregratedLatency, context.channel().id(), requestRecord.pendingRequestQueueSize(), parsingTime);
+        EventExecutorMonitor.trackLatency( statusCode, transitTime, decodeTime, receiveTime, totalLatency, context.channel().id(), requestRecord.pendingRequestQueueSize(), parsingTime, timePipelined, timeOnContext.get());
 
     }
 
@@ -908,6 +922,9 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         negotiator.removeOutboundHandler();
 
         if (!this.pendingWrites.isEmpty()) {
+            for (int i =0; i< this.pendingWritesCnt.get() && i < this.pendingRequestsList.size();i++) {
+                this.pendingRequestsList.get(i).setTimeCompletedOnContext(Instant.now());
+            }
             this.pendingWrites.writeAndRemoveAll(context);
             this.pendingWritesCnt.set(0);
             context.flush();
