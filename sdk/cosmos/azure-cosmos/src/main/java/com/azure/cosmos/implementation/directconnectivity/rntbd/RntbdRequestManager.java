@@ -45,6 +45,7 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCounted;
+import io.netty.util.Timeout;
 import io.netty.util.concurrent.DefaultEventExecutor;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
@@ -618,7 +619,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
             reportIssueUnless(current == null, context, "id: {}, current: {}, request: {}", record);
             record.pendingRequestQueueSize(pendingRequests.size());
-            this.pendingRequestsList.add(record);
+            //this.pendingRequestsList.add(record);
 
 //            final Timeout pendingRequestTimeout = record.newTimeout(timeout -> {
 //
@@ -757,11 +758,11 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         final UUID activityId = response.getActivityId();
         final int statusCode = status.code();
 
-        long transitTime = response.getDecodeStartTime().toEpochMilli() - requestRecord.timeSent().toEpochMilli();
-        long decodeTime = response.getDecodeEndTime().toEpochMilli() - response.getDecodeStartTime().toEpochMilli();
+//        long transitTime = response.getDecodeStartTime().toEpochMilli() - requestRecord.timeSent().toEpochMilli();
+//        long decodeTime = response.getDecodeEndTime().toEpochMilli() - response.getDecodeStartTime().toEpochMilli();
         Instant receive = Instant.now();
-        long receiveTime = receive.toEpochMilli() - response.getDecodeEndTime().toEpochMilli();
-        long totalLatency = receive.toEpochMilli() - requestRecord.timePipelined().toEpochMilli();
+//        long receiveTime = receive.toEpochMilli() - response.getDecodeEndTime().toEpochMilli();
+//        long totalLatency = receive.toEpochMilli() - requestRecord.timePipelined().toEpochMilli();
 
         if ((HttpResponseStatus.OK.code() <= statusCode && statusCode < HttpResponseStatus.MULTIPLE_CHOICES.code()) ||
             statusCode == HttpResponseStatus.NOT_MODIFIED.code()) {
@@ -898,20 +899,20 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             timeOnContext.set(requestRecord.getTimeCompletedOnContext().toEpochMilli() - requestRecord.timePipelined().toEpochMilli());
         }
 
-        logger.info(
-            "MESSAGE RECEIVED {} for request {} : {}|Transit:{}|Decode:{}|Receive:{}|total:{}|parsing:{}|pipeline:{}|context:{}|Pending:{}",
-            status,
-            response.getTransportRequestId(),
-            context.channel().id(),
-            transitTime,
-            decodeTime,
-            receiveTime,
-            totalLatency,
-            parsingTime,
-            timePipelined,
-            timeOnContext.get(),
-            requestRecord.pendingRequestQueueSize());
-        EventExecutorMonitor.trackLatency( statusCode, transitTime, decodeTime, receiveTime, totalLatency, context.channel().id(), requestRecord.pendingRequestQueueSize(), parsingTime, timePipelined, timeOnContext.get());
+//        logger.debug(
+//            "MESSAGE RECEIVED {} for request {} : {}|Transit:{}|Decode:{}|Receive:{}|total:{}|parsing:{}|pipeline:{}|context:{}|Pending:{}",
+//            status,
+//            response.getTransportRequestId(),
+//            context.channel().id(),
+//            transitTime,
+//            decodeTime,
+//            receiveTime,
+//            totalLatency,
+//            parsingTime,
+//            timePipelined,
+//            timeOnContext.get(),
+//            requestRecord.pendingRequestQueueSize());
+      //  EventExecutorMonitor.trackLatency( statusCode, transitTime, decodeTime, receiveTime, totalLatency, context.channel().id(), requestRecord.pendingRequestQueueSize(), parsingTime, timePipelined, timeOnContext.get());
 
     }
 

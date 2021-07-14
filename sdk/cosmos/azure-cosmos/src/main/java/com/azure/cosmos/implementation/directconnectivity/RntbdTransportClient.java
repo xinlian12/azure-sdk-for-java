@@ -216,7 +216,7 @@ public class RntbdTransportClient extends TransportClient {
 
         final Mono<StoreResponse> result = Mono.fromFuture(record.whenComplete((response, throwable) -> {
             record.stage(RntbdRequestRecord.Stage.COMPLETED);
-            EventExecutorMonitor.trackRecord(record);
+          //  EventExecutorMonitor.trackRecord(record);
 
             if (request.requestContext.cosmosDiagnostics == null) {
                 request.requestContext.cosmosDiagnostics = request.createCosmosDiagnostics();

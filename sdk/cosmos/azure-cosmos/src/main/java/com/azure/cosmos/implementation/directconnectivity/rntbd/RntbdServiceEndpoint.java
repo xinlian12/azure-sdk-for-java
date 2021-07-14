@@ -97,15 +97,14 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
 
         this.serverKey = RntbdUtils.getServerKey(physicalAddress);
         //receiveBufferAllocator.maxMessagesPerRead(16);
-        group.setIoRatio(99);
         final Bootstrap bootstrap = new Bootstrap()
             .channel(NioSocketChannel.class)
             .group(group)
             .option(ChannelOption.ALLOCATOR, config.allocator())
             .option(ChannelOption.AUTO_READ, true)
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.connectTimeoutInMillis())
-           // .option(ChannelOption.SO_RCVBUF, 1048576*1024)
-           // .option(ChannelOption.RCVBUF_ALLOCATOR, receiveBufferAllocator)
+            .option(ChannelOption.SO_RCVBUF, 1048576*1024)
+            .option(ChannelOption.RCVBUF_ALLOCATOR, receiveBufferAllocator)
             .option(ChannelOption.SO_KEEPALIVE, true)
             .remoteAddress(this.serverKey.getHost(), this.serverKey.getPort());
 

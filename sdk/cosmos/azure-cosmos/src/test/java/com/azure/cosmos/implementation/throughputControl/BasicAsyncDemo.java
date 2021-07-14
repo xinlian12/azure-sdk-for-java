@@ -124,8 +124,8 @@ public class BasicAsyncDemo {
 //        } catch (InterruptedException e) {
 //            e.printStackTrace();
 //        }
-       // insertSimpleItemsForRead(2000);
-        runReadItem(READ_CONTAINER_NAME);
+        insertSimpleItemsForRead(9500);
+       // runReadItem(READ_CONTAINER_NAME);
         //   runQueryTest();
         log("Completed");
     }
@@ -635,7 +635,7 @@ public class BasicAsyncDemo {
                 container.createItem(objectNode,
                     new CosmosItemRequestOptions().setConsistencyLevel(ConsistencyLevel.STRONG)).block();
                 System.out.println("Successfully insert: " + i);
-                LargeDocuments.documents.add(id);
+              //  LargeDocuments.documents.add(id);
             } catch (JsonProcessingException e) {
                 e.printStackTrace();
             }

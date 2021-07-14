@@ -26,9 +26,9 @@ public class RntbdSslHandler extends SslHandler {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        if (msg instanceof ByteBuf) {
-            logger.info("channelRead: {} | {} | {}", ctx.channel().id(), ((ByteBuf) msg).readableBytes(), ((ByteBuf) msg).capacity());
-        }
+//        if (msg instanceof ByteBuf) {
+//            logger.info("channelRead: {} | {} | {}", ctx.channel().id(), ((ByteBuf) msg).readableBytes(), ((ByteBuf) msg).capacity());
+//        }
 
         super.channelRead(ctx, msg);
     }
