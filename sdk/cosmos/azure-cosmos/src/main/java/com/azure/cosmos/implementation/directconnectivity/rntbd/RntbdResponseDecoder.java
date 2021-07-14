@@ -3,9 +3,11 @@
 
 package com.azure.cosmos.implementation.directconnectivity.rntbd;
 
+import com.azure.cosmos.implementation.apachecommons.lang.tuple.Pair;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.handler.codec.CorruptedFrameException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,6 +16,8 @@ import java.util.List;
 public final class RntbdResponseDecoder extends ByteToMessageDecoder {
 
     private static final Logger logger = LoggerFactory.getLogger(RntbdResponseDecoder.class);
+    private long packetLength = 0;
+    private State state = State.NONE;
 
     /**
      * Deserialize from an input {@link ByteBuf} to an {@link RntbdResponse} instance.
@@ -27,15 +31,64 @@ public final class RntbdResponseDecoder extends ByteToMessageDecoder {
     @Override
     protected void decode(final ChannelHandlerContext context, final ByteBuf in, final List<Object> out) {
 
-        if (RntbdFramer.canDecodeHead(in)) {
+        long packetLength = this.packetLength;
+        if (packetLength == 0) {
+            packetLength = RntbdResponseStatus.LENGTH;
+        }
 
-            final RntbdResponse response = RntbdResponse.decode(in);
+        if (in.readableBytes() < packetLength) {
+            return;
+        }
 
-            if (response != null) {
-                logger.debug("{} DECODE COMPLETE: {}", context.channel(), response);
-                in.discardReadBytes();
-                out.add(response.retain());
+        if (this.state == State.NONE) {
+            this.packetLength = RntbdFramer.getHeadLength(in);
+            checkPoint(State.HEAD);
+
+            // if got enough length for the head
+            if (in.readableBytes() >= this.packetLength) {
+                decodeHead(context, in, out);
+            }
+        } else if (this.state == State.HEAD) {
+            decodeHead(context, in, out);
+        } else if (this.state == State.BODY) {
+            Pair<RntbdResponse, Long> responseResult = RntbdResponse.decode(in);
+            if (responseResult.getLeft() == null) {
+                // something is wrong
+                throw new CorruptedFrameException("Cannot parse payload");
+            } else {
+                outputRntbdResponse(context, in, out, responseResult.getLeft());
             }
         }
+    }
+
+    private void decodeHead(final ChannelHandlerContext context, final ByteBuf in, final List<Object> out) {
+        // decode head and get the body length
+        Pair<RntbdResponse, Long> responseResult = RntbdResponse.decode(in);
+        if (responseResult.getLeft() != null) {
+            outputRntbdResponse(context, in, out, responseResult.getLeft());
+        } else {
+            // get body length
+            this.packetLength += responseResult.getRight();
+            checkPoint(State.BODY);
+        }
+    }
+
+    private void outputRntbdResponse(final ChannelHandlerContext context, final ByteBuf in, final List<Object> out, RntbdResponse response) {
+        logger.debug("DECODE COMPLETE: {} | {}", context.channel().id(), response.getTransportRequestId());
+        in.discardReadBytes();
+        out.add(response.retain());
+
+        this.packetLength = 0;
+        this.state = State.NONE;
+    }
+
+    private void checkPoint(State state) {
+        this.state = state;
+    }
+
+    private enum State {
+        NONE,
+        HEAD,
+        BODY
     }
 }

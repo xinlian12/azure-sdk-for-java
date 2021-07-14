@@ -4,6 +4,7 @@
 package com.azure.cosmos.implementation.directconnectivity.rntbd;
 
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdEndpoint.Config;
+import io.netty.channel.AdaptiveRecvByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
@@ -123,6 +124,7 @@ public class RntbdClientChannelHandler extends ChannelInitializer<Channel> imple
                 0,
                 TimeUnit.NANOSECONDS));
 
+        channel.config().setRecvByteBufAllocator(new AdaptiveRecvByteBufAllocator());
         channel.attr(REQUEST_MANAGER).set(requestManager);
     }
 }

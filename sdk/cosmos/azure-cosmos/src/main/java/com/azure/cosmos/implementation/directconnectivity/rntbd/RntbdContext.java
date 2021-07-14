@@ -98,7 +98,7 @@ public final class RntbdContext {
         final int headersLength = responseStatus.getHeadersLength();
 
         if (statusCode < 200 || statusCode >= 400) {
-            if (!RntbdFramer.canDecodePayload(in, in.readerIndex() + headersLength)) {
+            if (!RntbdFramer.canDecodePayload(in, in.readerIndex() + headersLength).getLeft()) {
                 in.resetReaderIndex();
                 return null;
             }
