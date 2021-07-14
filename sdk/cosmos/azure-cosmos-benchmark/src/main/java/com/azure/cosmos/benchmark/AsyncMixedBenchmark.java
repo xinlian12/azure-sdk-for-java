@@ -49,11 +49,11 @@ class AsyncMixedBenchmark extends AsyncBenchmark<Object> {
             int index = r.nextInt(1000);
 
             RequestOptions options = new RequestOptions();
-            String partitionKeyValue = docsToRead.get(index).getId();
+            String partitionKeyValue = docIdsToRead.get(index);
 
-            options.setPartitionKey(new PartitionKey(docsToRead.get(index).getId()));
+            options.setPartitionKey(new PartitionKey(docIdsToRead.get(index)));
 
-            obs = cosmosAsyncContainer.readItem(docsToRead.get(index).getId(),
+            obs = cosmosAsyncContainer.readItem(docIdsToRead.get(index),
                                               new PartitionKey(partitionKeyValue),
                                               PojoizedJson.class)
                     .flux();

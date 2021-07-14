@@ -113,7 +113,7 @@ public class Configuration {
         + "\n\t* writes 10k documents initially, which are used in the reads"
         + "\tLinkedInCtlWorkload - ctl for LinkedIn workload.*\n",
         converter = Operation.OperationTypeConverter.class)
-    private Operation operation = Operation.WriteThroughput;
+    private Operation operation = Operation.ReadLatency;
 
     @Parameter(names = "-concurrency", description = "Degree of Concurrency in Inserting Documents."
             + " If this value is not specified, the max connection pool size will be used as the concurrency level.")
@@ -191,6 +191,30 @@ public class Configuration {
 
     @Parameter(names = {"-h", "-help", "--help"}, description = "Help", help = true)
     private boolean help = false;
+
+    public void setServiceEndpoint(String serviceEndpoint) {
+        this.serviceEndpoint = serviceEndpoint;
+    }
+
+    public void setMasterKey(String masterKey) {
+        this.masterKey = masterKey;
+    }
+
+    public void setDatabaseId(String databaseId) {
+        this.databaseId = databaseId;
+    }
+
+    public void setCollectionId(String collectionId) {
+        this.collectionId = collectionId;
+    }
+
+    public void setNumberOfPreCreatedDocuments(int numberOfPreCreatedDocuments) {
+        this.numberOfPreCreatedDocuments = numberOfPreCreatedDocuments;
+    }
+
+    public void setConcurrency(Integer concurrency) {
+        this.concurrency = concurrency;
+    }
 
     public enum Operation {
         ReadThroughput,

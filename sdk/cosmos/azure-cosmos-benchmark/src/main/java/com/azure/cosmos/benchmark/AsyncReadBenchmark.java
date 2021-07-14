@@ -54,11 +54,11 @@ class AsyncReadBenchmark extends AsyncBenchmark<PojoizedJson> {
 
     @Override
     protected void performWorkload(BaseSubscriber<PojoizedJson> baseSubscriber, long i) throws InterruptedException {
-        int index = (int) (i % docsToRead.size());
-        PojoizedJson doc = docsToRead.get(index);
-        String partitionKeyValue = doc.getId();
+        int index = (int) (i % docIdsToRead.size());
+        String docId = docIdsToRead.get(index);
+        String partitionKeyValue = docId;
 
-        Mono<PojoizedJson> result = cosmosAsyncContainer.readItem(doc.getId(),
+        Mono<PojoizedJson> result = cosmosAsyncContainer.readItem(docId,
             new PartitionKey(partitionKeyValue),
             PojoizedJson.class).map(CosmosItemResponse::getItem);
 

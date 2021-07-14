@@ -65,7 +65,8 @@ abstract class AsyncBenchmark<T> {
 
     final String partitionKey;
     final Configuration configuration;
-    final List<PojoizedJson> docsToRead;
+//    final List<PojoizedJson> docsToRead;
+    final List<String> docIdsToRead = new ArrayList<>();
     final Semaphore concurrencyControlSemaphore;
     Timer latency;
 
@@ -132,62 +133,73 @@ abstract class AsyncBenchmark<T> {
 
         concurrencyControlSemaphore = new Semaphore(cfg.getConcurrency());
 
-        ArrayList<Flux<PojoizedJson>> createDocumentObservables = new ArrayList<>();
+        // Already has a container populated with large documents, so will just go ahead using it.
+        String query = "SELECT TOP 10000 VALUE c.id FROM c";
 
-        if (configuration.getOperationType() != Configuration.Operation.WriteLatency
-                && configuration.getOperationType() != Configuration.Operation.WriteThroughput
-                && configuration.getOperationType() != Configuration.Operation.ReadMyWrites) {
-            logger.info("PRE-populating {} documents ....", cfg.getNumberOfPreCreatedDocuments());
-            String dataFieldValue = RandomStringUtils.randomAlphabetic(cfg.getDocumentDataFieldSize());
-            for (int i = 0; i < cfg.getNumberOfPreCreatedDocuments(); i++) {
-                String uuid = UUID.randomUUID().toString();
-                PojoizedJson newDoc = BenchmarkHelper.generateDocument(uuid,
-                    dataFieldValue,
-                    partitionKey,
-                    configuration.getDocumentDataFieldCount());
-                Flux<PojoizedJson> obs = cosmosAsyncContainer
-                    .createItem(newDoc)
-                    .retryWhen(Retry.max(5).filter((error) -> {
-                        if (!(error instanceof CosmosException)) {
-                            return false;
-                        }
-                        final CosmosException cosmosException = (CosmosException)error;
-                        if (cosmosException.getStatusCode() == 410 ||
-                                cosmosException.getStatusCode() == 408 ||
-                                cosmosException.getStatusCode() == 429 ||
-                                cosmosException.getStatusCode() == 503) {
-                            return true;
-                        }
+        cosmosAsyncContainer.queryItems(query, String.class)
+            .collectList()
+            .flatMap(result -> {
+                docIdsToRead.addAll(result);
+                return Mono.empty();
+            })
+            .block();
 
-                        return false;
-                    }))
-                    .onErrorResume(
-                        (error) -> {
-                            if (!(error instanceof CosmosException)) {
-                                return false;
-                            }
-                            final CosmosException cosmosException = (CosmosException)error;
-                            if (cosmosException.getStatusCode() == 409) {
-                                return true;
-                            }
-
-                            return false;
-                        },
-                        (conflictException) -> cosmosAsyncContainer.readItem(
-                            uuid, new PartitionKey(partitionKey), PojoizedJson.class)
-                    )
-                    .map(resp -> {
-                        PojoizedJson x =
-                            resp.getItem();
-                        return x;
-                    })
-                    .flux();
-                createDocumentObservables.add(obs);
-            }
-        }
-
-        docsToRead = Flux.merge(Flux.fromIterable(createDocumentObservables), 100).collectList().block();
-        logger.info("Finished pre-populating {} documents", cfg.getNumberOfPreCreatedDocuments());
+//        ArrayList<Flux<PojoizedJson>> createDocumentObservables = new ArrayList<>();
+//
+//        if (configuration.getOperationType() != Configuration.Operation.WriteLatency
+//                && configuration.getOperationType() != Configuration.Operation.WriteThroughput
+//                && configuration.getOperationType() != Configuration.Operation.ReadMyWrites) {
+//            logger.info("PRE-populating {} documents ....", cfg.getNumberOfPreCreatedDocuments());
+//            String dataFieldValue = RandomStringUtils.randomAlphabetic(cfg.getDocumentDataFieldSize());
+//            for (int i = 0; i < cfg.getNumberOfPreCreatedDocuments(); i++) {
+//                String uuid = UUID.randomUUID().toString();
+//                PojoizedJson newDoc = BenchmarkHelper.generateDocument(uuid,
+//                    dataFieldValue,
+//                    partitionKey,
+//                    configuration.getDocumentDataFieldCount());
+//                Flux<PojoizedJson> obs = cosmosAsyncContainer
+//                    .createItem(newDoc)
+//                    .retryWhen(Retry.max(5).filter((error) -> {
+//                        if (!(error instanceof CosmosException)) {
+//                            return false;
+//                        }
+//                        final CosmosException cosmosException = (CosmosException)error;
+//                        if (cosmosException.getStatusCode() == 410 ||
+//                                cosmosException.getStatusCode() == 408 ||
+//                                cosmosException.getStatusCode() == 429 ||
+//                                cosmosException.getStatusCode() == 503) {
+//                            return true;
+//                        }
+//
+//                        return false;
+//                    }))
+//                    .onErrorResume(
+//                        (error) -> {
+//                            if (!(error instanceof CosmosException)) {
+//                                return false;
+//                            }
+//                            final CosmosException cosmosException = (CosmosException)error;
+//                            if (cosmosException.getStatusCode() == 409) {
+//                                return true;
+//                            }
+//
+//                            return false;
+//                        },
+//                        (conflictException) -> cosmosAsyncContainer.readItem(
+//                            uuid, new PartitionKey(partitionKey), PojoizedJson.class)
+//                    )
+//                    .map(resp -> {
+//                        PojoizedJson x =
+//                            resp.getItem();
+//                        return x;
+//                    })
+//                    .flux();
+//                createDocumentObservables.add(obs);
+//            }
+//        }
+//
+//        docsToRead = Flux.merge(Flux.fromIterable(createDocumentObservables), 100).collectList().block();
+        logger.info("Finished pre-populating {} documents", docIdsToRead.size());
 
         init();
 

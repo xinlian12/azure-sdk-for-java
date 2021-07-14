@@ -77,12 +77,12 @@ class AsyncQueryBenchmark extends AsyncBenchmark<FeedResponse<PojoizedJson>> {
         if (configuration.getOperationType() == Configuration.Operation.QueryCross) {
 
             int index = r.nextInt(this.configuration.getNumberOfPreCreatedDocuments());
-            String sqlQuery = "Select * from c where c.id = \"" + docsToRead.get(index).getId() + "\"";
+            String sqlQuery = "Select * from c where c.id = \"" + docIdsToRead.get(index) + "\"";
             obs = cosmosAsyncContainer.queryItems(sqlQuery, options, PojoizedJson.class).byPage();
         } else if (configuration.getOperationType() == Configuration.Operation.QuerySingle) {
 
             int index = r.nextInt(this.configuration.getNumberOfPreCreatedDocuments());
-            String pk = docsToRead.get(index).getProperty(partitionKey);
+            String pk = docIdsToRead.get(index);
             options.setPartitionKey(new PartitionKey(pk));
             String sqlQuery = "Select * from c where c." + partitionKey + " = \"" + pk + "\"";
             obs = cosmosAsyncContainer.queryItems(sqlQuery, options, PojoizedJson.class).byPage();
@@ -112,8 +112,8 @@ class AsyncQueryBenchmark extends AsyncBenchmark<FeedResponse<PojoizedJson>> {
             options.setMaxDegreeOfParallelism(200);
             List<SqlParameter> parameters = new ArrayList<>();
             int j = 0;
-            for(PojoizedJson doc: docsToRead) {
-                String partitionKeyValue = doc.getId();
+            for(String docId: docIdsToRead) {
+                String partitionKeyValue = docId;
                 parameters.add(new SqlParameter("@param" + j, partitionKeyValue));
                 j++;
             }
@@ -126,7 +126,7 @@ class AsyncQueryBenchmark extends AsyncBenchmark<FeedResponse<PojoizedJson>> {
         } else if (configuration.getOperationType() == Configuration.Operation.ReadAllItemsOfLogicalPartition) {
 
             int index = r.nextInt(this.configuration.getNumberOfPreCreatedDocuments());
-            String pk = docsToRead.get(index).getProperty(partitionKey);
+            String pk = docIdsToRead.get(index);
             obs = cosmosAsyncContainer.readAllItems(new PartitionKey(pk), options, PojoizedJson.class).byPage();
         } else {
             throw new IllegalArgumentException("Unsupported Operation: " + configuration.getOperationType());

@@ -12,25 +12,23 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class PojoizedJson {
-    private final Map<String, String> instanceProps = new HashMap<>();
 
-    @JsonAnyGetter
-    public Map<String, String> getInstance() {
-        return instanceProps;
-    }
+    private String id;
+    private String myprop;
 
-    @JsonAnySetter
-    public void setProperty(String name, String value) {
-        this.instanceProps.put(name, value);
-    }
-
-    @JsonIgnore
     public String getId() {
-        return instanceProps.get("id");
+        return id;
     }
 
-    @JsonIgnore
-    public String getProperty(String propName) {
-        return instanceProps.get(propName);
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getMyprop() {
+        return myprop;
+    }
+
+    public void setMyprop(String myprop) {
+        this.myprop = myprop;
     }
 }

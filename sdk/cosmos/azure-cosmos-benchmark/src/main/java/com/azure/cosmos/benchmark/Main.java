@@ -24,6 +24,10 @@ public class Main {
             LOGGER.debug("Parsing the arguments ...");
             Configuration cfg = new Configuration();
             cfg.tryGetValuesFromSystem();
+            cfg.setNumberOfPreCreatedDocuments(10000);
+            cfg.setDatabaseId("perfdb");
+            cfg.setCollectionId("perfcontRead");
+            cfg.setConcurrency(128);
 
             JCommander jcommander = new JCommander(cfg, args);
             if (cfg.isHelp()) {

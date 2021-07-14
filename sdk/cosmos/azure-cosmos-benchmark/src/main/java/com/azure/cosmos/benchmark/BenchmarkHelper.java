@@ -10,12 +10,8 @@ public class BenchmarkHelper {
     public static PojoizedJson generateDocument(String idString, String dataFieldValue, String partitionKey,
                                          int dataFieldCount) {
         PojoizedJson instance = new PojoizedJson();
-        Map<String, String> properties = instance.getInstance();
-        properties.put("id", idString);
-        properties.put(partitionKey, idString);
-        for (int i = 0; i < dataFieldCount; i++) {
-            properties.put("dataField" + i, dataFieldValue);
-        }
+        instance.setId(idString);
+        instance.setMyprop(dataFieldValue);
 
         return instance;
     }
