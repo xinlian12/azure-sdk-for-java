@@ -8,7 +8,10 @@ public enum RntbdChannelAcquisitionEventType {
     ADD_TO_PENDING_QUEUE("pending"),
     PENDING_TIME_OUT("pendingTimeout"),
     ATTEMPT_TO_CREATE_NEW_CHANNEL("startNew"),
-    ATTEMPT_TO_CREATE_NEW_CHANNEL_COMPLETE("completeNew");
+    ATTEMPT_TO_CREATE_NEW_CHANNEL_COMPLETE("completeNew"),
+    NOTIFY_CHANNEL_COMPLETE("notifyChannelComplete"),
+    CHANNEL_ACQUISITION_STARTED("channelAcquisitionStarted"),
+    ACQUIRE_CHANNEL_COMPLETED("acquireChannelCompleted");
 
     private String name;
     RntbdChannelAcquisitionEventType(String name) {

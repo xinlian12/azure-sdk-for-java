@@ -358,6 +358,9 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         final RntbdRequestRecord requestRecord = new AsyncRntbdRequestRecord(requestArgs, this.requestTimer);
         requestRecord.channelAcquisitionContextEnabled(this.channelAcquisitionContextEnabled);
         requestRecord.stage(RntbdRequestRecord.Stage.CHANNEL_ACQUISITION_STARTED);
+        RntbdChannelAcquisitionTimeline.startNewEvent(
+            requestRecord.getChannelAcquisitionTimeline(),
+            RntbdChannelAcquisitionEventType.CHANNEL_ACQUISITION_STARTED);
         final Future<Channel> connectedChannel = this.channelPool.acquire(requestRecord.getChannelAcquisitionTimeline());
 
         logger.debug("\n  [{}]\n  {}\n  WRITE WHEN CONNECTED {}", this, requestArgs, connectedChannel);
@@ -374,12 +377,17 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
     private RntbdRequestRecord writeWhenConnected(
         final RntbdRequestRecord requestRecord, final Future<? super Channel> connected) {
 
+        RntbdChannelAcquisitionTimeline.startNewEvent(
+            requestRecord.getChannelAcquisitionTimeline(),
+            RntbdChannelAcquisitionEventType.ACQUIRE_CHANNEL_COMPLETED);
+
         if (connected.isSuccess()) {
             final Channel channel = (Channel) connected.getNow();
             assert channel != null : "impossible";
-            this.releaseToPool(channel);
+            //this.releaseToPool(channel);
             requestRecord.channelTaskQueueLength(RntbdUtils.tryGetExecutorTaskQueueSize(channel.eventLoop()));
-            channel.write(requestRecord.stage(RntbdRequestRecord.Stage.PIPELINED));
+            channel.write(requestRecord.stage(RntbdRequestRecord.Stage.PIPELINED))
+                .addListener(ignoreResponse -> this.releaseToPool(channel));
             return requestRecord;
         }
 

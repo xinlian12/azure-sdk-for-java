@@ -1025,10 +1025,15 @@ public final class RntbdClientChannelPool implements ChannelPool {
     }
 
     private void safeNotifyChannelConnect(final ChannelFuture future, final Promise<Channel> promise) {
+        if (promise instanceof ChannelPromiseWithExpiryTime) {
+            RntbdChannelAcquisitionTimeline timeline = ((ChannelPromiseWithExpiryTime) promise).getChannelAcquisitionTimeline();
+            RntbdChannelAcquisitionTimeline.startNewEvent(timeline, RntbdChannelAcquisitionEventType.ATTEMPT_TO_CREATE_NEW_CHANNEL_COMPLETE);
+        }
+
         if (this.executor.inEventLoop()) {
             notifyChannelConnect(future, promise);
         } else {
-            this.executor.submit(() ->  notifyChannelConnect(future, promise));
+            this.executor.execute(() -> notifyChannelConnect(future, promise));
         }
     }
 
@@ -1118,7 +1123,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
             if (promise instanceof ChannelPromiseWithExpiryTime) {
                 RntbdChannelAcquisitionTimeline.startNewEvent(
                     ((ChannelPromiseWithExpiryTime) promise).getChannelAcquisitionTimeline(),
-                    RntbdChannelAcquisitionEventType.ATTEMPT_TO_CREATE_NEW_CHANNEL_COMPLETE
+                    RntbdChannelAcquisitionEventType.NOTIFY_CHANNEL_COMPLETE
                 );
             }
             this.connecting.set(false);
