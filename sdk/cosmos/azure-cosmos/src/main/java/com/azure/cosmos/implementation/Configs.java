@@ -99,6 +99,10 @@ public class Configs {
     private static final String OPEN_CONNECTIONS_RETRIES_COUNT_NAME = "COSMOS.OPEN_CONNECTIONS_RETRIES_COUNT";
     private static final int DEFAULT_OPEN_CONNECTIONS_RETRIES_COUNT = 1;
 
+    // DoResolveAddress Constants
+    private static final String ENABLE_RESOLVE_ADDRESS_IN_BACKGROUND_NAME = "COSMOS.ENABLE_RESOLVE_ADDRESS_IN_BACKGROUND_NAME";
+    private static final boolean DEFAULT_ENABLE_RESOLVE_ADDRESS_IN_BACKGROUND = true;
+
     public Configs() {
         this.sslContext = sslContextInit();
     }
@@ -264,6 +268,12 @@ public class Configs {
         return getJVMConfigAsBoolean(
             SWITCH_OFF_IO_THREAD_FOR_RESPONSE_NAME,
             DEFAULT_SWITCH_OFF_IO_THREAD_FOR_RESPONSE);
+    }
+
+    public static boolean shouldEnableAddressResolveInBackground() {
+        return getJVMConfigAsBoolean(
+            ENABLE_RESOLVE_ADDRESS_IN_BACKGROUND_NAME,
+            DEFAULT_ENABLE_RESOLVE_ADDRESS_IN_BACKGROUND);
     }
 
     public static int getOpenConnectionsRetriesCount() {

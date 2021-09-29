@@ -8,6 +8,7 @@ import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.implementation.AuthorizationTokenType;
 import com.azure.cosmos.implementation.Configs;
 import com.azure.cosmos.implementation.Constants;
+import com.azure.cosmos.implementation.CosmosSchedulers;
 import com.azure.cosmos.implementation.DiagnosticsClientContext;
 import com.azure.cosmos.implementation.DocumentCollection;
 import com.azure.cosmos.implementation.Exceptions;
@@ -44,13 +45,16 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -92,6 +96,7 @@ public class GatewayAddressCache implements IAddressCache {
     private final boolean tcpConnectionEndpointRediscoveryEnabled;
 
     private final ConcurrentHashMap<String, ForcedRefreshMetadata> lastForcedRefreshMap;
+    private final Set<String> hostNameSet;
 
     public GatewayAddressCache(
         DiagnosticsClientContext clientContext,
@@ -138,6 +143,37 @@ public class GatewayAddressCache implements IAddressCache {
         this.serverPartitionAddressToPkRangeIdMap = new ConcurrentHashMap<>();
         this.tcpConnectionEndpointRediscoveryEnabled = tcpConnectionEndpointRediscoveryEnabled;
         this.lastForcedRefreshMap = new ConcurrentHashMap<>();
+        this.hostNameSet = ConcurrentHashMap.newKeySet();
+        this.startResolveAddressTask();
+    }
+
+    private void startResolveAddressTask() {
+        if (Configs.shouldEnableAddressResolveInBackground()) {
+            Mono.delay(Duration.ofMinutes(5))
+                    .flatMap(t -> {
+                        logger.info("Start refresh addresses, total count: {}", this.hostNameSet.size());
+                        return Flux.fromIterable(this.hostNameSet)
+                            .flatMap(address -> {
+                                try{
+                                    InetAddress.getAllByName(address);
+                                } catch (UnknownHostException e) {
+                                    logger.warn("Failed to resolve address for host {}", address, e);
+                                }
+
+                                return Mono.empty();
+                            })
+                            .then();
+                    })
+                .onErrorResume(throwable -> {
+                    logger.warn("Address resolve failed", throwable);
+                    return Mono.empty();
+                })
+                .doOnSuccess(dummy -> {
+                    logger.info("finished refreshing address");
+                })
+                .repeat()
+                .subscribeOn(CosmosSchedulers.COSMOS_PARALLEL);
+        }
     }
 
     public GatewayAddressCache(
@@ -774,6 +810,14 @@ public class GatewayAddressCache implements IAddressCache {
                     return partitionKeyRangeIdentitySet;
                 });
             }
+        }
+
+        if (Configs.shouldEnableAddressResolveInBackground()) {
+            Set<String> distinctHosts = Arrays.stream(addressInfos)
+                .map(addressInformation -> addressInformation.getPhysicalUri().getURI().getHost())
+                .collect(Collectors.toSet());
+
+            this.hostNameSet.addAll(distinctHosts);
         }
 
         return Pair.of(partitionKeyRangeIdentity, addressInfos);
