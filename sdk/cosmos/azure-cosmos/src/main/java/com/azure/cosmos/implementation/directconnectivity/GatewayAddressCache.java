@@ -822,7 +822,7 @@ public class GatewayAddressCache implements IAddressCache {
         return Pair.of(partitionKeyRangeIdentity, addressInfos);
     }
 
-    private Mono resolveDnsName(Set<String> hostNameSet) {
+    private Mono<Void> resolveDnsName(Set<String> hostNameSet) {
         checkArgument(hostNameSet != null, "Host name sets should not be null");
         return Flux.fromIterable(hostNameSet)
             .doOnNext(hostName -> {
