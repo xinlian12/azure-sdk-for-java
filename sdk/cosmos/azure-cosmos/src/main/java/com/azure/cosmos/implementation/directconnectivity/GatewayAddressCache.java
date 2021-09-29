@@ -64,6 +64,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkArgument;
+
 public class GatewayAddressCache implements IAddressCache {
     private final static Duration minDurationBeforeEnforcingCollectionRoutingMapRefresh = Duration.ofSeconds(30);
 
@@ -144,35 +146,23 @@ public class GatewayAddressCache implements IAddressCache {
         this.tcpConnectionEndpointRediscoveryEnabled = tcpConnectionEndpointRediscoveryEnabled;
         this.lastForcedRefreshMap = new ConcurrentHashMap<>();
         this.hostNameSet = ConcurrentHashMap.newKeySet();
-        this.startResolveAddressTask();
+        this.startResolveDnsNameTask();
     }
 
-    private void startResolveAddressTask() {
+    private void startResolveDnsNameTask() {
         if (Configs.shouldEnableAddressResolveInBackground()) {
             Mono.delay(Duration.ofMinutes(5))
                     .flatMap(t -> {
                         logger.info("Start refresh addresses, total count: {}", this.hostNameSet.size());
-                        return Flux.fromIterable(this.hostNameSet)
-                            .flatMap(address -> {
-                                try{
-                                    InetAddress.getAllByName(address);
-                                } catch (UnknownHostException e) {
-                                    logger.warn("Failed to resolve address for host {}", address, e);
-                                }
-
-                                return Mono.empty();
-                            })
-                            .then();
+                        return this.resolveDnsName(this.hostNameSet);
                     })
                 .onErrorResume(throwable -> {
                     logger.warn("Address resolve failed", throwable);
                     return Mono.empty();
                 })
-                .doOnSuccess(dummy -> {
-                    logger.info("finished refreshing address");
-                })
                 .repeat()
-                .subscribeOn(CosmosSchedulers.COSMOS_PARALLEL);
+                .subscribeOn(CosmosSchedulers.COSMOS_PARALLEL)
+                .subscribe();
         }
     }
 
@@ -817,10 +807,32 @@ public class GatewayAddressCache implements IAddressCache {
                 .map(addressInformation -> addressInformation.getPhysicalUri().getURI().getHost())
                 .collect(Collectors.toSet());
 
+            if (!this.hostNameSet.addAll(distinctHosts)) {
+                this.resolveDnsName(distinctHosts)
+                    .onErrorResume(throwable -> {
+                        logger.warn("Failed to do dns name resolution", throwable);
+                        return Mono.empty();
+                    })
+                    .subscribeOn(CosmosSchedulers.COSMOS_PARALLEL)
+                    .subscribe();
+            }
             this.hostNameSet.addAll(distinctHosts);
         }
 
         return Pair.of(partitionKeyRangeIdentity, addressInfos);
+    }
+
+    private Mono resolveDnsName(Set<String> hostNameSet) {
+        checkArgument(hostNameSet != null, "Host name sets should not be null");
+        return Flux.fromIterable(hostNameSet)
+            .doOnNext(hostName -> {
+                try {
+                    InetAddress.getAllByName(hostName);
+                } catch (UnknownHostException e) {
+                    logger.warn("Failed to resolve dns name for {}", hostName);
+                }
+            })
+            .then();
     }
 
     private static AddressInformation toAddressInformation(Address address) {
