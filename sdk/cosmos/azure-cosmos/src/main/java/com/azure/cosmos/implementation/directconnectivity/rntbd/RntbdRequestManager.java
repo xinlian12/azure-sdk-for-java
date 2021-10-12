@@ -10,6 +10,7 @@ import com.azure.cosmos.implementation.ConflictException;
 import com.azure.cosmos.implementation.CosmosError;
 import com.azure.cosmos.implementation.ForbiddenException;
 import com.azure.cosmos.implementation.GoneException;
+import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.InternalServerErrorException;
 import com.azure.cosmos.implementation.InvalidPartitionException;
 import com.azure.cosmos.implementation.LockedException;
@@ -25,7 +26,9 @@ import com.azure.cosmos.implementation.RequestTimeoutException;
 import com.azure.cosmos.implementation.RetryWithException;
 import com.azure.cosmos.implementation.ServiceUnavailableException;
 import com.azure.cosmos.implementation.UnauthorizedException;
+import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
+import com.azure.cosmos.implementation.directconnectivity.WFConstants;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
@@ -740,8 +743,28 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         if ((HttpResponseStatus.OK.code() <= statusCode && statusCode < HttpResponseStatus.MULTIPLE_CHOICES.code()) ||
             statusCode == HttpResponseStatus.NOT_MODIFIED.code()) {
 
-            final StoreResponse storeResponse = response.toStoreResponse(this.contextFuture.getNow(null));
-            requestRecord.complete(storeResponse);
+//            final StoreResponse storeResponse = response.toStoreResponse(this.contextFuture.getNow(null));
+//            requestRecord.complete(storeResponse);
+
+            // ..Fetch required header values
+
+            final long lsn = response.getHeader(RntbdResponseHeader.LSN);
+            final String partitionKeyRangeId = response.getHeader(RntbdResponseHeader.PartitionKeyRangeId);
+
+            // ..Create Error instance
+
+            final CosmosError error = response.hasPayload()
+                ? new CosmosError(RntbdObjectMapper.readTree(response))
+                : new CosmosError(Integer.toString(statusCode), status.reasonPhrase(), status.codeClass().name());
+
+            // ..Map RNTBD response headers to HTTP response headers
+
+            final Map<String, String> responseHeaders = response.getHeaders().asMap(
+                this.rntbdContext().orElseThrow(IllegalStateException::new), activityId
+            );
+
+            requestRecord.completeExceptionally(
+                new NotFoundException(error, lsn, partitionKeyRangeId, responseHeaders));
 
         } else {
 

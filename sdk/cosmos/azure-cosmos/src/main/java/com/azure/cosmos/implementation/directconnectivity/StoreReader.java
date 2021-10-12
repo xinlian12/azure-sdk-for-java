@@ -717,6 +717,8 @@ public class StoreReader {
             }
 
             if ((headerValue = storeResponse.getHeaderValue(WFConstants.BackendHeaders.GLOBAL_COMMITTED_LSN)) != null) {
+                System.out.println("No Exception: " + headerValue);
+
                 globalCommittedLSN = Long.parseLong(headerValue);
             }
 
@@ -800,7 +802,7 @@ public class StoreReader {
 
                 headerValue = cosmosException.getResponseHeaders().get(WFConstants.BackendHeaders.GLOBAL_COMMITTED_LSN);
                 if (!Strings.isNullOrEmpty(headerValue)) {
-                    globalCommittedLSN = Long.parseLong(headerValue);
+                    globalCommittedLSN = Integer.parseInt(headerValue);
                 }
 
                 headerValue = cosmosException.getResponseHeaders().get(HttpConstants.HttpHeaders.BACKEND_REQUEST_DURATION_MILLISECONDS);
