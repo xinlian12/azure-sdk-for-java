@@ -3,6 +3,11 @@
 
 package com.azure.cosmos.benchmark;
 
+import com.azure.cosmos.ConsistencyLevel;
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.benchmark.ctl.AsyncCtlWorkload;
 import com.azure.cosmos.benchmark.encryption.AsyncEncryptionBenchmark;
 import com.azure.cosmos.benchmark.encryption.AsyncEncryptionQueryBenchmark;
@@ -10,12 +15,14 @@ import com.azure.cosmos.benchmark.encryption.AsyncEncryptionQuerySinglePartition
 import com.azure.cosmos.benchmark.encryption.AsyncEncryptionReadBenchmark;
 import com.azure.cosmos.benchmark.encryption.AsyncEncryptionWriteBenchmark;
 import com.azure.cosmos.benchmark.linkedin.LICtlWorkload;
+import com.azure.cosmos.models.PartitionKey;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.ParameterException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import static com.azure.cosmos.benchmark.Configuration.Operation.CtlWorkload;
 import static com.azure.cosmos.benchmark.Configuration.Operation.LinkedInCtlWorkload;
@@ -27,33 +34,21 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
         try {
-            LOGGER.debug("Parsing the arguments ...");
-            Configuration cfg = new Configuration();
-            cfg.tryGetValuesFromSystem();
+            CosmosAsyncClient client = new CosmosClientBuilder()
+                .endpoint("")
+                .key("")
+                .consistencyLevel(ConsistencyLevel.STRONG)
+                .buildAsyncClient();
 
-            JCommander jcommander = new JCommander(cfg, args);
-            if (cfg.isHelp()) {
-                // prints out the usage help
-                jcommander.usage();
-                return;
+
+            CosmosAsyncContainer container = client.getDatabase("testdb").getContainer("testContainer");
+
+            try {
+                container.readItem(UUID.randomUUID().toString(), new PartitionKey("mypk"), TestItem.class).block();
+                //container.readItem("a1302ed6-7e8e-4571-8644-73594d0dda2e", new PartitionKey("mypk"), TestItem.class).block();
             }
-
-            validateConfiguration(cfg);
-
-            if (cfg.isSync()) {
-                syncBenchmark(cfg);
-            } else {
-                if (cfg.getOperationType().equals(ReadThroughputWithMultipleClients)) {
-                    asyncMultiClientBenchmark(cfg);
-                } else if (cfg.getOperationType().equals(CtlWorkload)) {
-                    asyncCtlWorkload(cfg);
-                } else if (cfg.getOperationType().equals(LinkedInCtlWorkload)) {
-                    linkedInCtlWorkload(cfg);
-                } else if (cfg.isEncryptionEnabled()) {
-                    asyncEncryptionBenchmark(cfg);
-                } else {
-                    asyncBenchmark(cfg);
-                }
+            catch (Exception e) {
+                System.out.println(e.getStackTrace());
             }
         } catch (ParameterException e) {
             // if any error in parsing the cmd-line options print out the usage help
