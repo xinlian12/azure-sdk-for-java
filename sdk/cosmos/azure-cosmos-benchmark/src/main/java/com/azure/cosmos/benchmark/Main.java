@@ -3,27 +3,13 @@
 
 package com.azure.cosmos.benchmark;
 
-import com.azure.cosmos.ConsistencyLevel;
-import com.azure.cosmos.CosmosAsyncClient;
-import com.azure.cosmos.CosmosAsyncContainer;
-import com.azure.cosmos.CosmosClientBuilder;
-import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.benchmark.ctl.AsyncCtlWorkload;
-import com.azure.cosmos.benchmark.encryption.AsyncEncryptionBenchmark;
-import com.azure.cosmos.benchmark.encryption.AsyncEncryptionQueryBenchmark;
-import com.azure.cosmos.benchmark.encryption.AsyncEncryptionQuerySinglePartitionMultiple;
-import com.azure.cosmos.benchmark.encryption.AsyncEncryptionReadBenchmark;
-import com.azure.cosmos.benchmark.encryption.AsyncEncryptionWriteBenchmark;
 import com.azure.cosmos.benchmark.linkedin.LICtlWorkload;
-import com.azure.cosmos.models.PartitionKey;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.ParameterException;
-import org.apache.commons.lang3.SystemUtils;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Optional;
-import java.util.UUID;
 
 import static com.azure.cosmos.benchmark.Configuration.Operation.CtlWorkload;
 import static com.azure.cosmos.benchmark.Configuration.Operation.LinkedInCtlWorkload;
@@ -35,27 +21,32 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
         try {
+            LOGGER.debug("Parsing the arguments ...");
+            Configuration cfg = new Configuration();
+            cfg.tryGetValuesFromSystem();
 
-            System.out.println(SystemUtils.IS_OS_LINUX);
-            System.out.println(SystemUtils.IS_OS_UNIX);
-            System.out.println(SystemUtils.OS_NAME);
-            System.out.println(SystemUtils.OS_VERSION);
-            System.out.println(SystemUtils.OS_ARCH);
-            CosmosAsyncClient client = new CosmosClientBuilder()
-                .endpoint("")
-                .key("")
-                .consistencyLevel(ConsistencyLevel.STRONG)
-                .buildAsyncClient();
-
-
-            CosmosAsyncContainer container = client.getDatabase("testdb").getContainer("testContainer");
-
-            try {
-                container.readItem(UUID.randomUUID().toString(), new PartitionKey("mypk"), TestItem.class).block();
-                //container.readItem("a1302ed6-7e8e-4571-8644-73594d0dda2e", new PartitionKey("mypk"), TestItem.class).block();
+            JCommander jcommander = new JCommander(cfg, args);
+            if (cfg.isHelp()) {
+                // prints out the usage help
+                jcommander.usage();
+                return;
             }
-            catch (Exception e) {
-                System.out.println(e.getStackTrace());
+
+            validateConfiguration(cfg);
+
+            if (cfg.isSync()) {
+                syncBenchmark(cfg);
+            } else {
+                if(cfg.getOperationType().equals(ReadThroughputWithMultipleClients)) {
+                    asyncMultiClientBenchmark(cfg);
+                } else if(cfg.getOperationType().equals(CtlWorkload)) {
+                    asyncCtlWorkload(cfg);
+                } else if (cfg.getOperationType().equals(LinkedInCtlWorkload)) {
+                    linkedInCtlWorkload(cfg);
+                }
+                else {
+                    asyncBenchmark(cfg);
+                }
             }
         } catch (ParameterException e) {
             // if any error in parsing the cmd-line options print out the usage help
@@ -153,47 +144,6 @@ public class Main {
 
                 case ReadMyWrites:
                     benchmark = new ReadMyWriteWorkflow(cfg);
-                    break;
-
-                default:
-                    throw new RuntimeException(cfg.getOperationType() + " is not supported");
-            }
-
-            LOGGER.info("Starting {}", cfg.getOperationType());
-            benchmark.run();
-        } finally {
-            if (benchmark != null) {
-                benchmark.shutdown();
-            }
-        }
-    }
-
-    private static void asyncEncryptionBenchmark(Configuration cfg) throws Exception {
-        LOGGER.info("Async encryption benchmark ...");
-        AsyncEncryptionBenchmark<?> benchmark = null;
-        try {
-            switch (cfg.getOperationType()) {
-                case WriteThroughput:
-                case WriteLatency:
-                    benchmark = new AsyncEncryptionWriteBenchmark(cfg);
-                    break;
-
-                case ReadThroughput:
-                case ReadLatency:
-                    benchmark = new AsyncEncryptionReadBenchmark(cfg);
-                    break;
-
-                case QueryCross:
-                case QuerySingle:
-                case QueryParallel:
-                case QueryOrderby:
-                case QueryTopOrderby:
-                case QueryInClauseParallel:
-                    benchmark = new AsyncEncryptionQueryBenchmark(cfg);
-                    break;
-
-                case QuerySingleMany:
-                    benchmark = new AsyncEncryptionQuerySinglePartitionMultiple(cfg);
                     break;
 
                 default:
