@@ -18,6 +18,7 @@ import com.azure.cosmos.benchmark.linkedin.LICtlWorkload;
 import com.azure.cosmos.models.PartitionKey;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.ParameterException;
+import org.apache.commons.lang3.SystemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +35,12 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
         try {
+
+            System.out.println(SystemUtils.IS_OS_LINUX);
+            System.out.println(SystemUtils.IS_OS_UNIX);
+            System.out.println(SystemUtils.OS_NAME);
+            System.out.println(SystemUtils.OS_VERSION);
+            System.out.println(SystemUtils.OS_ARCH);
             CosmosAsyncClient client = new CosmosClientBuilder()
                 .endpoint("")
                 .key("")
