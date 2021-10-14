@@ -709,7 +709,27 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         if (HttpResponseStatus.OK.code() <= statusCode && statusCode < HttpResponseStatus.MULTIPLE_CHOICES.code()) {
 
             final StoreResponse storeResponse = response.toStoreResponse(this.contextFuture.getNow(null));
-            requestRecord.complete(storeResponse);
+//            requestRecord.complete(storeResponse);
+
+            // ..Fetch required header values
+
+            final long lsn = response.getHeader(RntbdResponseHeader.LSN);
+            final String partitionKeyRangeId = response.getHeader(RntbdResponseHeader.PartitionKeyRangeId);
+
+            // ..Create Error instance
+
+            final CosmosError error = response.hasPayload()
+                ? new CosmosError(RntbdObjectMapper.readTree(response))
+                : new CosmosError(Integer.toString(statusCode), status.reasonPhrase(), status.codeClass().name());
+
+            // ..Map RNTBD response headers to HTTP response headers
+
+            final Map<String, String> responseHeaders = response.getHeaders().asMap(
+                this.rntbdContext().orElseThrow(IllegalStateException::new), activityId
+            );
+
+            requestRecord.completeExceptionally(
+                new NotFoundException(error, lsn, partitionKeyRangeId, responseHeaders));
 
         } else {
 

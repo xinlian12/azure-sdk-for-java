@@ -3,6 +3,7 @@
 
 package com.azure.cosmos.implementation.directconnectivity.rntbd;
 
+import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.fasterxml.jackson.annotation.JsonFilter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -24,6 +25,7 @@ import java.util.function.Function;
 
 import static com.azure.cosmos.implementation.HttpConstants.HttpHeaders;
 import static com.azure.cosmos.implementation.directconnectivity.WFConstants.BackendHeaders;
+import static com.azure.cosmos.implementation.directconnectivity.WFConstants.BackendHeaders.GLOBAL_COMMITTED_LSN;
 import static com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdConstants.RntbdIndexingDirective;
 import static com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdConstants.RntbdResponseHeader;
 
@@ -216,7 +218,12 @@ class RntbdResponseHeaders extends RntbdTokenStream<RntbdResponseHeader> {
 
         this.collectEntries((token, toEntry) -> {
             if (token.isPresent()) {
-                builder.put(toEntry.apply(token));
+                if (StringUtils.equals(token.getName(), RntbdResponseHeader.GlobalCommittedLSN.toString())) {
+                    builder.put(new Entry(GLOBAL_COMMITTED_LSN, "3629783308"));
+                    //  builder.put(toEntry.apply(token));
+                } else {
+                    builder.put(toEntry.apply(token));
+                }
             }
         });
 
@@ -252,7 +259,7 @@ class RntbdResponseHeaders extends RntbdTokenStream<RntbdResponseHeader> {
         this.mapValue(this.databaseAccountId, BackendHeaders.DATABASE_ACCOUNT_ID, String::toString, headers);
         this.mapValue(this.disableRntbdChannel, HttpHeaders.DISABLE_RNTBD_CHANNEL, Boolean::parseBoolean, headers);
         this.mapValue(this.eTag, HttpHeaders.E_TAG, String::toString, headers);
-        this.mapValue(this.globalCommittedLSN, BackendHeaders.GLOBAL_COMMITTED_LSN, Long::parseLong, headers);
+        this.mapValue(this.globalCommittedLSN, GLOBAL_COMMITTED_LSN, Long::parseLong, headers);
         this.mapValue(this.hasTentativeWrites, BackendHeaders.HAS_TENTATIVE_WRITES, Boolean::parseBoolean, headers);
         this.mapValue(this.indexingDirective, HttpHeaders.INDEXING_DIRECTIVE, RntbdIndexingDirective::valueOf, headers);
         this.mapValue(this.isRUPerMinuteUsed, BackendHeaders.IS_RU_PER_MINUTE_USED, Byte::parseByte, headers);
@@ -347,7 +354,7 @@ class RntbdResponseHeaders extends RntbdTokenStream<RntbdResponseHeader> {
         );
 
         collector.accept(this.globalCommittedLSN, token ->
-            toLongEntry(BackendHeaders.GLOBAL_COMMITTED_LSN, token)
+            toLongEntry(GLOBAL_COMMITTED_LSN, token)
         );
 
         collector.accept(this.hasTentativeWrites, token ->

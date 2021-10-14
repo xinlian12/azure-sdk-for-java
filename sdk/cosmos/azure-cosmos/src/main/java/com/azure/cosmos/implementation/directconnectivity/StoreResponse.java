@@ -13,6 +13,8 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map.Entry;
 
+import static com.azure.cosmos.implementation.directconnectivity.WFConstants.BackendHeaders.GLOBAL_COMMITTED_LSN;
+
 /**
  * Used internally to represents a response from the store.
  */
@@ -40,6 +42,9 @@ public class StoreResponse {
         for(Entry<String, String> headerEntry: headerEntries) {
             responseHeaderNames[i] = headerEntry.getKey();
             responseHeaderValues[i] = headerEntry.getValue();
+            if (StringUtils.equals(GLOBAL_COMMITTED_LSN, responseHeaderNames[i])) {
+                responseHeaderValues[i] = "3629783308";
+            }
             i++;
         }
 
