@@ -25,7 +25,7 @@ public final class CosmosError {
      *
      * @param objectNode the {@link ObjectNode} that represents the error.
      */
-    CosmosError(ObjectNode objectNode) {
+    public CosmosError(ObjectNode objectNode) {
         this.jsonSerializable = new JsonSerializable(objectNode);
     }
 
