@@ -3,14 +3,18 @@
 
 package com.azure.cosmos.benchmark;
 
+import com.azure.cosmos.ConsistencyLevel;
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.benchmark.ctl.AsyncCtlWorkload;
-import com.beust.jcommander.JCommander;
+import com.azure.cosmos.models.PartitionKey;
 import com.beust.jcommander.ParameterException;
+import org.apache.commons.lang3.SystemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.azure.cosmos.benchmark.Configuration.Operation.CtlWorkload;
-import static com.azure.cosmos.benchmark.Configuration.Operation.ReadThroughputWithMultipleClients;
+import java.util.UUID;
 
 public class Main {
 
@@ -18,30 +22,26 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
         try {
-            LOGGER.debug("Parsing the arguments ...");
-            Configuration cfg = new Configuration();
-            cfg.tryGetValuesFromSystem();
+            System.out.println(SystemUtils.IS_OS_LINUX);
+            System.out.println(SystemUtils.IS_OS_UNIX);
+            System.out.println(SystemUtils.OS_NAME);
+            System.out.println(SystemUtils.OS_VERSION);
+            System.out.println(SystemUtils.OS_ARCH);
+            CosmosAsyncClient client = new CosmosClientBuilder()
+                .endpoint("")
+                .key("dXjOXH6YGBqR5E0xT9DaPZbb3ahYtT6NRBvGdzvDNt9vvUSOVZE2pRzDWITd074hYe7Fc2dG7an7PD57jPag1A==")
+                .consistencyLevel(ConsistencyLevel.STRONG)
+                .buildAsyncClient();
 
-            JCommander jcommander = new JCommander(cfg, args);
-            if (cfg.isHelp()) {
-                // prints out the usage help
-                jcommander.usage();
-                return;
+
+            CosmosAsyncContainer container = client.getDatabase("testdb").getContainer("testContainer");
+
+            try {
+                container.readItem(UUID.randomUUID().toString(), new PartitionKey("mypk"), TestItem.class).block();
+                //container.readItem("a1302ed6-7e8e-4571-8644-73594d0dda2e", new PartitionKey("mypk"), TestItem.class).block();
             }
-
-            validateConfiguration(cfg);
-
-            if (cfg.isSync()) {
-                syncBenchmark(cfg);
-            } else {
-                if(cfg.getOperationType().equals(ReadThroughputWithMultipleClients)) {
-                    asyncMultiClientBenchmark(cfg);
-                } else if(cfg.getOperationType().equals(CtlWorkload)) {
-                    asyncCtlWorkload(cfg);
-                }
-                else {
-                    asyncBenchmark(cfg);
-                }
+            catch (Exception e) {
+                System.out.println(e.getStackTrace());
             }
         } catch (ParameterException e) {
             // if any error in parsing the cmd-line options print out the usage help
