@@ -29,7 +29,7 @@ public class Main {
             System.out.println(SystemUtils.OS_ARCH);
             CosmosAsyncClient client = new CosmosClientBuilder()
                 .endpoint("")
-                .key("dXjOXH6YGBqR5E0xT9DaPZbb3ahYtT6NRBvGdzvDNt9vvUSOVZE2pRzDWITd074hYe7Fc2dG7an7PD57jPag1A==")
+                .key("")
                 .consistencyLevel(ConsistencyLevel.STRONG)
                 .buildAsyncClient();
 
@@ -41,7 +41,7 @@ public class Main {
                 //container.readItem("a1302ed6-7e8e-4571-8644-73594d0dda2e", new PartitionKey("mypk"), TestItem.class).block();
             }
             catch (Exception e) {
-                System.out.println(e.getStackTrace());
+                e.printStackTrace();
             }
         } catch (ParameterException e) {
             // if any error in parsing the cmd-line options print out the usage help
