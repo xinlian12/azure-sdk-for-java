@@ -64,6 +64,7 @@ class BulkWriter(container: CosmosAsyncContainer,
     // multiplied by 2 to leave space for partition splits during ingestion
     case None => 2 * ContainerFeedRangesCache.getFeedRanges(container).block().size
   }
+  private val patchConfig = getPatchConfig(writeConfig)
   log.logInfo(
     s"BulkWriter instantiated (Host CPU count: $cpuCount, maxPendingOperations: $maxPendingOperations, " +
   s"maxConcurrentPartitions: $maxConcurrentPartitions ...")
@@ -262,6 +263,13 @@ class BulkWriter(container: CosmosAsyncContainer,
             case _ =>  new CosmosBulkItemRequestOptions()
           },
           operationContext)
+      case ItemWriteStrategy.ItemPatch =>
+          getPatchItemOperation(
+              operationContext.itemId,
+              partitionKeyValue,
+              objectNode,
+              operationContext,
+              this.patchConfig)
       case _ =>
         throw new RuntimeException(s"${writeConfig.itemWriteStrategy} not supported")
     }
@@ -270,6 +278,22 @@ class BulkWriter(container: CosmosAsyncContainer,
 
     // For FAIL_NON_SERIALIZED, will keep retry, while for other errors, use the default behavior
     bulkInputEmitter.emitNext(bulkItemOperation, emitFailureHandler)
+  }
+
+  private[this] def getPatchItemOperation(itemId: String,
+                                          partitionKey: PartitionKey,
+                                          objectNode: ObjectNode,
+                                          context: OperationContext,
+                                          patchConfig: CosmosPatchConfig): CosmosItemOperation = {
+      // going through the object node
+
+  }
+
+  private[this] def getPatchConfig(writeConfig: CosmosWriteConfig): CosmosPatchConfig ={
+      writeConfig.patchConfig match {
+          case Some(config) => config
+          case None => CosmosPatchConfig(PatchOperationTypes.Replace)
+      }
   }
 
   //scalastyle:off method.length

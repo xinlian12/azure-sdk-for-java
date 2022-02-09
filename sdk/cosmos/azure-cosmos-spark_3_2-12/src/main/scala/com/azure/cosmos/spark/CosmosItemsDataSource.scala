@@ -5,16 +5,13 @@ package com.azure.cosmos.spark
 import com.azure.cosmos.spark.CosmosPredicates.assertOnSparkDriver
 import com.azure.cosmos.spark.diagnostics.BasicLoggingTrait
 import org.apache.spark.sql.SparkSession
-
-import java.util
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-import java.util.Collections
-import scala.collection.immutable.Map
+import java.util
 
 // scalastyle:off underscore.import
 import scala.collection.JavaConverters._

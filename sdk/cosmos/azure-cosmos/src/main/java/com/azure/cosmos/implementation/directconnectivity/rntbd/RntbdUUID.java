@@ -65,7 +65,7 @@ public final class RntbdUUID {
      * @return a new byte array containing the encoded
      */
     public static byte[] encode(final UUID uuid) {
-        final byte[] bytes = new byte[2 * Integer.BYTES];
+        final byte[] bytes = new byte[2 * Long.BYTES];
         encode(uuid, Unpooled.wrappedBuffer(bytes));
         return bytes;
     }
