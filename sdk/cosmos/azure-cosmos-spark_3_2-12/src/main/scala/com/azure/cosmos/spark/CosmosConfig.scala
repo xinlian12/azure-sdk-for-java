@@ -82,6 +82,7 @@ private[spark] object CosmosConfigNames {
   }
   val PatchDefaultOperation = "spark.cosmos.patch.defaultOperation"
   val PatchOperations = "spark.cosmos.patch.operations"
+  val PatchFilter = "spark.cosmos.patch.filter"
 
     private val cosmosPrefix = "spark.cosmos."
 
@@ -128,7 +129,8 @@ private[spark] object CosmosConfigNames {
     ThroughputControlGlobalControlExpireIntervalInMS,
     SerializationInclusionMode,
     PatchDefaultOperation,
-    PatchOperations
+    PatchOperations,
+    PatchFilter
   )
 
   def validateConfigName(name: String): Unit = {
@@ -478,7 +480,8 @@ private case class PatchOption(columnName: String,
                                filterPredicate: Option[String])
 
 private case class CosmosPatchConfig(defaultOperation: PatchOperationTypes,
-                                     operationsMap: Option[Map[String, PatchOption]] = None)
+                                     operationsMap: Map[String, PatchOperationTypes],
+                                     filter: Option[String] = None)
 
 private case class CosmosWriteConfig(itemWriteStrategy: ItemWriteStrategy,
                                      maxRetryCount: Int,
@@ -553,19 +556,26 @@ private object CosmosWriteConfig {
         parseFromStringFunction = patchDefaultOperationTypeString => CosmosConfigEntry.parseEnumeration(patchDefaultOperationTypeString, PatchOperationTypes),
         helpMessage = "Default patch operation")
 
-    private val patchOperationsSupplier = CosmosConfigEntry[Map[String, PatchOption]](
+    private val patchOperationsSupplier = CosmosConfigEntry[Map[String, PatchOperationTypes]](
         key = CosmosConfigNames.PatchOperations,
         mandatory = false,
         defaultValue = None,
         parseFromStringFunction = patchOperationstring => parsePatchOperations(patchOperationstring),
         helpMessage = "Patch operation")
 
-    private def parsePatchOperations(patchOperations: String): Map[String, PatchOption] = {
+    private val patchFilterOperationSupplier = CosmosConfigEntry[String](
+        key = CosmosConfigNames.PatchFilter,
+        mandatory = false,
+        defaultValue = None,
+        parseFromStringFunction = patchDefaultOperationTypeString => patchDefaultOperationTypeString,
+        helpMessage = "Patch filter")
+
+    private def parsePatchOperations(patchOperations: String): Map[String, PatchOperationTypes] = {
         // example:
         // col(column1).add.where(column3 > 2)
-        val patchOperationExpr = """col[(](.*)[)].(add|remove|set|replace|increment)(.where[(](.*)(?:[)]))?$""".r
-
-        val patchOptionsMap = collection.mutable.Map[String, PatchOption]()
+       // val patchOperationExpr = """col[(](.*)[)].(add|remove|set|replace|increment)(.where[(](.*)(?:[)]))?$""".r
+       val patchOperationExpr = """col[(](.*)[)].(add|remove|set|replace|increment)$""".r
+        val patchOptionsMap = collection.mutable.Map[String, PatchOperationTypes]()
 
         val patchOperationArray =  patchOperations.split(",")
         patchOperationArray.foreach(patchOperationString => {
@@ -576,9 +586,9 @@ private object CosmosWriteConfig {
                     println("columnName: " + columnName);
                     val operationType = CosmosConfigEntry.parseEnumeration(matchedData.group(2), PatchOperationTypes)
                     println("operationType: " + operationType)
-                    val filter = matchedData.group(4)
-                    println("Filter: " + filter)
-                    patchOptionsMap.put(columnName, PatchOption(columnName = columnName, patchOperationType = operationType, filterPredicate = Some(filter)))
+//                    val filter = matchedData.group(4)
+//                    println("Filter: " + filter)
+                    patchOptionsMap.put(columnName, operationType)
             }
         })
 
@@ -592,6 +602,7 @@ private object CosmosWriteConfig {
     val bulkEnabledOpt = CosmosConfigEntry.parse(cfg, bulkEnabled)
     val defaultPatchOperationType = CosmosConfigEntry.parse(cfg, patchDefaultOperationSupplier)
     val patchOptions = CosmosConfigEntry.parse(cfg, patchOperationsSupplier)
+    val patchFilter = CosmosConfigEntry.parse(cfg, patchFilterOperationSupplier)
     assert(bulkEnabledOpt.isDefined)
 
     // parsing above already validated this
@@ -599,7 +610,6 @@ private object CosmosWriteConfig {
     assert(maxRetryCountOpt.isDefined)
     assert(bulkEnabledOpt.isDefined)
     assert(defaultPatchOperationType.isDefined)
-    assert(patchOptions.isDefined)
 
     if (itemWriteStrategyOpt.isDefined && itemWriteStrategyOpt.get == ItemWriteStrategy.ItemPatch) {
         CosmosWriteConfig(
@@ -609,7 +619,11 @@ private object CosmosWriteConfig {
             bulkMaxPendingOperations = CosmosConfigEntry.parse(cfg, bulkMaxPendingOperations),
             pointMaxConcurrency = CosmosConfigEntry.parse(cfg, pointWriteConcurrency),
             maxConcurrentCosmosPartitions = CosmosConfigEntry.parse(cfg, bulkMaxConcurrentPartitions),
-            patchConfig = Option.apply(CosmosPatchConfig(defaultPatchOperationType.get, patchOptions)))
+            patchConfig = Option.apply(
+                CosmosPatchConfig(
+                    defaultPatchOperationType.get,
+                    if (patchOptions.isDefined) patchOptions.get else Map.empty[String, PatchOperationTypes],
+                    patchFilter)))
     } else {
         CosmosWriteConfig(
             itemWriteStrategyOpt.get,

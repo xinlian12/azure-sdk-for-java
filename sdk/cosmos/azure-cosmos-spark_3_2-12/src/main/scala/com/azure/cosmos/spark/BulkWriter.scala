@@ -6,6 +6,7 @@ package com.azure.cosmos.spark
 import com.azure.cosmos.{models, _}
 import com.azure.cosmos.models._
 import com.azure.cosmos.spark.BulkWriter.{BulkOperationFailedException, bulkWriterBoundedElastic, getThreadInfo}
+import com.azure.cosmos.spark.PatchOperationTypes.PatchOperationTypes
 import com.azure.cosmos.spark.diagnostics.DefaultDiagnostics
 import reactor.core.scheduler.Scheduler
 
@@ -286,13 +287,33 @@ class BulkWriter(container: CosmosAsyncContainer,
                                           context: OperationContext,
                                           patchConfig: CosmosPatchConfig): CosmosItemOperation = {
       // going through the object node
+      val operations = CosmosPatchOperations.create()
+      objectNode.fields().asScala
+          .foreach(entry => {
+              val patchOperationTypes = patchConfig.operationsMap.getOrElse(entry.getKey, patchConfig.defaultOperation)
 
+              patchOperationTypes match {
+                  case PatchOperationTypes.Add => operations.add(s"/${entry.getKey}", entry.getValue)
+                  case PatchOperationTypes.Set => operations.set(s"/${entry.getKey}", entry.getValue)
+                  case PatchOperationTypes.Replace => operations.replace(s"/${entry.getKey}", entry.getValue)
+                  case PatchOperationTypes.Remove => operations.remove(s"/${entry.getKey}")
+                  //case PatchOperationTypes.Increment => operations.increment(entry.getKey, entry.getValue)
+                  case _ => throw new IllegalStateException(s"Does not support operation type ${patchOperationTypes}")
+              }
+          })
+
+      val requestOptions = new CosmosBulkPatchItemRequestOptions();
+      if (patchConfig.filter.isDefined) {
+          requestOptions.setFilterPredicate(s"${patchConfig.filter}")
+      }
+
+      CosmosBulkOperations.getPatchItemOperation(itemId, partitionKey, operations, requestOptions, context)
   }
 
   private[this] def getPatchConfig(writeConfig: CosmosWriteConfig): CosmosPatchConfig ={
       writeConfig.patchConfig match {
           case Some(config) => config
-          case None => CosmosPatchConfig(PatchOperationTypes.Replace)
+          case None => CosmosPatchConfig(PatchOperationTypes.Replace, Map.empty[String, PatchOperationTypes])
       }
   }
 
