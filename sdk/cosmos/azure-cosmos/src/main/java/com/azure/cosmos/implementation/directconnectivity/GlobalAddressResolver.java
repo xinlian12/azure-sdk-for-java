@@ -53,6 +53,7 @@ public class GlobalAddressResolver implements IAddressResolver {
     private ApiType apiType;
 
     private HttpClient httpClient;
+    private IOpenConnectionHandler openConnectionHandler;
 
     public GlobalAddressResolver(
         DiagnosticsClientContext diagnosticsClientContext,
@@ -131,6 +132,15 @@ public class GlobalAddressResolver implements IAddressResolver {
     }
 
     @Override
+    public void setOpenConnectionHandler(IOpenConnectionHandler openConnectionHandler) {
+        this.openConnectionHandler = openConnectionHandler;
+
+        this.addressCacheByEndpoint.values().forEach(cache -> {
+            cache.addressCache.setOpenConnectionHandler(openConnectionHandler);
+        });
+    }
+
+    @Override
     public Mono<AddressInformation[]> resolveAsync(RxDocumentServiceRequest request, boolean forceRefresh) {
         IAddressResolver resolver = this.getAddressResolver(request);
         return resolver.resolveAsync(request, forceRefresh);
@@ -157,7 +167,8 @@ public class GlobalAddressResolver implements IAddressResolver {
                 this.userAgentContainer,
                 this.httpClient,
                 this.tcpConnectionEndpointRediscoveryEnabled,
-                this.apiType);
+                this.apiType,
+                this.openConnectionHandler);
             AddressResolver addressResolver = new AddressResolver();
             addressResolver.initializeCaches(this.collectionCache, this.routingMapProvider, gatewayAddressCache);
             EndpointCache cache = new EndpointCache();

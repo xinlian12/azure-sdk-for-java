@@ -15,4 +15,5 @@ public interface IAddressResolver {
             boolean forceRefreshPartitionAddresses);
 
     int updateAddresses(URI serverKey);
+    void setOpenConnectionHandler(IOpenConnectionHandler openConnectionHandler);
 }
