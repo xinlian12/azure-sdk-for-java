@@ -24,12 +24,13 @@ public class OpenConnectionTest {
     private final static Logger logger = LoggerFactory.getLogger(OpenConnectionTest.class);
 
     @Test
-    public void openConnectionTest() {
+    public void openConnectionTest() throws InterruptedException {
 
-        System.setProperty("COSMOS.ALWAYS_OPEN_CONNECTIONS", "true");
+        System.setProperty("COSMOS.ALWAYS_OPEN_CONNECTIONS", "false");
+        System.setProperty("azure.cosmos.directTcp.defaultOptions", "{\"channelAcquisitionContextEnabled\":\"true\"}");
 
         DirectConnectionConfig directConnectionConfig = DirectConnectionConfig.getDefaultConfig();
-        directConnectionConfig.setIdleConnectionTimeout(Duration.ofSeconds(5));
+        directConnectionConfig.setConnectionEndpointRediscoveryEnabled(true);
 
         String endpoint = "";
         String key = "";
@@ -44,14 +45,16 @@ public class OpenConnectionTest {
 
         container.readItem("c637db9b-8d63-4fcd-91d3-ab6c9e61c83b", new PartitionKey("pk1"), TestItem.class).block();
 
-
-        AtomicLong totalTime = new AtomicLong(0L);
-        AtomicInteger totalSuccessfulRequest = new AtomicInteger(0);
-        Instant startTime  = Instant.now();
-
         List<Integer> concurrency = Arrays.asList(1, 2, 3);
+
         for (int k = 0; k < concurrency.size(); k++) {
+
+            logger.info("Start testing concurrency {}", concurrency.get(k));
+
             int totalRequest = 10 * concurrency.get(k);
+            AtomicLong totalTime = new AtomicLong(0L);
+            AtomicInteger totalSuccessfulRequest = new AtomicInteger(0);
+            Instant startTime  = Instant.now();
 
             for (int i = 0; i < 10; i++) {
                 Flux.range(1, totalRequest/10)
@@ -70,6 +73,8 @@ public class OpenConnectionTest {
                     })
                     .blockLast();
             }
+
+            Thread.sleep(Duration.ofSeconds(10).toMillis());
         }
 
 

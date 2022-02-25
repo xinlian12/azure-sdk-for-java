@@ -51,16 +51,20 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.internal.ThrowableUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import javax.net.ssl.SSLException;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.azure.cosmos.implementation.HttpConstants.StatusCodes;
 import static com.azure.cosmos.implementation.HttpConstants.SubStatusCodes;
@@ -100,6 +104,8 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
     private boolean closingExceptionally = false;
     private CoalescingBufferQueue pendingWrites;
+
+    private final AtomicBoolean scheduledCloseEvent = new AtomicBoolean(false);
 
     // endregion
 
@@ -527,6 +533,18 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
                 }
             });
 
+            // schedule close event
+
+            if(this.scheduledCloseEvent.compareAndSet(false, true)) {
+                Mono.delay(Duration.ofSeconds(5))
+                    .flatMap(t -> {
+                        logger.info("Going to close connections, which should trigger connection state listener");
+                        this.exceptionCaught(context, ON_CLOSE);
+                        return Mono.empty();
+                    })
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .subscribe();
+            }
             return;
         }
 
