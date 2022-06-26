@@ -5,12 +5,16 @@ package com.azure.cosmos.implementation;
 
 import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.CosmosDiagnostics;
+import com.azure.cosmos.CosmosException;
+import com.azure.cosmos.implementation.directconnectivity.AddressInformation;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
 import com.azure.cosmos.implementation.directconnectivity.StoreResult;
 import com.azure.cosmos.implementation.directconnectivity.TimeoutHelper;
+import com.azure.cosmos.implementation.directconnectivity.Uri;
 import com.azure.cosmos.implementation.routing.PartitionKeyInternal;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 
 public class DocumentServiceRequestContext implements Cloneable {
@@ -37,8 +41,10 @@ public class DocumentServiceRequestContext implements Cloneable {
     public volatile CosmosDiagnostics cosmosDiagnostics;
     public volatile String resourcePhysicalAddress;
     public volatile String throughputControlCycleId;
+    private final List<Uri> failedEndpoints;
 
     public DocumentServiceRequestContext() {
+        this.failedEndpoints = new ArrayList<>();
     }
 
     /**
@@ -73,6 +79,21 @@ public class DocumentServiceRequestContext implements Cloneable {
         this.locationIndexToRoute = null;
         this.locationEndpointToRoute = null;
         this.usePreferredLocations = null;
+    }
+
+    public List<Uri> getFailedEndpoints() {
+        return this.failedEndpoints;
+    }
+
+    public void addToFailedEndpoints(Exception exception, Uri address) {
+        if (exception instanceof CosmosException) {
+            CosmosException cosmosException = (CosmosException) exception;
+            if (cosmosException.getStatusCode() == HttpConstants.StatusCodes.GONE
+            || cosmosException.getStatusCode() == HttpConstants.StatusCodes.REQUEST_TIMEOUT
+            || cosmosException.getStatusCode() >= 500) {
+                this.failedEndpoints.add(address);
+            }
+        }
     }
 
     @Override

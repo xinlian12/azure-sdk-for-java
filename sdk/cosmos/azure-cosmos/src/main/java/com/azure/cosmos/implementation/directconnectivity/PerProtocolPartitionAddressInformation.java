@@ -7,6 +7,7 @@ import com.azure.cosmos.implementation.GoneException;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.Strings;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,8 +16,8 @@ import java.util.stream.Collectors;
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
 
 public class PerProtocolPartitionAddressInformation {
-    private final List<AddressInformation> replicaAddresses;
     private final List<Uri> transportAddressUris;
+    private final Map<String, Uri.HealthStatus> transportAddressHealthMap;
     private final List<Uri> nonPrimaryReplicaTransportAddressUris;
     private final Uri primaryReplicaAddressUri;
     private final Protocol protocol;
@@ -25,6 +26,33 @@ public class PerProtocolPartitionAddressInformation {
         checkNotNull(replicaAddresses, "Argument 'replicaAddresses' should not be null");
 
         this.protocol = protocol;
+
+        List<AddressInformation> replicaAddressesByProtocol = this.getAddressesByProtocol(replicaAddresses, protocol);
+
+        this.transportAddressUris = new ArrayList<>();
+        this.transportAddressHealthMap = new ConcurrentHashMap<>();
+        this.nonPrimaryReplicaTransportAddressUris = new ArrayList<>();
+        Uri primaryAddressUri = null;
+
+        for (AddressInformation address : replicaAddressesByProtocol) {
+            Uri addressUri = address.getPhysicalUri();
+
+            this.transportAddressUris.add(addressUri);
+            this.transportAddressHealthMap.put(addressUri.getURIAsString(), addressUri.getHealthStatus());
+
+            if (!address.isPrimary()) {
+                this.nonPrimaryReplicaTransportAddressUris.add(addressUri);
+            } else if (!addressUri.getURIAsString().contains("[")) {
+                primaryAddressUri = addressUri;
+            }
+        }
+
+        this.primaryReplicaAddressUri = primaryAddressUri;
+    }
+
+    private List<AddressInformation> getAddressesByProtocol(List<AddressInformation> replicaAddresses, Protocol protocol) {
+        checkNotNull(replicaAddresses, "Argument 'replicaAddresses' should not be null");
+
         List<AddressInformation> nonEmptyReplicaAddresses = replicaAddresses
                 .stream()
                 .filter(addressInformation ->
@@ -32,35 +60,18 @@ public class PerProtocolPartitionAddressInformation {
                                 && Strings.areEqualIgnoreCase(addressInformation.getProtocolScheme(), protocol.scheme()))
                 .collect(Collectors.toList());
 
-        List<AddressInformation> internalAddresses =
-                nonEmptyReplicaAddresses
-                        .stream()
-                        .filter(addressInformation -> !addressInformation.isPublic())
-                        .collect(Collectors.toList());
+        List<AddressInformation> internalAddresses = new ArrayList<>();
+        List<AddressInformation> publicAddresses = new ArrayList<>();
 
-        this.replicaAddresses = internalAddresses.size() > 0
-                ? internalAddresses
-                : nonEmptyReplicaAddresses.stream().filter(addressInformation -> addressInformation.isPublic()).collect(Collectors.toList());
+        nonEmptyReplicaAddresses.forEach(addressInformation -> {
+            if (addressInformation.isPublic()) {
+                publicAddresses.add(addressInformation);
+            } else {
+                internalAddresses.add(addressInformation);
+            }
+        });
 
-        this.transportAddressUris =
-                this.replicaAddresses
-                        .stream()
-                        .map(addressInformation -> addressInformation.getPhysicalUri())
-                        .collect(Collectors.toList());
-
-        this.nonPrimaryReplicaTransportAddressUris =
-                this.replicaAddresses
-                        .stream()
-                        .filter(addressInformation -> !addressInformation.isPrimary())
-                        .map(addressInformation -> addressInformation.getPhysicalUri())
-                        .collect(Collectors.toList());
-
-        this.primaryReplicaAddressUri =
-                this.replicaAddresses
-                        .stream()
-                        .filter(addressInformation -> addressInformation.isPrimary() && !addressInformation.getPhysicalUri().getURIAsString().contains("["))
-                        .map(addressInformation -> addressInformation.getPhysicalUri())
-                        .findAny().orElse(null);
+        return internalAddresses.size() > 0 ? internalAddresses : publicAddresses;
     }
 
     public List<Uri> getTransportAddressUris() {
@@ -92,5 +103,9 @@ public class PerProtocolPartitionAddressInformation {
         }
 
         return primaryAddressUri;
+    }
+
+    public Map<String, Uri.HealthStatus> getTransportAddressHealthMap() {
+        return this.transportAddressHealthMap;
     }
 }

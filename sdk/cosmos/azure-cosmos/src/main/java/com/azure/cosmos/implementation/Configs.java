@@ -106,6 +106,10 @@ public class Configs {
     private static final String QUERY_EMPTY_PAGE_DIAGNOSTICS_ENABLED = "COSMOS.QUERY_EMPTY_PAGE_DIAGNOSTICS_ENABLED";
     private static final boolean DEFAULT_QUERY_EMPTY_PAGE_DIAGNOSTICS_ENABLED = false;
 
+    // whether to enable replica addresses validation
+    private static final String REPLICA_ADDRESS_VALIDATION_ENABLED = "COSMOS.REPLICA_ADDRESS_VALIDATION_ENABLED_ENABLED";
+    private static final boolean DEFAULT_REPLICA_ADDRESS_VALIDATION_ENABLED = false;
+
     public Configs() {
         this.sslContext = sslContextInit();
     }
@@ -277,6 +281,12 @@ public class Configs {
         return getJVMConfigAsBoolean(
             QUERY_EMPTY_PAGE_DIAGNOSTICS_ENABLED,
             DEFAULT_QUERY_EMPTY_PAGE_DIAGNOSTICS_ENABLED);
+    }
+
+    public static boolean isReplicaAddressValidationEnabled() {
+        return getJVMConfigAsBoolean(
+                REPLICA_ADDRESS_VALIDATION_ENABLED,
+                DEFAULT_REPLICA_ADDRESS_VALIDATION_ENABLED);
     }
 
     private static int getJVMConfigAsInt(String propName, int defaultValue) {

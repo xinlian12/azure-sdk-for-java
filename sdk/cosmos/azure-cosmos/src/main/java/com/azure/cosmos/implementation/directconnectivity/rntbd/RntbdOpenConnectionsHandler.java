@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -64,5 +65,10 @@ public class RntbdOpenConnectionsHandler implements IOpenConnectionsHandler {
 
                     return Mono.just(new OpenConnectionResponse(addressUri, false, new IllegalStateException("Unable to acquire semaphore")));
                 });
+    }
+
+    @Override
+    public Mono<OpenConnectionResponse> openConnection(Uri address) {
+        return this.openConnections(Arrays.asList(address)).single();
     }
 }

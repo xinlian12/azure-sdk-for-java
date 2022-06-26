@@ -5,10 +5,12 @@ package com.azure.cosmos.implementation.directconnectivity;
 
 import java.net.URI;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class Uri {
     private final String uriAsString;
     private final URI uri;
+    private final AtomicReference<HealthStatus> healthStatus;
 
     public static Uri create(String uriAsString) {
         return new Uri(uriAsString);
@@ -24,6 +26,7 @@ public class Uri {
             uriValue = null;
         }
         this.uri = uriValue;
+        this.healthStatus = new AtomicReference<>(HealthStatus.Unknown);
     }
 
     public URI getURI() {
@@ -32,6 +35,14 @@ public class Uri {
 
     public String getURIAsString() {
         return this.uriAsString;
+    }
+
+    public void setHealthStatus(HealthStatus status) {
+        this.healthStatus.set(status);
+    }
+
+    public HealthStatus getHealthStatus() {
+        return this.healthStatus.get();
     }
 
     @Override
@@ -51,5 +62,20 @@ public class Uri {
     @Override
     public String toString() {
         return this.uriAsString;
+    }
+
+    public enum HealthStatus {
+        Healthy(0),
+        Unknown(1),
+        Unhealthy(2);
+
+        private int value;
+        HealthStatus(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return this.value;
+        }
     }
 }

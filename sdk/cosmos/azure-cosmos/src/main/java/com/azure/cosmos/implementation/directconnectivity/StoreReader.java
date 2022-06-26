@@ -32,6 +32,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -46,6 +47,7 @@ public class StoreReader {
     private final AddressSelector addressSelector;
     private final ISessionContainer sessionContainer;
     private String lastReadAddress;
+    private final AddressEnumerator addressEnumerator;
 
     public StoreReader(
             TransportClient transportClient,
@@ -54,6 +56,7 @@ public class StoreReader {
         this.transportClient = transportClient;
         this.addressSelector = addressSelector;
         this.sessionContainer = sessionContainer;
+        this.addressEnumerator = new AddressEnumerator();
     }
 
     public Mono<List<StoreResult>> readMultipleReplicaAsync(
@@ -204,23 +207,29 @@ public class StoreReader {
             return Flux.error(new GoneException());
         }
         List<Pair<Flux<StoreResponse>, Uri>> readStoreTasks = new ArrayList<>();
+
+        // TODO: change this to use failedEndpoints in requestContext
+        List<Uri> randomPermutations =
+                this.addressEnumerator.getAddresses(
+                        entity.requestContext.resolvedPartitionKeyRange.getId(),
+                        resolveApiResults,
+                        Arrays.asList());
         int uriIndex = StoreReader.generateNextRandom(resolveApiResults.size());
 
-        while (resolveApiResults.size() > 0) {
-            uriIndex = uriIndex % resolveApiResults.size();
-            Uri uri = resolveApiResults.get(uriIndex);
+        int startIndex = 0;
+        while(startIndex < randomPermutations.size()) {
+            Uri address = randomPermutations.get(startIndex);
             Pair<Mono<StoreResponse>, Uri> res;
             try {
-                res = this.readFromStoreAsync(resolveApiResults.get(uriIndex),
-                                              entity);
+                res = this.readFromStoreAsync(address, entity);
 
             } catch (Exception e) {
-                res = Pair.of(Mono.error(e), uri);
+                res = Pair.of(Mono.error(e), address);
             }
 
             readStoreTasks.add(Pair.of(res.getLeft().flux(), res.getRight()));
             resolveApiResults.remove(uriIndex);
-
+            startIndex++;
 
             if (!forceReadAll && readStoreTasks.size() == replicasToRead.get()) {
                 break;
