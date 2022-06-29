@@ -5,6 +5,7 @@ package com.azure.cosmos.implementation.directconnectivity;
 
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdUtils;
+import com.azure.cosmos.implementation.routing.PartitionKeyRangeIdentity;
 
 import java.net.URI;
 import java.util.Locale;
@@ -14,21 +15,33 @@ import java.util.Objects;
  * Used internally to encapsulate a physical address information in the Azure Cosmos DB database service.
  */
 public class AddressInformation {
-    private Protocol protocol;
-    private boolean isPublic;
-    private boolean isPrimary;
-    private Uri physicalUri;
+    private final Protocol protocol;
+    private final boolean isPublic;
+    private final boolean isPrimary;
+    private final Uri physicalUri;
+    private final PartitionKeyRangeIdentity partitionKeyRangeIdentity;
 
-    public AddressInformation(boolean isPublic, boolean isPrimary, String physicalUri, Protocol protocol) {
+    public AddressInformation(
+            boolean isPublic,
+            boolean isPrimary,
+            String physicalUri,
+            Protocol protocol,
+            PartitionKeyRangeIdentity pkRangeIdentity) {
         Objects.requireNonNull(protocol);
         this.protocol = protocol;
         this.isPublic = isPublic;
         this.isPrimary = isPrimary;
         this.physicalUri = new Uri(normalizePhysicalUri(physicalUri));
+        this.partitionKeyRangeIdentity = pkRangeIdentity;
     }
 
-    public AddressInformation(boolean isPublic, boolean isPrimary, String physicalUri, String protocolScheme) {
-        this(isPublic, isPrimary, physicalUri, scheme2protocol(protocolScheme));
+    public AddressInformation(
+            boolean isPublic,
+            boolean isPrimary,
+            String physicalUri,
+            String protocolScheme,
+            PartitionKeyRangeIdentity pkRangeIdentity) {
+        this(isPublic, isPrimary, physicalUri, scheme2protocol(protocolScheme), pkRangeIdentity);
     }
 
     public boolean isPublic() {

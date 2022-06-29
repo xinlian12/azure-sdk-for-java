@@ -17,7 +17,7 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
 
 public class PerProtocolPartitionAddressInformation {
     private final List<Uri> transportAddressUris;
-    private final Map<String, Uri.HealthStatus> transportAddressHealthMap;
+    private final Map<String, Uri> transportAddressUriMap;
     private final List<Uri> nonPrimaryReplicaTransportAddressUris;
     private final Uri primaryReplicaAddressUri;
     private final Protocol protocol;
@@ -30,7 +30,7 @@ public class PerProtocolPartitionAddressInformation {
         List<AddressInformation> replicaAddressesByProtocol = this.getAddressesByProtocol(replicaAddresses, protocol);
 
         this.transportAddressUris = new ArrayList<>();
-        this.transportAddressHealthMap = new ConcurrentHashMap<>();
+        this.transportAddressUriMap = new ConcurrentHashMap<>();
         this.nonPrimaryReplicaTransportAddressUris = new ArrayList<>();
         Uri primaryAddressUri = null;
 
@@ -38,7 +38,7 @@ public class PerProtocolPartitionAddressInformation {
             Uri addressUri = address.getPhysicalUri();
 
             this.transportAddressUris.add(addressUri);
-            this.transportAddressHealthMap.put(addressUri.getURIAsString(), addressUri.getHealthStatus());
+            this.transportAddressUriMap.put(addressUri.getURIAsString(), addressUri);
 
             if (!address.isPrimary()) {
                 this.nonPrimaryReplicaTransportAddressUris.add(addressUri);
@@ -105,7 +105,7 @@ public class PerProtocolPartitionAddressInformation {
         return primaryAddressUri;
     }
 
-    public Map<String, Uri.HealthStatus> getTransportAddressHealthMap() {
-        return this.transportAddressHealthMap;
+    public Map<String, Uri> getTransportAddressUriMap() {
+        return this.transportAddressUriMap;
     }
 }

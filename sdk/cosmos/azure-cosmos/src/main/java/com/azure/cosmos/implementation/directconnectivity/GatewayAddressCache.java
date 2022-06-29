@@ -58,7 +58,6 @@ import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -236,7 +235,7 @@ public class GatewayAddressCache implements IAddressCache {
             PartitionKeyRange.MASTER_PARTITION_KEY_RANGE_ID)) {
 
             // if that's master partition return master partition address!
-            return this.resolveMasterAsync(request, forceRefreshPartitionAddresses, request.properties)
+            return this.resolveMasterAsync(request, forceRefreshPartitionAddresses, request.properties, null)
                        .map(partitionKeyRangeIdentityPair -> new Utils.ValueHolder<>(partitionKeyRangeIdentityPair.getRight()));
         }
 
@@ -298,38 +297,53 @@ public class GatewayAddressCache implements IAddressCache {
                                 null)) // TODO: Once nonblocking cache PR merged in, change to pass cached value
                         .map(Utils.ValueHolder::new);
 
-        return addressesObs.map(
-            addressesValueHolder -> {
-                if (notAllReplicasAvailable(addressesValueHolder.v)) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("not all replicas available {}", JavaStreamUtils.info(addressesValueHolder.v.getAllAddresses()));
+        return addressesObs
+            .map(
+                addressesValueHolder -> {
+                    if (notAllReplicasAvailable(addressesValueHolder.v)) {
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("not all replicas available {}", JavaStreamUtils.info(addressesValueHolder.v.getAllAddresses()));
+                        }
+                        this.suboptimalServerPartitionTimestamps.putIfAbsent(partitionKeyRangeIdentity, Instant.now());
                     }
-                    this.suboptimalServerPartitionTimestamps.putIfAbsent(partitionKeyRangeIdentity, Instant.now());
-                }
 
-                return addressesValueHolder;
-            }).onErrorResume(ex -> {
-            Throwable unwrappedException = reactor.core.Exceptions.unwrap(ex);
-            CosmosException dce = Utils.as(unwrappedException, CosmosException.class);
-            if (dce == null) {
-                logger.error("unexpected failure", ex);
-                if (forceRefreshPartitionAddressesModified) {
-                    this.suboptimalServerPartitionTimestamps.remove(partitionKeyRangeIdentity);
+                    if (addressesValueHolder.v
+                            .getAllAddresses()
+                            .stream()
+                            .anyMatch(addressInformation -> addressInformation.getPhysicalUri().shouldRefreshHeathStatus())) {
+                        this.serverPartitionAddressCache.refresh(
+                                partitionKeyRangeIdentity,
+                                () -> this.getAddressesForRangeId(
+                                        request,
+                                        partitionKeyRangeIdentity,
+                                        true,
+                                        null));
+                    }
+
+                    return addressesValueHolder;
+                })
+            .onErrorResume(ex -> {
+                Throwable unwrappedException = reactor.core.Exceptions.unwrap(ex);
+                CosmosException dce = Utils.as(unwrappedException, CosmosException.class);
+                if (dce == null) {
+                    logger.error("unexpected failure", ex);
+                    if (forceRefreshPartitionAddressesModified) {
+                        this.suboptimalServerPartitionTimestamps.remove(partitionKeyRangeIdentity);
+                    }
+                    return Mono.error(unwrappedException);
+                } else {
+                    logger.debug("tryGetAddresses dce", dce);
+                    if (Exceptions.isStatusCode(dce, HttpConstants.StatusCodes.NOTFOUND) ||
+                        Exceptions.isStatusCode(dce, HttpConstants.StatusCodes.GONE) ||
+                        Exceptions.isSubStatusCode(dce, HttpConstants.SubStatusCodes.PARTITION_KEY_RANGE_GONE)) {
+                        //remove from suboptimal cache in case the collection+pKeyRangeId combo is gone.
+                        this.suboptimalServerPartitionTimestamps.remove(partitionKeyRangeIdentity);
+                        logger.debug("tryGetAddresses: inner onErrorResumeNext return null", dce);
+                        return Mono.just(new Utils.ValueHolder<>(null));
+                    }
+                    return Mono.error(unwrappedException);
                 }
-                return Mono.error(unwrappedException);
-            } else {
-                logger.debug("tryGetAddresses dce", dce);
-                if (Exceptions.isStatusCode(dce, HttpConstants.StatusCodes.NOTFOUND) ||
-                    Exceptions.isStatusCode(dce, HttpConstants.StatusCodes.GONE) ||
-                    Exceptions.isSubStatusCode(dce, HttpConstants.SubStatusCodes.PARTITION_KEY_RANGE_GONE)) {
-                    //remove from suboptimal cache in case the collection+pKeyRangeId combo is gone.
-                    this.suboptimalServerPartitionTimestamps.remove(partitionKeyRangeIdentity);
-                    logger.debug("tryGetAddresses: inner onErrorResumeNext return null", dce);
-                    return Mono.just(new Utils.ValueHolder<>(null));
-                }
-                return Mono.error(unwrappedException);
-            }
-        });
+            });
     }
 
     @Override
@@ -492,7 +506,8 @@ public class GatewayAddressCache implements IAddressCache {
     private Mono<Pair<PartitionKeyRangeIdentity, PartitionAddressInformation>> resolveMasterAsync(
             RxDocumentServiceRequest request,
             boolean forceRefresh,
-            Map<String, Object> properties) {
+            Map<String, Object> properties,
+            PartitionAddressInformation cachedPartitionAddressInformation) {
         logger.debug("resolveMasterAsync forceRefresh: {}", forceRefresh);
         Pair<PartitionKeyRangeIdentity, PartitionAddressInformation> masterAddressAndRangeInitial = this.masterPartitionAddressCache;
 
@@ -514,7 +529,7 @@ public class GatewayAddressCache implements IAddressCache {
             return masterReplicaAddressesObs.map(
                 masterAddresses -> {
                     Pair<PartitionKeyRangeIdentity, PartitionAddressInformation> masterAddressAndRangeRes =
-                        this.toPartitionAddressAndRange("", masterAddresses);
+                        this.toPartitionAddressAndRange("", masterAddresses, cachedPartitionAddressInformation);
                     this.masterPartitionAddressCache = masterAddressAndRangeRes;
 
                     if (notAllReplicasAvailable(masterAddressAndRangeRes.getRight())
@@ -620,7 +635,7 @@ public class GatewayAddressCache implements IAddressCache {
         RxDocumentServiceRequest request,
         PartitionKeyRangeIdentity pkRangeIdentity,
         boolean forceRefresh,
-        PartitionAddressInformation cachedInformation) {
+        PartitionAddressInformation cachedPartitionAddressInformation) {
 
         Utils.checkNotNullOrThrow(request, "request", "");
         validatePkRangeIdentity(pkRangeIdentity);
@@ -654,7 +669,7 @@ public class GatewayAddressCache implements IAddressCache {
                             .collect(Collectors.groupingBy(Address::getParitionKeyRangeId))
                             .values()
                             .stream()
-                            .map(groupedAddresses -> toPartitionAddressAndRange(collectionRid, addresses))
+                            .map(groupedAddresses -> toPartitionAddressAndRange(collectionRid, addresses, cachedPartitionAddressInformation))
                             .collect(Collectors.toList());
                 });
 
@@ -687,9 +702,7 @@ public class GatewayAddressCache implements IAddressCache {
                             return Mono.just(list.get(0).getRight());
                         }
                     })
-                .doOnSuccess(partitionAddressInformation -> {
-
-                })
+                .doOnSuccess(partitionAddressInformation -> this.validateReplicaAddresses(partitionAddressInformation, cachedPartitionAddressInformation))
                 .doOnError(e -> logger.debug("getAddressesForRangeId", e));
     }
 
@@ -826,7 +839,11 @@ public class GatewayAddressCache implements IAddressCache {
         });
     }
 
-    private Pair<PartitionKeyRangeIdentity, PartitionAddressInformation> toPartitionAddressAndRange(String collectionRid, List<Address> addresses) {
+    private Pair<PartitionKeyRangeIdentity, PartitionAddressInformation> toPartitionAddressAndRange(
+            String collectionRid,
+            List<Address> addresses,
+            PartitionAddressInformation cachedPartitionAddressInformation) {
+
         if (logger.isDebugEnabled()) {
             logger.debug("toPartitionAddressAndRange");
         }
@@ -837,7 +854,7 @@ public class GatewayAddressCache implements IAddressCache {
         List<AddressInformation> addressInfos =
                 addresses
                         .stream()
-                        .map(addr -> GatewayAddressCache.toAddressInformation(addr))
+                        .map(addr -> GatewayAddressCache.toAddressInformation(addr, partitionKeyRangeIdentity))
                         .collect(Collectors.toList());
 
         if (this.tcpConnectionEndpointRediscoveryEnabled) {
@@ -860,11 +877,34 @@ public class GatewayAddressCache implements IAddressCache {
             }
         }
 
-        return Pair.of(partitionKeyRangeIdentity, new PartitionAddressInformation(addressInfos));
+        // merge the two partition address information
+        List<AddressInformation> mergedAddressInformation = new ArrayList<>();
+
+        Map<String, AddressInformation> cachedAddressMap =
+                cachedPartitionAddressInformation == null ?
+                        null :
+                        cachedPartitionAddressInformation
+                                .getAllAddresses()
+                                .stream()
+                                .collect(Collectors.toMap(addressInformation -> addressInformation.getPhysicalUri().getURIAsString(), addressInformation -> addressInformation));
+
+        for (AddressInformation addressInformation : addressInfos) {
+            if (cachedAddressMap.containsKey(addressInformation.getPhysicalUri().getURIAsString())) {
+                mergedAddressInformation.add(cachedAddressMap.get(addressInformation.getPhysicalUri().getURIAsString()));
+            } else {
+                mergedAddressInformation.add(addressInformation);
+            }
+        }
+
+        for (AddressInformation addressInformation : mergedAddressInformation) {
+            addressInformation.getPhysicalUri().setRefreshed();
+        }
+
+        return Pair.of(partitionKeyRangeIdentity, new PartitionAddressInformation(mergedAddressInformation));
     }
 
-    private static AddressInformation toAddressInformation(Address address) {
-        return new AddressInformation(true, address.isPrimary(), address.getPhyicalUri(), address.getProtocolScheme());
+    private static AddressInformation toAddressInformation(Address address, PartitionKeyRangeIdentity pkRangeIdentity) {
+        return new AddressInformation(true, address.isPrimary(), address.getPhyicalUri(), address.getProtocolScheme(), pkRangeIdentity);
     }
 
     public Flux<OpenConnectionResponse> openConnectionsAndInitCaches(
@@ -920,7 +960,7 @@ public class GatewayAddressCache implements IAddressCache {
                                 .collect(Collectors.groupingBy(Address::getParitionKeyRangeId))
                                 .values()
                                 .stream()
-                                .map(addresses -> toPartitionAddressAndRange(collection.getResourceId(), addresses))
+                                .map(addresses -> toPartitionAddressAndRange(collection.getResourceId(), addresses, null))
                                 .collect(Collectors.toList());
 
                     return Flux.fromIterable(addressInfos)
@@ -967,41 +1007,39 @@ public class GatewayAddressCache implements IAddressCache {
     private void validateReplicaAddresses(PartitionAddressInformation newAddresses, PartitionAddressInformation cachedAddresses){
         checkNotNull(newAddresses,"Argument 'newAddresses' can not be null");
 
-        if(cachedAddresses != null){
-            Map<String,Uri.HealthStatus> addressHealthStatusMap =
-                    cachedAddresses.getAddressesByProtocol(this.protocol).getTransportAddressHealthMap();
+        if (this.replicaAddressValidationEnabled.get()) {
 
+            Flux.fromIterable(newAddresses.getAddressesByProtocol(this.protocol)
+                    .getTransportAddressUris())
+                    .flatMap(addressUri -> {
+                        if (addressUri.getHealthStatus() != Uri.HealthStatus.Healthy) {
+                            return this.openConnectionsHandler.openConnection(addressUri)
+                                    .flatMap(response -> {
+                                        if (response.isConnected()) {
+                                            addressUri.setHealthStatus(Uri.HealthStatus.Healthy);
+                                        } else {
+                                            addressUri.setHealthStatus(Uri.HealthStatus.Unhealthy);
+                                        }
 
-//copyoverthehealthstatusfromexistingaddress
-            for(AddressInformationnewAddress:newAddresses.){
-                if(addressHealthStatusMap.containsKey(newAddress)){
-                    newAddress.setHealthStatus(addressHealthStatusMap.get(newAddress));
-                }
+                                        return Mono.empty();
+                                    });
+                        }
+
+                        return Mono.empty();
+                    })
+                    .onErrorResume(throwable -> {
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("Failed to validate replicate health due to ", throwable);
+                        }
+                        return Mono.empty();
+                    })
+                    .subscribeOn(CosmosSchedulers.OPEN_CONNECTIONS_BOUNDED_ELASTIC)
+                    .subscribe();
+        } else {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Replica addresses validation is not enabled");
             }
         }
-
-        Flux.fromArray(newAddresses)
-                .flatMap(newAddress->{
-                    returnthis.openConnectionsHandler.openConnection(newAddress.getPhysicalUri())
-                            .flatMap(openConnectionResponse->{
-                                if(openConnectionResponse.isConnected()){
-                                    newAddress.setHealthStatus(AddressInformation.HealthStatus.Healthy);
-                                }else{
-                                    newAddress.setHealthStatus(AddressInformation.HealthStatus.Unhealthy);
-                                }
-
-                                returnMono.empty();
-                            });
-                })
-                .onErrorResume(throwable->{
-                    if(logger.isDebugEnabled()){
-                        logger.debug("Failedtovalidatereplicahealthydueto",throwable);
-                    }
-
-                    returnMono.empty();
-                })
-                .subscribeOn(CosmosSchedulers.OPEN_CONNECTIONS_BOUNDED_ELASTIC)
-                .subscribe();
     }
 
     private static String logAddressResolutionStart(
