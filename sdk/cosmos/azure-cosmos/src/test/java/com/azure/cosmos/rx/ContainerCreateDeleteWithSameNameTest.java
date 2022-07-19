@@ -25,7 +25,9 @@ import com.azure.cosmos.models.CosmosContainerRequestOptions;
 import com.azure.cosmos.models.CosmosItemRequestOptions;
 import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
+import com.azure.cosmos.models.FeedRange;
 import com.azure.cosmos.models.PartitionKey;
+import com.azure.cosmos.models.TestObject;
 import com.azure.cosmos.models.ThroughputResponse;
 import com.azure.cosmos.util.CosmosPagedFlux;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -113,6 +115,32 @@ public class ContainerCreateDeleteWithSameNameTest extends TestSuiteBase {
             } catch (Exception e) {
                 fail("error while fetching documentCollection from cache");
             }
+        };
+
+        createDeleteContainerWithSameName(func);
+    }
+
+    @Test(groups = {"emulator"}, timeOut = TIMEOUT)
+    public <T> void queryWithFullRange() throws Exception {
+        String query = "SELECT * FROM r";
+
+        Consumer<CosmosAsyncContainer> func = (container) -> {
+
+            // Create data with new client, so cache can be tested in query workload on recreate
+            CosmosAsyncClient cosmosClient = getClientBuilder().buildAsyncClient();
+            CosmosAsyncContainer cosmosAsyncContainer = cosmosClient.getDatabase(container.getDatabase().getId()).getContainer(container.getId());
+            TestObject docDefinition = getDocumentDefinition();
+            cosmosAsyncContainer.createItem(docDefinition).block();
+            cosmosClient.close();
+
+            CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions();
+            queryRequestOptions.setFeedRange(FeedRange.forFullRange());
+            CosmosPagedFlux<TestObject> queryFlux = container.queryItems(query, queryRequestOptions, TestObject.class);
+            FeedResponseListValidator<TestObject> queryValidator = new FeedResponseListValidator.Builder<TestObject>()
+                    .totalSize(1)
+                    .numberOfPages(1)
+                    .build();
+            validateQuerySuccess(queryFlux.byPage(10), queryValidator);
         };
 
         createDeleteContainerWithSameName(func);
@@ -416,45 +444,6 @@ public class ContainerCreateDeleteWithSameNameTest extends TestSuiteBase {
         CosmosContainerRequestOptions options = new CosmosContainerRequestOptions();
         CosmosContainerProperties collectionDefinition = new CosmosContainerProperties(conatinerId, "/id");
         return createCollection(createdDatabase, collectionDefinition, options);
-    }
-
-    static class TestObject {
-        String id;
-        String mypk;
-        String prop;
-
-        public TestObject() {
-        }
-
-        public TestObject(String id, String mypk, String prop) {
-            this.id = id;
-            this.mypk = mypk;
-            this.prop = prop;
-        }
-
-        public String getId() {
-            return id;
-        }
-
-        public void setId(String id) {
-            this.id = id;
-        }
-
-        public String getMypk() {
-            return mypk;
-        }
-
-        public void setMypk(String mypk) {
-            this.mypk = mypk;
-        }
-
-        public String getProp() {
-            return prop;
-        }
-
-        public void setProp(String prop) {
-            this.prop = prop;
-        }
     }
 
     private DocumentCollection getDocumentCollectionFromCache(String containerCacheKey) throws Exception {
