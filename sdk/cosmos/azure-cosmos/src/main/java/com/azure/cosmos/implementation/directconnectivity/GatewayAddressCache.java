@@ -290,7 +290,11 @@ public class GatewayAddressCache implements IAddressCache {
                 partitionKeyRangeIdentity,
                 forceRefreshPartitionAddressesModified,
                 cachedAddresses),
-            forceRefresh -> forceRefreshPartitionAddressesModified).map(Utils.ValueHolder::new);
+            cachedAddresses -> {
+                return forceRefreshPartitionAddressesModified
+                        || Arrays.stream(cachedAddresses).anyMatch(addressInformation -> addressInformation.getPhysicalUri().shouldRefreshHealthStatus());
+
+            }).map(Utils.ValueHolder::new);
 
         return addressesObs.map(
             addressesValueHolder -> {
@@ -299,27 +303,6 @@ public class GatewayAddressCache implements IAddressCache {
                         logger.debug("not all replicas available {}", JavaStreamUtils.info(addressesValueHolder.v));
                     }
                     this.suboptimalServerPartitionTimestamps.putIfAbsent(partitionKeyRangeIdentity, Instant.now());
-
-                    // Refresh the cache if there was an address has been marked as unhealthy long enough and need to revalidate its status
-                    // If you are curious about why we do not depend on 410 to force refresh the addresses, the reason being:
-                    // When an address is marked as unhealthy, then the address enumerator will move it to the end of the list
-                    // So it could happen that no request will use the unhealthy address for an extended period of time
-                    // So the 410 -> forceRefresh workflow may not happen
-                    // TODO: moving this part logic into forceRefresh decision making in unblocking cache
-                    if (Arrays
-                        .stream(addressesValueHolder.v)
-                        .anyMatch(addressInformation -> addressInformation.getPhysicalUri().shouldRefreshHealthStatus())) {
-
-                        logger.info("refresh cache due to address uri in unhealthy status");
-                        this.serverPartitionAddressCache.getAsync(
-                            partitionKeyRangeIdentity,
-                            cachedAddresses -> this.getAddressesForRangeId(
-                                request,
-                                partitionKeyRangeIdentity,
-                                true,
-                                cachedAddresses),
-                            forceRefresh -> forceRefreshPartitionAddressesModified);
-                    }
                 }
 
                 return addressesValueHolder;
