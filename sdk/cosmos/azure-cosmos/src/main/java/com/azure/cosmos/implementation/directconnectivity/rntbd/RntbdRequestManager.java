@@ -816,7 +816,10 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             statusCode == HttpResponseStatus.NOT_MODIFIED.code()) {
 
             final StoreResponse storeResponse = response.toStoreResponse(this.contextFuture.getNow(null));
-            requestRecord.complete(storeResponse);
+
+            if (!requestRecord.isDone()){
+                requestRecord.complete(storeResponse);
+            }
 
         } else {
 
@@ -937,7 +940,9 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
             }
             BridgeInternal.setResourceAddress(cause, resourceAddress);
 
-            requestRecord.completeExceptionally(cause);
+            if (!requestRecord.isDone()) {
+                requestRecord.completeExceptionally(cause);
+            }
         }
     }
 
