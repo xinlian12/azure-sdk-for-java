@@ -74,7 +74,7 @@ Unlike .Net SDK, Java SDK does not do implicit lease conversation, when customer
 
 
 
-Proposed migration change
+## Proposed migration change
 Two processes matters here
 - `Bootstrap` - Initialize the lease store, creating all the leases based on the pkRanges
 ```mermaid
