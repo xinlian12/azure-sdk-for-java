@@ -102,6 +102,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         final ClientTelemetry clientTelemetry) {
 
         this.serverKey = RntbdUtils.getServerKey(physicalAddress);
+        System.out.println("ServerKey: " + physicalAddress.toString());
 
         final Bootstrap bootstrap = this.getBootStrap(group, config);
 

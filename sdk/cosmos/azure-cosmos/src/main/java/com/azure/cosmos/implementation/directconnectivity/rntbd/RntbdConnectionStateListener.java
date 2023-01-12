@@ -58,6 +58,7 @@ public class RntbdConnectionStateListener {
             if (exception instanceof ClosedChannelException) {
                 this.metrics.recordAddressUpdated(this.onConnectionEvent(RntbdConnectionEvent.READ_EOF, exception));
             } else {
+                logger.info("Will not raise the connection state change event for error", exception);
                 if (logger.isDebugEnabled()) {
                     logger.debug("Will not raise the connection state change event for error", exception);
                 }

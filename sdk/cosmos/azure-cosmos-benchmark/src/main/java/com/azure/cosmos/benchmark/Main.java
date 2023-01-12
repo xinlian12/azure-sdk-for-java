@@ -3,6 +3,10 @@
 
 package com.azure.cosmos.benchmark;
 
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.benchmark.ctl.AsyncCtlWorkload;
 import com.azure.cosmos.benchmark.encryption.AsyncEncryptionBenchmark;
 import com.azure.cosmos.benchmark.encryption.AsyncEncryptionQueryBenchmark;
@@ -10,11 +14,15 @@ import com.azure.cosmos.benchmark.encryption.AsyncEncryptionQuerySinglePartition
 import com.azure.cosmos.benchmark.encryption.AsyncEncryptionReadBenchmark;
 import com.azure.cosmos.benchmark.encryption.AsyncEncryptionWriteBenchmark;
 import com.azure.cosmos.benchmark.linkedin.LICtlWorkload;
+import com.azure.cosmos.models.PartitionKey;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.ParameterException;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.Optional;
 
 import static com.azure.cosmos.benchmark.Configuration.Operation.CtlWorkload;
@@ -45,21 +53,33 @@ public class Main {
 
             validateConfiguration(cfg);
 
-            if (cfg.isSync()) {
-                syncBenchmark(cfg);
-            } else {
-                if (cfg.getOperationType().equals(ReadThroughputWithMultipleClients)) {
-                    asyncMultiClientBenchmark(cfg);
-                } else if (cfg.getOperationType().equals(CtlWorkload)) {
-                    asyncCtlWorkload(cfg);
-                } else if (cfg.getOperationType().equals(LinkedInCtlWorkload)) {
-                    linkedInCtlWorkload(cfg);
-                } else if (cfg.isEncryptionEnabled()) {
-                    asyncEncryptionBenchmark(cfg);
-                } else {
-                    asyncBenchmark(cfg);
-                }
+            CosmosAsyncClient client = new CosmosClientBuilder()
+                .endpoint(cfg.getServiceEndpoint())
+                .key(cfg.getMasterKey())
+                .buildAsyncClient();
+
+            CosmosAsyncContainer container = client.getDatabase("TestDB").getContainer("TestContainer");
+            container.openConnectionsAndInitCaches().block();
+
+            System.out.println("Has finished opening all connections, sleep for 1 minutes to disable the network");
+            Thread.sleep(Duration.ofMinutes(1).toMillis());
+
+            for (int i = 0; i < 4; i++) {
+                container
+                    .readItem("1b04c1e7-ed6b-423e-b760-3785ba199313", new PartitionKey("1b04c1e7-ed6b-423e-b760-3785ba199313"), JsonNode.class)
+                    .flatMap(response -> {
+                        System.out.println(response.getDiagnostics());
+                        return Mono.empty();
+                    })
+                    .onErrorResume(throwable -> {
+                        System.out.println("Error: " + ((CosmosException) throwable).getDiagnostics());
+                        return Mono.empty();
+                    })
+                    .block();
             }
+
+            System.out.println("Start sleep for 1 hour");
+            Thread.sleep(Duration.ofHours(1).toMillis());
         } catch (ParameterException e) {
             // if any error in parsing the cmd-line options print out the usage help
             System.err.println("INVALID Usage: " + e.getMessage());
