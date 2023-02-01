@@ -16,6 +16,7 @@ import com.azure.cosmos.implementation.ReplicatedResourceClientUtils;
 import com.azure.cosmos.implementation.ResourceType;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.OpenConnectionResponse;
+import com.azure.cosmos.implementation.faultinjection.RntbdFaultInjector;
 import com.azure.cosmos.implementation.throughputControl.ThroughputControlStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,15 +48,15 @@ public class ReplicatedResourceClient {
     private final Configs configs;
 
     public ReplicatedResourceClient(
-            DiagnosticsClientContext diagnosticsClientContext,
-            Configs configs,
-            AddressSelector addressSelector,
-            ISessionContainer sessionContainer,
-            TransportClient transportClient,
-            GatewayServiceConfigurationReader serviceConfigReader,
-            IAuthorizationTokenProvider authorizationTokenProvider,
-            boolean enableReadRequestsFallback,
-            boolean useMultipleWriteLocations) {
+        DiagnosticsClientContext diagnosticsClientContext,
+        Configs configs,
+        AddressSelector addressSelector,
+        ISessionContainer sessionContainer,
+        TransportClient transportClient,
+        GatewayServiceConfigurationReader serviceConfigReader,
+        IAuthorizationTokenProvider authorizationTokenProvider,
+        boolean enableReadRequestsFallback,
+        boolean useMultipleWriteLocations) {
         this.diagnosticsClientContext = diagnosticsClientContext;
         this.configs = configs;
         this.protocol = configs.getProtocol();

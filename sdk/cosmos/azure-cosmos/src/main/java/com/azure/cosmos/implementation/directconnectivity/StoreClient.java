@@ -27,6 +27,7 @@ import com.azure.cosmos.implementation.Strings;
 import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.apachecommons.lang.math.NumberUtils;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdOpenConnectionsHandler;
+import com.azure.cosmos.implementation.faultinjection.RntbdFaultInjector;
 import com.azure.cosmos.implementation.throughputControl.ThroughputControlStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,13 +56,13 @@ public class StoreClient implements IStoreClient {
     private final String ZERO_PARTITION_KEY_RANGE = "0";
 
     public StoreClient(
-            DiagnosticsClientContext diagnosticsClientContext,
-            Configs configs,
-            IAddressResolver addressResolver,
-            SessionContainer sessionContainer,
-            GatewayServiceConfigurationReader serviceConfigurationReader, IAuthorizationTokenProvider userTokenProvider,
-            TransportClient transportClient,
-            boolean useMultipleWriteLocations) {
+        DiagnosticsClientContext diagnosticsClientContext,
+        Configs configs,
+        IAddressResolver addressResolver,
+        SessionContainer sessionContainer,
+        GatewayServiceConfigurationReader serviceConfigurationReader, IAuthorizationTokenProvider userTokenProvider,
+        TransportClient transportClient,
+        boolean useMultipleWriteLocations) {
         this.diagnosticsClientContext = diagnosticsClientContext;
         this.transportClient = transportClient;
         this.sessionContainer = sessionContainer;

@@ -26,6 +26,7 @@ import com.azure.cosmos.implementation.RetryWithException;
 import com.azure.cosmos.implementation.ServiceUnavailableException;
 import com.azure.cosmos.implementation.UnauthorizedException;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
+import com.azure.cosmos.implementation.faultinjection.RntbdFaultInjector;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
@@ -107,6 +108,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
 
     private boolean closingExceptionally = false;
     private CoalescingBufferQueue pendingWrites;
+    private RntbdFaultInjector faultInjector;
 
     // endregion
 
@@ -114,7 +116,8 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         final ChannelHealthChecker healthChecker,
         final int pendingRequestLimit,
         final RntbdConnectionStateListener connectionStateListener,
-        final long idleConnectionTimerResolutionInNanos) {
+        final long idleConnectionTimerResolutionInNanos,
+        final RntbdFaultInjector faultInjector) {
 
         checkArgument(pendingRequestLimit > 0, "pendingRequestLimit: %s", pendingRequestLimit);
         checkNotNull(healthChecker, "healthChecker");
@@ -124,6 +127,7 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         this.healthChecker = healthChecker;
         this.rntbdConnectionStateListener = connectionStateListener;
         this.idleConnectionTimerResolutionInNanos = idleConnectionTimerResolutionInNanos;
+        this.faultInjector = faultInjector;
     }
 
     // region ChannelHandler methods
@@ -821,6 +825,12 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
         final HttpResponseStatus status = response.getStatus();
         final UUID activityId = response.getActivityId();
         final int statusCode = status.code();
+
+        if (faultInjector.applyRule(requestRecord.args().serviceRequest())) {
+            return;
+        }
+
+        // for connection delay - delay completing request record by the duration
 
         if ((HttpResponseStatus.OK.code() <= statusCode && statusCode < HttpResponseStatus.MULTIPLE_CHOICES.code()) ||
             statusCode == HttpResponseStatus.NOT_MODIFIED.code()) {

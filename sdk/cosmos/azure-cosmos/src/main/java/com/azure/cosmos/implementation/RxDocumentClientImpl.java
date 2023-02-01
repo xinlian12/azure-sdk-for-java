@@ -28,6 +28,8 @@ import com.azure.cosmos.implementation.directconnectivity.GlobalAddressResolver;
 import com.azure.cosmos.implementation.directconnectivity.ServerStoreModel;
 import com.azure.cosmos.implementation.directconnectivity.StoreClient;
 import com.azure.cosmos.implementation.directconnectivity.StoreClientFactory;
+import com.azure.cosmos.implementation.faultinjection.GatewayFaultInjector;
+import com.azure.cosmos.implementation.faultinjection.RntbdFaultInjector;
 import com.azure.cosmos.implementation.feedranges.FeedRangeEpkImpl;
 import com.azure.cosmos.implementation.http.HttpClient;
 import com.azure.cosmos.implementation.http.HttpClientConfig;
@@ -60,6 +62,7 @@ import com.azure.cosmos.models.CosmosItemIdentity;
 import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.CosmosPatchOperations;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
+import com.azure.cosmos.models.FaultInjectionRule;
 import com.azure.cosmos.models.FeedRange;
 import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.models.ModelBridgeInternal;
@@ -188,6 +191,8 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
     private final CosmosClientTelemetryConfig clientTelemetryConfig;
     private final String clientCorrelationId;
     private final EnumSet<TagName> metricTagNames;
+    private GatewayFaultInjector gatewayFaultInjector;
+    private RntbdFaultInjector rntbdFaultInjector;
 
     public RxDocumentClientImpl(URI serviceEndpoint,
                                 String masterKeyOrResourceToken,
@@ -450,6 +455,8 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             this.queryPlanCache = new ConcurrentHashMap<>();
             this.apiType = apiType;
             this.clientTelemetryConfig = clientTelemetryConfig;
+            this.gatewayFaultInjector = new GatewayFaultInjector();
+            this.rntbdFaultInjector = new RntbdFaultInjector();
         } catch (RuntimeException e) {
             logger.error("unexpected failure in initializing client.", e);
             close();
@@ -509,7 +516,8 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
                 this.userAgentContainer,
                 this.globalEndpointManager,
                 this.reactorHttpClient,
-                this.apiType);
+                this.apiType,
+                this.gatewayFaultInjector);
             this.globalEndpointManager.init();
             this.initializeGatewayConfigurationReader();
 
@@ -625,7 +633,8 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
                                              UserAgentContainer userAgentContainer,
                                              GlobalEndpointManager globalEndpointManager,
                                              HttpClient httpClient,
-                                             ApiType apiType) {
+                                             ApiType apiType,
+                                             GatewayFaultInjector gatewayFaultInjector) {
         return new RxGatewayStoreModel(
                 this,
                 sessionContainer,
@@ -634,7 +643,8 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
                 userAgentContainer,
                 globalEndpointManager,
                 httpClient,
-                apiType);
+                apiType,
+                gatewayFaultInjector);
     }
 
     private HttpClient httpClient() {
@@ -4295,6 +4305,14 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
         }
 
         this.throughputControlStore.enableThroughputControlGroup(group);
+    }
+
+    @Override
+    public synchronized void applyFaultInjectionRules(List<FaultInjectionRule> rules) {
+        for (FaultInjectionRule rule : rules) {
+            this.rntbdFaultInjector.configureRule(rule);
+            this.gatewayFaultInjector.configureRule(rule);
+        }
     }
 
     @Override

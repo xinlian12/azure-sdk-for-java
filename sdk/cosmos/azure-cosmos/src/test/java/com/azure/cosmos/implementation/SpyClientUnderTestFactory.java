@@ -8,6 +8,7 @@ import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.implementation.clienttelemetry.TagName;
 import com.azure.cosmos.implementation.directconnectivity.Protocol;
 import com.azure.cosmos.implementation.directconnectivity.ReflectionUtils;
+import com.azure.cosmos.implementation.faultinjection.GatewayFaultInjector;
 import com.azure.cosmos.implementation.http.HttpClient;
 import com.azure.cosmos.implementation.http.HttpHeaders;
 import com.azure.cosmos.implementation.http.HttpRequest;
@@ -118,7 +119,8 @@ public class SpyClientUnderTestFactory {
                                                  UserAgentContainer userAgentContainer,
                                                  GlobalEndpointManager globalEndpointManager,
                                                  HttpClient rxClient,
-                                                 ApiType apiType) {
+                                                 ApiType apiType,
+                                                 GatewayFaultInjector faultInjector) {
             this.origRxGatewayStoreModel = super.createRxGatewayProxy(
                 sessionContainer,
                 consistencyLevel,
@@ -126,7 +128,8 @@ public class SpyClientUnderTestFactory {
                 userAgentContainer,
                 globalEndpointManager,
                 rxClient,
-                apiType);
+                apiType,
+                faultInjector);
             this.requests = Collections.synchronizedList(new ArrayList<>());
             this.spyRxGatewayStoreModel = Mockito.spy(this.origRxGatewayStoreModel);
             this.initRequestCapture();

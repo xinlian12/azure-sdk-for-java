@@ -29,6 +29,8 @@ import com.azure.cosmos.models.CosmosDatabaseRequestOptions;
 import com.azure.cosmos.models.CosmosDatabaseResponse;
 import com.azure.cosmos.models.CosmosPermissionProperties;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
+import com.azure.cosmos.models.FaultInjectionRule;
+import com.azure.cosmos.models.FaultInjectionRuleBuilder;
 import com.azure.cosmos.models.ModelBridgeInternal;
 import com.azure.cosmos.models.SqlQuerySpec;
 import com.azure.cosmos.models.ThroughputProperties;
@@ -579,6 +581,10 @@ public final class CosmosAsyncClient implements Closeable {
     void enableThroughputControlGroup(ThroughputControlGroupInternal group) {
         checkNotNull(group, "Throughput control group cannot be null");
         this.asyncDocumentClient.enableThroughputControlGroup(group);
+    }
+
+    void applyFaultInjectionRules(List<FaultInjectionRule> faultInjectionRules) {
+        this.asyncDocumentClient.applyFaultInjectionRules(faultInjectionRules);
     }
 
     /**

@@ -20,6 +20,8 @@ import com.azure.cosmos.models.CosmosChangeFeedRequestOptions;
 import com.azure.cosmos.models.CosmosItemIdentity;
 import com.azure.cosmos.models.CosmosPatchOperations;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
+import com.azure.cosmos.models.FaultInjectionRule;
+import com.azure.cosmos.models.FaultInjectionRuleBuilder;
 import com.azure.cosmos.models.FeedRange;
 import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.models.PartitionKey;
@@ -1654,6 +1656,8 @@ public interface AsyncDocumentClient {
      * @param group the throughput control group.
      */
     void enableThroughputControlGroup(ThroughputControlGroupInternal group);
+
+    void applyFaultInjectionRules(List<FaultInjectionRule> rules);
 
     /***
      *  Warming up the caches and connections to all replicas of the container for the current read region.

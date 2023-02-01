@@ -5,6 +5,7 @@ package com.azure.cosmos.implementation.directconnectivity.rntbd;
 
 import com.azure.cosmos.implementation.clienttelemetry.ClientTelemetry;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdEndpoint.Config;
+import com.azure.cosmos.implementation.faultinjection.RntbdFaultInjector;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
@@ -183,6 +184,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
 
     private final ScheduledFuture<?> pendingAcquisitionExpirationFuture;
     private final ClientTelemetry clientTelemetry;
+    private RntbdFaultInjector faultInjector;
 
     /**
      * Initializes a newly created {@link RntbdClientChannelPool} instance.
@@ -197,8 +199,9 @@ public final class RntbdClientChannelPool implements ChannelPool {
         final Bootstrap bootstrap,
         final Config config,
         final ClientTelemetry clientTelemetry,
-        final RntbdConnectionStateListener connectionStateListener) {
-        this(endpoint, bootstrap, config, new RntbdClientChannelHealthChecker(config), clientTelemetry, connectionStateListener);
+        final RntbdConnectionStateListener connectionStateListener,
+        final RntbdFaultInjector faultInjector) {
+        this(endpoint, bootstrap, config, new RntbdClientChannelHealthChecker(config), clientTelemetry, connectionStateListener, faultInjector);
     }
 
     private RntbdClientChannelPool(
@@ -207,7 +210,8 @@ public final class RntbdClientChannelPool implements ChannelPool {
         final Config config,
         final RntbdClientChannelHealthChecker healthChecker,
         final ClientTelemetry clientTelemetry,
-        final RntbdConnectionStateListener connectionStateListener) {
+        final RntbdConnectionStateListener connectionStateListener,
+        final RntbdFaultInjector faultInjector) {
 
         checkNotNull(endpoint, "expected non-null endpoint");
         checkNotNull(bootstrap, "expected non-null bootstrap");
@@ -215,7 +219,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
         checkNotNull(healthChecker, "expected non-null healthChecker");
 
         this.endpoint = endpoint;
-        this.poolHandler = new RntbdClientChannelHandler(config, healthChecker, connectionStateListener);
+        this.poolHandler = new RntbdClientChannelHandler(config, healthChecker, connectionStateListener, this.faultInjector);
         this.executor = bootstrap.config().group().next();
         this.healthChecker = healthChecker;
 
@@ -288,6 +292,8 @@ public final class RntbdClientChannelPool implements ChannelPool {
 //                this.runTasksInPendingAcquisitionQueue();
 //
 //            }, requestTimerResolutionInNanos, requestTimerResolutionInNanos, TimeUnit.NANOSECONDS);
+
+        this.faultInjector = faultInjector;
     }
 
     // region Accessors

@@ -15,6 +15,7 @@ import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.UserAgentContainer;
 import com.azure.cosmos.implementation.clienttelemetry.ClientTelemetry;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.*;
+import com.azure.cosmos.implementation.faultinjection.RntbdFaultInjector;
 import com.azure.cosmos.implementation.guava25.base.Strings;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -110,13 +111,14 @@ public class RntbdTransportClient extends TransportClient {
         final UserAgentContainer userAgent,
         final IAddressResolver addressResolver,
         final ClientTelemetry clientTelemetry,
-        final GlobalEndpointManager globalEndpointManager) {
+        final GlobalEndpointManager globalEndpointManager,
+        final RntbdFaultInjector faultInjector) {
 
         this(
             new Options.Builder(connectionPolicy).userAgent(userAgent).build(),
             configs.getSslContext(),
             addressResolver,
-            clientTelemetry, globalEndpointManager);
+            clientTelemetry, globalEndpointManager, faultInjector);
     }
 
     //  TODO:(kuthapar) This constructor sets the globalEndpointmManager to null, which is not ideal.
@@ -133,14 +135,16 @@ public class RntbdTransportClient extends TransportClient {
         final SslContext sslContext,
         final IAddressResolver addressResolver,
         final ClientTelemetry clientTelemetry,
-        final GlobalEndpointManager globalEndpointManager) {
+        final GlobalEndpointManager globalEndpointManager,
+        final RntbdFaultInjector faultInjector) {
 
         this.endpointProvider = new RntbdServiceEndpoint.Provider(
             this,
             options,
             checkNotNull(sslContext, "expected non-null sslContext"),
             addressResolver,
-            clientTelemetry);
+            clientTelemetry,
+            faultInjector);
 
         this.id = instanceCount.incrementAndGet();
         this.tag = RntbdTransportClient.tag(this.id);

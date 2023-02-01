@@ -13,6 +13,7 @@ import com.azure.cosmos.implementation.directconnectivity.HttpUtils;
 import com.azure.cosmos.implementation.directconnectivity.RequestHelper;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
 import com.azure.cosmos.implementation.directconnectivity.WebExceptionUtility;
+import com.azure.cosmos.implementation.faultinjection.GatewayFaultInjector;
 import com.azure.cosmos.implementation.http.HttpClient;
 import com.azure.cosmos.implementation.http.HttpHeaders;
 import com.azure.cosmos.implementation.http.HttpRequest;
@@ -62,16 +63,18 @@ class RxGatewayStoreModel implements RxStoreModel {
     private RxPartitionKeyRangeCache partitionKeyRangeCache;
     private GatewayServiceConfigurationReader gatewayServiceConfigurationReader;
     private RxClientCollectionCache collectionCache;
+    private GatewayFaultInjector gatewayFaultInjector;
 
     public RxGatewayStoreModel(
-            DiagnosticsClientContext clientContext,
-            ISessionContainer sessionContainer,
-            ConsistencyLevel defaultConsistencyLevel,
-            QueryCompatibilityMode queryCompatibilityMode,
-            UserAgentContainer userAgentContainer,
-            GlobalEndpointManager globalEndpointManager,
-            HttpClient httpClient,
-            ApiType apiType) {
+        DiagnosticsClientContext clientContext,
+        ISessionContainer sessionContainer,
+        ConsistencyLevel defaultConsistencyLevel,
+        QueryCompatibilityMode queryCompatibilityMode,
+        UserAgentContainer userAgentContainer,
+        GlobalEndpointManager globalEndpointManager,
+        HttpClient httpClient,
+        ApiType apiType,
+        GatewayFaultInjector gatewayFaultInjector) {
         this.clientContext = clientContext;
         this.defaultHeaders = new HashMap<>();
         this.defaultHeaders.put(HttpConstants.HttpHeaders.CACHE_CONTROL,
@@ -103,6 +106,7 @@ class RxGatewayStoreModel implements RxStoreModel {
 
         this.httpClient = httpClient;
         this.sessionContainer = sessionContainer;
+        this.gatewayFaultInjector = gatewayFaultInjector;
     }
 
     void setGatewayServiceConfigurationReader(GatewayServiceConfigurationReader gatewayServiceConfigurationReader) {
@@ -190,8 +194,11 @@ class RxGatewayStoreModel implements RxStoreModel {
                         RuntimeConstants.MediaTypes.QUERY_JSON);
                 break;
         }
-        return this.performRequest(request, HttpMethod.POST);
+
+        return this.gatewayFaultInjector.applyRule(request)
+            .switchIfEmpty(this.performRequest(request, HttpMethod.POST));
     }
+
 
     public Mono<RxDocumentServiceResponse> performRequest(RxDocumentServiceRequest request, HttpMethod method) {
         try {
@@ -207,6 +214,7 @@ class RxGatewayStoreModel implements RxStoreModel {
             }
 
             return this.performRequestInternal(request, method, uri);
+
         } catch (Exception e) {
             return Mono.error(e);
         }
