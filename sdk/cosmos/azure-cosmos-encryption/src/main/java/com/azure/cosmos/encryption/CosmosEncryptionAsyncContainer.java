@@ -10,9 +10,11 @@ import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.encryption.implementation.Constants;
 import com.azure.cosmos.encryption.implementation.CosmosResponseFactory;
 import com.azure.cosmos.encryption.implementation.EncryptionImplementationBridgeHelpers;
+import com.azure.cosmos.encryption.implementation.EncryptionProcessor;
 import com.azure.cosmos.encryption.implementation.EncryptionSettings;
 import com.azure.cosmos.encryption.implementation.EncryptionUtils;
 import com.azure.cosmos.encryption.implementation.mdesrc.cryptography.MicrosoftDataEncryptionException;
+import com.azure.cosmos.encryption.models.SqlQuerySpecWithEncryption;
 import com.azure.cosmos.implementation.CosmosPagedFluxOptions;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
@@ -46,8 +48,6 @@ import com.azure.cosmos.models.SqlParameter;
 import com.azure.cosmos.models.SqlQuerySpec;
 import com.azure.cosmos.util.CosmosPagedFlux;
 import com.azure.cosmos.util.UtilBridgeInternal;
-import com.azure.cosmos.encryption.implementation.EncryptionProcessor;
-import com.azure.cosmos.encryption.models.SqlQuerySpecWithEncryption;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -60,7 +60,6 @@ import reactor.core.scheduler.Schedulers;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -200,83 +199,113 @@ public final class CosmosEncryptionAsyncContainer {
                                                        CosmosItemRequestOptions requestOptions) {
 
         this.encryptionProcessor.initEncryptionSettingsIfNotInitializedAsync();
-        EncryptionSettings encryptionSettings = this.encryptionProcessor.getEncryptionSettings();
 
-        try {
-            itemId = checkAndGetEncryptedId(itemId, encryptionSettings);
-            partitionKey = checkAndGetEncryptedPartitionKey(partitionKey, encryptionSettings);
-        } catch (JsonProcessingException | MicrosoftDataEncryptionException e) {
-            return Mono.error(e);
-        }
-        return container.deleteItem(itemId, partitionKey, requestOptions);
+        String finalItemId = itemId;
+        PartitionKey finalPartitionKey = partitionKey;
+        return Mono.just(this.encryptionProcessor.getEncryptionSettings())
+            .flatMap(settings -> {
+                try {
+                    return Mono.zip(
+                        checkAndGetEncryptedId(finalItemId, settings),
+                        checkAndGetEncryptedPartitionKey(finalPartitionKey, settings)
+                    ).flatMap(encryptedIdPartitionTuple ->
+                        container.deleteItem(encryptedIdPartitionTuple.getT1(), encryptedIdPartitionTuple.getT2(), requestOptions));
+
+                } catch (Exception e) {
+                    return Mono.error(e);
+                }
+            });
     }
 
-    private String checkAndGetEncryptedId(String itemId, EncryptionSettings encryptionSettings)
-        throws MicrosoftDataEncryptionException {
-        AtomicReference<String> encryptedId = new AtomicReference<>();
+    private Mono<String> checkAndGetEncryptedId(String itemId, EncryptionSettings encryptionSettings) {
         if (this.encryptionProcessor.getClientEncryptionPolicy().getIncludedPaths().stream().
             anyMatch(includedPath -> includedPath.getPath().substring(1).equals(Constants.PROPERTY_NAME_ID))) {
 
-            encryptedId.set(getEncryptedItem(encryptionSettings, Constants.PROPERTY_NAME_ID, itemId));
+            return this.getEncryptedItem(encryptionSettings, Constants.PROPERTY_NAME_ID, itemId);
         }
 
-        return encryptedId.get() != null ? encryptedId.get() : itemId;
+        return Mono.just(itemId);
     }
 
-    private PartitionKey checkAndGetEncryptedPartitionKey(PartitionKey partitionKey, EncryptionSettings encryptionSettings)
-        throws JsonProcessingException, MicrosoftDataEncryptionException {
+    private Mono<PartitionKey> checkAndGetEncryptedPartitionKey(PartitionKey partitionKey, EncryptionSettings encryptionSettings) {
         if (encryptionSettings.getPartitionKeyPaths().isEmpty() || partitionKey == null) {
-            return partitionKey;
+            return Mono.just(partitionKey);
         }
-        JsonNode partitionKeyNode = EncryptionUtils.getSimpleObjectMapper().readTree(partitionKey.toString());
+
+        JsonNode partitionKeyNode;
+        try {
+            partitionKeyNode = EncryptionUtils.getSimpleObjectMapper().readTree(partitionKey.toString());
+        } catch (JsonProcessingException e) {
+            return Mono.error(e);
+        }
+
         if (partitionKeyNode.isArray()) {
             ArrayNode arrayNode = (ArrayNode) partitionKeyNode;
-            PartitionKeyBuilder partitionKeyBuilder = new PartitionKeyBuilder();
 
-            for (String path : encryptionSettings.getPartitionKeyPaths()) {
-                // case: partition key path is /a/b/c and the client encryption policy has /a in path.
-                // hence encrypt the partition key value with using its top level path /a since
-                // /c would have been encrypted in the document using /a's policy.
-                String partitionKeyPath = path.split("/")[0];
+            return Mono.just(new PartitionKeyBuilder())
+                .flatMap(partitionKeyBuilder -> {
+                    return Flux.fromIterable(encryptionSettings.getPartitionKeyPaths())
+                        .flatMap(path -> {
+                            // case: partition key path is /a/b/c and the client encryption policy has /a in path.
+                            // hence encrypt the partition key value with using its top level path /a since
+                            // /c would have been encrypted in the document using /a's policy.
+                            String partitionKeyPath = path.split("/")[0];
 
-                String childPartitionKey = arrayNode.elements().next().toString();
-                if (this.encryptionProcessor.getClientEncryptionPolicy().getIncludedPaths().stream().
-                    anyMatch(includedPath -> includedPath.getPath().substring(1).equals(partitionKeyPath))) {
-                    partitionKeyBuilder.add(childPartitionKey);
-                    continue;
-                }
-                partitionKeyBuilder.add(getEncryptedItem(encryptionSettings, partitionKeyPath, childPartitionKey));
-            }
-            return partitionKeyBuilder.build();
+                            String childPartitionKey = arrayNode.elements().next().toString();
+                            if (this.encryptionProcessor.getClientEncryptionPolicy().getIncludedPaths().stream().
+                                anyMatch(includedPath -> includedPath.getPath().substring(1).equals(partitionKeyPath))) {
+                                partitionKeyBuilder.add(childPartitionKey);
+                                return Mono.empty();
+                            }
+
+                            return getEncryptedItem(encryptionSettings, partitionKeyPath, childPartitionKey);
+                        })
+                        .collectList()
+                        .flatMap(encryptedItems -> {
+                            for (String encryptedItem : encryptedItems) {
+                                partitionKeyBuilder.add(encryptedItem);
+                            }
+
+                            return Mono.just(partitionKeyBuilder.build());
+                        });
+                });
         }
 
         else {
-            if (encryptionSettings.getPartitionKeyPaths().size() > 1) {
-                throw new MicrosoftDataEncryptionException("There should only be 1 PartitionKeyPath.");
-            }
-            String partitionKeyPath = encryptionSettings.getPartitionKeyPaths().get(0);
-            if (this.encryptionProcessor.getClientEncryptionPolicy().getIncludedPaths().stream().
-                anyMatch(includedPath -> includedPath.getPath().substring(1).equals(partitionKeyPath))) {
-                return partitionKey;
-            }
-            return new PartitionKey(getEncryptedItem(encryptionSettings, partitionKeyPath, partitionKey.toString()));
+            return Mono.just((encryptionSettings.getPartitionKeyPaths().size() > 1))
+                .flatMap(multiplePartitionPath -> {
+                    if (multiplePartitionPath) {
+                        return Mono.error(new MicrosoftDataEncryptionException("There should only be 1 PartitionKeyPath."));
+                    }
+
+                    return Mono.just(encryptionSettings.getPartitionKeyPaths().get(0))
+                        .flatMap(partitionKeyPath -> {
+                            if (this.encryptionProcessor.getClientEncryptionPolicy().getIncludedPaths().stream().
+                                anyMatch(includedPath -> includedPath.getPath().substring(1).equals(partitionKeyPath))) {
+                                return Mono.just(partitionKey);
+                            }
+
+                            return getEncryptedItem(encryptionSettings, partitionKeyPath, partitionKey.toString());
+                        })
+                        .map(encryptedPartitionKeyPath -> new PartitionKey(encryptedPartitionKeyPath));
+                });
         }
     }
 
-    private String getEncryptedItem(EncryptionSettings encryptionSettings, String propertyName, String propertyValue) {
-        AtomicReference<String> encryptedItem = new AtomicReference<>();
-        Mono<EncryptionSettings> encryptionSettingsForProperty = encryptionSettings.getEncryptionSettingForPropertyAsync(propertyName, this.encryptionProcessor);
-
-        encryptionSettingsForProperty.flatMap(settings -> {
-            try {
-                encryptedItem.set(this.encryptionProcessor.
-                    encryptAndSerializeValue(settings, propertyValue, propertyName));
-            } catch (MicrosoftDataEncryptionException ex) {
-                return Mono.error(ex);
-            }
-            return Mono.empty();
-        }).block();
-        return encryptedItem.get();
+    private Mono<String> getEncryptedItem(EncryptionSettings encryptionSettings, String propertyName, String propertyValue) {
+        return encryptionSettings
+            .getEncryptionSettingForPropertyAsync(propertyName, this.encryptionProcessor)
+            .flatMap(settings -> {
+                try {
+                    return Mono.just(
+                        this.encryptionProcessor.encryptAndSerializeValue(
+                            settings,
+                            propertyValue,
+                            propertyName));
+                } catch (MicrosoftDataEncryptionException e) {
+                    return Mono.error(e);
+                }
+            });
     }
 
 
@@ -313,15 +342,12 @@ public final class CosmosEncryptionAsyncContainer {
             requestOptions = new CosmosItemRequestOptions();
         }
 
-        this.encryptionProcessor.initEncryptionSettingsIfNotInitializedAsync();
-        EncryptionSettings encryptionSettings = this.encryptionProcessor.getEncryptionSettings();
-
-        try {
-            partitionKey = checkAndGetEncryptedPartitionKey(partitionKey, encryptionSettings);
-        } catch (JsonProcessingException | MicrosoftDataEncryptionException e) {
-            return Mono.error(e);
-        }
-        return container.deleteAllItemsByPartitionKey(partitionKey, requestOptions);
+        // Please find a better way to do this
+        CosmosItemRequestOptions finalRequestOptions = requestOptions;
+        return this.encryptionProcessor.initEncryptionSettingsIfNotInitializedAsync()
+            .thenReturn(this.encryptionProcessor.getEncryptionSettings())
+            .flatMap(encryptedSettings -> checkAndGetEncryptedPartitionKey(partitionKey, encryptedSettings))
+            .flatMap(encryptedPartitionKey -> container.deleteAllItemsByPartitionKey(partitionKey, finalRequestOptions));
     }
 
     /**
@@ -477,21 +503,24 @@ public final class CosmosEncryptionAsyncContainer {
             requestOptions = new CosmosItemRequestOptions();
         }
 
-        this.encryptionProcessor.initEncryptionSettingsIfNotInitializedAsync();
-        EncryptionSettings encryptionSettings = this.encryptionProcessor.getEncryptionSettings();
-
-        try {
-            id = checkAndGetEncryptedId(id, encryptionSettings);
-            partitionKey = checkAndGetEncryptedPartitionKey(partitionKey, encryptionSettings);
-        } catch (JsonProcessingException | MicrosoftDataEncryptionException e) {
-            return Mono.error(e);
-        }
-
-        Mono<CosmosItemResponse<byte[]>> responseMessageMono = this.readItemHelper(id, partitionKey, requestOptions, false);
-
-        return responseMessageMono.publishOn(encryptionScheduler).flatMap(cosmosItemResponse -> setByteArrayContent(cosmosItemResponse,
-            this.encryptionProcessor.decrypt(cosmosItemResponseBuilderAccessor.getByteArrayContent(cosmosItemResponse)))
-            .map(bytes -> this.responseFactory.createItemResponse(cosmosItemResponse, classType)));
+        // Please find a better way
+        CosmosItemRequestOptions finalRequestOptions = requestOptions;
+        return this.encryptionProcessor.initEncryptionSettingsIfNotInitializedAsync()
+            .thenReturn(this.encryptionProcessor.getEncryptionSettings())
+            .flatMap(encryptedSettings -> {
+                return Mono.zip(
+                        checkAndGetEncryptedId(id, encryptedSettings),
+                        checkAndGetEncryptedPartitionKey(partitionKey, encryptedSettings))
+                    .flatMap(encryptedIdPartitionKeyTuple ->
+                        this.readItemHelper(encryptedIdPartitionKeyTuple.getT1(), encryptedIdPartitionKeyTuple.getT2(), finalRequestOptions, false))
+                    .publishOn(encryptionScheduler)
+                    .flatMap(cosmosItemResponse -> {
+                        return setByteArrayContent(
+                            cosmosItemResponse,
+                            this.encryptionProcessor.decrypt(cosmosItemResponseBuilderAccessor.getByteArrayContent(cosmosItemResponse))
+                        ).map(bytes -> this.responseFactory.createItemResponse(cosmosItemResponse, classType));
+                    });
+            });
     }
 
     /**
@@ -661,17 +690,22 @@ public final class CosmosEncryptionAsyncContainer {
             options = new CosmosPatchItemRequestOptions();
         }
 
-        this.encryptionProcessor.initEncryptionSettingsIfNotInitializedAsync();
-        EncryptionSettings encryptionSettings = this.encryptionProcessor.getEncryptionSettings();
-
-        try {
-            itemId = checkAndGetEncryptedId(itemId, encryptionSettings);
-            partitionKey = checkAndGetEncryptedPartitionKey(partitionKey, encryptionSettings);
-        } catch (JsonProcessingException | MicrosoftDataEncryptionException e) {
-            return Mono.error(e);
-        }
-
-        return patchItemHelper(itemId, partitionKey, cosmosPatchOperations, options, itemType);
+        // Find a better way
+        CosmosPatchItemRequestOptions finalOptions = options;
+        return this.encryptionProcessor.initEncryptionSettingsIfNotInitializedAsync()
+            .thenReturn(this.encryptionProcessor.getEncryptionSettings())
+            .flatMap(encryptedSettings -> {
+                return Mono.zip(
+                        checkAndGetEncryptedId(itemId, encryptedSettings),
+                        checkAndGetEncryptedPartitionKey(partitionKey, encryptedSettings))
+                    .flatMap(encryptedIdPartitionKeyTuple ->
+                        patchItemHelper(
+                            itemId,
+                            partitionKey,
+                            cosmosPatchOperations,
+                            finalOptions,
+                            itemType));
+            });
     }
 
     private <T> Mono<CosmosItemResponse<T>> patchItemHelper(String itemId,
