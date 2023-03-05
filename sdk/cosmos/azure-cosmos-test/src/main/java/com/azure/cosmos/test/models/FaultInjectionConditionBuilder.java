@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.cosmos.faultinjection;
+package com.azure.cosmos.test.models;
 
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 

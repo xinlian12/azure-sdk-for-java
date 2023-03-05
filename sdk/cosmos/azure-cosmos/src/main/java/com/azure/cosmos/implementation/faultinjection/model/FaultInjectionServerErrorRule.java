@@ -22,6 +22,7 @@ public class FaultInjectionServerErrorRule implements IFaultInjectionRuleInterna
     private final Instant expireTime;
     private final Integer hitLimit;
     private final AtomicLong hitCount;
+    private final FaultInjectionConnectionTypeInternal connectionType;
     private final FaultInjectionConditionInternal condition;
     private final FaultInjectionServerErrorResultInternal result;
 
@@ -33,12 +34,14 @@ public class FaultInjectionServerErrorRule implements IFaultInjectionRuleInterna
         Duration delay,
         Duration duration,
         Integer hitLimit,
+        FaultInjectionConnectionTypeInternal connectionType,
         FaultInjectionConditionInternal condition,
         FaultInjectionServerErrorResultInternal result) {
 
         checkArgument(StringUtils.isNotEmpty(id), "Argument 'id' cannot be null nor empty");
         checkNotNull(condition, "Argument 'condition' can not be null");
         checkNotNull(result, "Argument 'result' can not be null");
+        checkNotNull(connectionType, "Argument 'connectionType' can not be null");
 
         this.id = id;
         this.enabled = enabled;
@@ -48,6 +51,7 @@ public class FaultInjectionServerErrorRule implements IFaultInjectionRuleInterna
         this.hitCount = new AtomicLong(0);
         this.condition = condition;
         this.result = result;
+        this.connectionType = connectionType;
     }
 
     public boolean isApplicable(RxDocumentServiceRequest request) {
@@ -73,6 +77,11 @@ public class FaultInjectionServerErrorRule implements IFaultInjectionRuleInterna
     @Override
     public long getHitCount() {
         return this.hitCount.get() > this.hitLimit ? this.hitLimit : this.hitCount.get();
+    }
+
+    @Override
+    public FaultInjectionConnectionTypeInternal getConnectionType() {
+        return this.connectionType;
     }
 
     public FaultInjectionConditionInternal getCondition() {

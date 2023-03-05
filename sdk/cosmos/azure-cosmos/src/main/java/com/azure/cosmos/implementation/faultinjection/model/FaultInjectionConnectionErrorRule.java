@@ -21,6 +21,7 @@ public class FaultInjectionConnectionErrorRule implements IFaultInjectionRuleInt
     private final AtomicLong hitCount;
     private final List<URI> regionEndpoints;
     private final List<URI> addresses;
+    private final FaultInjectionConnectionTypeInternal connectionType;
     private final FaultInjectionConnectionErrorResultInternal result;
 
     private boolean enabled;
@@ -32,10 +33,12 @@ public class FaultInjectionConnectionErrorRule implements IFaultInjectionRuleInt
         Duration duration,
         List<URI> regionEndpoints,
         List<URI> addresses,
+        FaultInjectionConnectionTypeInternal connectionType,
         FaultInjectionConnectionErrorResultInternal result) {
 
         checkArgument(StringUtils.isNotEmpty(id), "Argument 'id' cannot be null nor empty");
         checkNotNull(result, "Argument 'result' can not be null");
+        checkNotNull(connectionType, "Argument 'connectionType' can not be null");
 
         this.id = id;
         this.enabled = enabled;
@@ -45,6 +48,7 @@ public class FaultInjectionConnectionErrorRule implements IFaultInjectionRuleInt
         this.addresses = addresses;
         this.result = result;
         this.hitCount = new AtomicLong(0);
+        this.connectionType = connectionType;
     }
 
     @Override
@@ -55,6 +59,11 @@ public class FaultInjectionConnectionErrorRule implements IFaultInjectionRuleInt
     @Override
     public long getHitCount() {
         return this.hitCount.get();
+    }
+
+    @Override
+    public FaultInjectionConnectionTypeInternal getConnectionType() {
+        return this.connectionType;
     }
 
     public FaultInjectionConnectionErrorResultInternal getResult() {

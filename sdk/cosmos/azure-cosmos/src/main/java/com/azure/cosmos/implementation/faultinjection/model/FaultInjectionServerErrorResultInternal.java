@@ -4,7 +4,6 @@
 package com.azure.cosmos.implementation.faultinjection.model;
 
 import com.azure.cosmos.CosmosException;
-import com.azure.cosmos.faultinjection.FaultInjectionServerErrorType;
 import com.azure.cosmos.implementation.GoneException;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.InternalServerErrorException;
@@ -19,19 +18,18 @@ import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.directconnectivity.WFConstants;
 
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkArgument;
 
 public class FaultInjectionServerErrorResultInternal {
-    private final FaultInjectionServerErrorType serverErrorType;
+    private final FaultInjectionServerErrorTypeInternal serverErrorType;
     private final Integer times;
     private final Duration delay;
 
     public FaultInjectionServerErrorResultInternal(
-        FaultInjectionServerErrorType serverErrorTypes,
+        FaultInjectionServerErrorTypeInternal serverErrorTypes,
         Integer times,
         Duration delay) {
 
@@ -41,7 +39,7 @@ public class FaultInjectionServerErrorResultInternal {
         this.delay = delay;
     }
 
-    public FaultInjectionServerErrorType getServerErrorType() {
+    public FaultInjectionServerErrorTypeInternal getServerErrorType() {
         return serverErrorType;
     }
 

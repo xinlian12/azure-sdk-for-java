@@ -3,19 +3,17 @@
 
 package com.azure.cosmos.implementation.faultinjection.model;
 
-import com.azure.cosmos.faultinjection.FaultInjectionConnectionErrorType;
-
 import java.time.Duration;
 
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
 
 public class FaultInjectionConnectionErrorResultInternal {
-    private final FaultInjectionConnectionErrorType errorType;
+    private final FaultInjectionConnectionErrorTypeInternal errorType;
     private Duration interval;
     private double threshold;
 
     public FaultInjectionConnectionErrorResultInternal(
-        FaultInjectionConnectionErrorType errorType,
+        FaultInjectionConnectionErrorTypeInternal errorType,
         Duration interval,
         double threshold) {
 
@@ -26,7 +24,7 @@ public class FaultInjectionConnectionErrorResultInternal {
         this.threshold = threshold;
     }
 
-    public FaultInjectionConnectionErrorType getErrorType() {
+    public FaultInjectionConnectionErrorTypeInternal getErrorType() {
         return errorType;
     }
 

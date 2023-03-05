@@ -23,6 +23,7 @@ import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.batch.BatchExecutor;
 import com.azure.cosmos.implementation.batch.BulkExecutor;
+import com.azure.cosmos.implementation.faultinjection.model.IFaultInjectionRuleInternal;
 import com.azure.cosmos.implementation.feedranges.FeedRangeEpkImpl;
 import com.azure.cosmos.implementation.feedranges.FeedRangeInternal;
 import com.azure.cosmos.implementation.routing.Range;
@@ -48,7 +49,6 @@ import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.CosmosPatchItemRequestOptions;
 import com.azure.cosmos.models.CosmosPatchOperations;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
-import com.azure.cosmos.faultinjection.FaultInjectionRule;
 import com.azure.cosmos.models.FeedRange;
 import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.models.ModelBridgeInternal;
@@ -1891,11 +1891,10 @@ public class CosmosAsyncContainer {
      * Config fault injection rules.
      *
      * @param rules the rules to be configured.
-     * @return the mono.
      */
-    Mono<Void> configureFaultInjectionRules(List<FaultInjectionRule> rules) {
+    void configureFaultInjectionRules(List<IFaultInjectionRuleInternal> rules) {
         checkNotNull(rules, "Argument 'rules' can not be null");
-        return this.database
+        this.database
             .getClient()
             .configureFaultInjectionRules(rules, Utils.trimBeginningAndEndingSlashes(this.link));
     }
@@ -1924,8 +1923,11 @@ public class CosmosAsyncContainer {
                 }
 
                 @Override
-                public Mono<Void> configureFaultInjectionRules(CosmosAsyncContainer cosmosAsyncContainer, List<FaultInjectionRule> faultInjectionRules) {
-                    return cosmosAsyncContainer.configureFaultInjectionRules(faultInjectionRules);
+                public void configureFaultInjectionRules(
+                    CosmosAsyncContainer cosmosAsyncContainer,
+                    List<IFaultInjectionRuleInternal> faultInjectionRules) {
+
+                    cosmosAsyncContainer.configureFaultInjectionRules(faultInjectionRules);
                 }
             });
     }

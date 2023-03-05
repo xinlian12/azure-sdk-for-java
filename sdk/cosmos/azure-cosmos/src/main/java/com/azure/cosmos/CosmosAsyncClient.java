@@ -24,6 +24,7 @@ import com.azure.cosmos.implementation.clienttelemetry.CosmosMeterOptions;
 import com.azure.cosmos.implementation.clienttelemetry.MetricCategory;
 import com.azure.cosmos.implementation.clienttelemetry.TagName;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdMetrics;
+import com.azure.cosmos.implementation.faultinjection.model.IFaultInjectionRuleInternal;
 import com.azure.cosmos.implementation.throughputControl.config.ThroughputControlGroupInternal;
 import com.azure.cosmos.models.CosmosAuthorizationTokenResolver;
 import com.azure.cosmos.models.CosmosClientTelemetryConfig;
@@ -33,7 +34,6 @@ import com.azure.cosmos.models.CosmosDatabaseResponse;
 import com.azure.cosmos.models.CosmosMetricName;
 import com.azure.cosmos.models.CosmosPermissionProperties;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
-import com.azure.cosmos.faultinjection.FaultInjectionRule;
 import com.azure.cosmos.models.ModelBridgeInternal;
 import com.azure.cosmos.models.SqlQuerySpec;
 import com.azure.cosmos.models.ThroughputProperties;
@@ -597,13 +597,13 @@ public final class CosmosAsyncClient implements Closeable {
         this.asyncDocumentClient.enableThroughputControlGroup(group, throughputQueryMono);
     }
 
-    Mono<Void> configureFaultInjectionRules(List<FaultInjectionRule> rules, String containerNameLink) {
+    void configureFaultInjectionRules(List<IFaultInjectionRuleInternal> rules, String containerNameLink) {
         checkNotNull(rules, "Argument 'rules' can not be null");
         checkArgument(
             StringUtils.isNotEmpty(containerNameLink),
             "Argument 'containerNameLink' can not be null nor empty");
 
-        return this.asyncDocumentClient.configureFaultInjectionRules(rules, containerNameLink);
+        this.asyncDocumentClient.configureFaultInjectionRules(rules, containerNameLink);
     }
 
     /**

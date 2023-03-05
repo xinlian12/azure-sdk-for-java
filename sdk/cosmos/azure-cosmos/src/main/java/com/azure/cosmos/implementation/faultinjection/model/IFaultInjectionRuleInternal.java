@@ -12,6 +12,6 @@ public interface IFaultInjectionRuleInternal {
     List<URI> getRegionEndpoints();
     boolean isValid();
     String getId();
-
     long getHitCount();
+    FaultInjectionConnectionTypeInternal getConnectionType();
 }

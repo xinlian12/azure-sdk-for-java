@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.cosmos.implementation.faultinjection;
+package com.azure.cosmos.test.implementation;
 
 import com.azure.cosmos.ConnectionMode;
 import com.azure.cosmos.ThrottlingRetryOptions;
@@ -9,7 +9,6 @@ import com.azure.cosmos.implementation.BackoffRetryUtility;
 import com.azure.cosmos.implementation.DocumentCollection;
 import com.azure.cosmos.implementation.GlobalEndpointManager;
 import com.azure.cosmos.implementation.IRetryPolicy;
-import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
 import com.azure.cosmos.implementation.OperationType;
 import com.azure.cosmos.implementation.ResourceThrottleRetryPolicy;
 import com.azure.cosmos.implementation.ResourceType;
@@ -28,19 +27,23 @@ import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdUtils;
 import com.azure.cosmos.implementation.faultinjection.model.FaultInjectionConditionInternal;
 import com.azure.cosmos.implementation.faultinjection.model.FaultInjectionConnectionErrorResultInternal;
 import com.azure.cosmos.implementation.faultinjection.model.FaultInjectionConnectionErrorRule;
+import com.azure.cosmos.implementation.faultinjection.model.FaultInjectionConnectionErrorTypeInternal;
+import com.azure.cosmos.implementation.faultinjection.model.FaultInjectionConnectionTypeInternal;
 import com.azure.cosmos.implementation.faultinjection.model.FaultInjectionServerErrorResultInternal;
 import com.azure.cosmos.implementation.faultinjection.model.FaultInjectionServerErrorRule;
+import com.azure.cosmos.implementation.faultinjection.model.FaultInjectionServerErrorTypeInternal;
 import com.azure.cosmos.implementation.faultinjection.model.IFaultInjectionRuleInternal;
 import com.azure.cosmos.implementation.feedranges.FeedRangeInternal;
 import com.azure.cosmos.implementation.routing.PartitionKeyRangeIdentity;
-import com.azure.cosmos.faultinjection.FaultInjectionCondition;
-import com.azure.cosmos.faultinjection.FaultInjectionConnectionErrorResult;
-import com.azure.cosmos.faultinjection.FaultInjectionConnectionType;
-import com.azure.cosmos.faultinjection.FaultInjectionEndpoints;
-import com.azure.cosmos.faultinjection.FaultInjectionOperationType;
-import com.azure.cosmos.faultinjection.FaultInjectionRule;
-import com.azure.cosmos.faultinjection.FaultInjectionServerErrorResult;
-import com.azure.cosmos.faultinjection.FaultInjectionServerErrorType;
+import com.azure.cosmos.test.models.FaultInjectionCondition;
+import com.azure.cosmos.test.models.FaultInjectionConnectionErrorResult;
+import com.azure.cosmos.test.models.FaultInjectionConnectionErrorType;
+import com.azure.cosmos.test.models.FaultInjectionConnectionType;
+import com.azure.cosmos.test.models.FaultInjectionEndpoints;
+import com.azure.cosmos.test.models.FaultInjectionOperationType;
+import com.azure.cosmos.test.models.FaultInjectionRule;
+import com.azure.cosmos.test.models.FaultInjectionServerErrorResult;
+import com.azure.cosmos.test.models.FaultInjectionServerErrorType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -66,7 +69,6 @@ public class FaultInjectionRulesProcessor {
     private final RxStoreModel storeModel;
     private final RxGatewayStoreModel gatewayStoreModel;
     private final RxCollectionCache collectionCache;
-
     private final GlobalEndpointManager globalEndpointManager;
     private final RxPartitionKeyRangeCache partitionKeyRangeCache;
     private final AddressSelector addressSelector;
@@ -105,13 +107,14 @@ public class FaultInjectionRulesProcessor {
      * Main logic of the fault injection processor:
      * 1. Pre-populate all required information - regionEndpoints, physical addresses
      * 2. Create internal effective rule, and attach it to the original rule
-     * 3. Routing the effective rule to the corresponding components: rntbd layer or gateway
      *
      * @param rules the rules to be configured.
      * @param containerNameLink the container name link.
      * @return the mono.
      */
-    public Mono<Void> processFaultInjectionRules(List<FaultInjectionRule> rules, String containerNameLink) {
+    public Mono<List<IFaultInjectionRuleInternal>> processFaultInjectionRules(
+        List<FaultInjectionRule> rules,
+        String containerNameLink) {
         checkNotNull(rules, "Argument 'rules' can not be null");
         checkArgument(
             StringUtils.isNotEmpty(containerNameLink),
@@ -127,24 +130,15 @@ public class FaultInjectionRulesProcessor {
                     .flatMap(rule -> {
                         validateRule(rule);
                         return this.getEffectiveRule(rule, collection)
-                            .flatMap(effectiveRule -> {
+                            .map(effectiveRule -> {
                                 ImplementationBridgeHelpers
                                     .FaultInjectionRuleHelper
                                     .getFaultInjectionRuleAccessor()
                                     .setEffectiveFaultInjectionRule(rule, effectiveRule);
 
-                                switch (rule.getCondition().getConnectionType()) {
-                                    case DIRECT:
-                                        this.storeModel.configFaultInjectionRule(effectiveRule);
-                                        break;
-                                    // TODO: add support for gateway mode
-                                    default:
-                                        return Mono.error(new IllegalStateException("Connection type is not supported"));
-                                }
-
-                                return Mono.empty();
+                                return effectiveRule;
                             });
-                    }).then();
+                    }).collectList();
             });
     }
 
@@ -222,9 +216,10 @@ public class FaultInjectionRulesProcessor {
                     rule.getStartDelay(),
                     rule.getDuration(),
                     rule.getHitLimit(),
+                    this.getEffectiveConnectionType(rule.getCondition().getConnectionType()),
                     effectiveCondition,
                     new FaultInjectionServerErrorResultInternal(
-                        result.getServerErrorType(),
+                        this.getEffectiveErrorType(result.getServerErrorType()),
                         result.getTimes(),
                         result.getDelay()
                     )
@@ -266,8 +261,9 @@ public class FaultInjectionRulesProcessor {
                             rule.getDuration(),
                             regionEndpoints,
                             effectiveAddresses,
+                            this.getEffectiveConnectionType(rule.getCondition().getConnectionType()),
                             new FaultInjectionConnectionErrorResultInternal(
-                                result.getErrorType(),
+                                this.getEffectiveErrorType(result.getErrorType()),
                                 result.getInterval(),
                                 result.getThreshold()
                             )
@@ -316,6 +312,54 @@ public class FaultInjectionRulesProcessor {
                 return OperationType.Delete;
             default:
                 throw new IllegalStateException("FaultInjectionOperationType " + faultInjectionOperationType + " is not supported");
+        }
+    }
+
+    private FaultInjectionConnectionErrorTypeInternal getEffectiveErrorType(FaultInjectionConnectionErrorType connectionErrorType) {
+        switch (connectionErrorType) {
+            case CONNECTION_CLOSE:
+                return FaultInjectionConnectionErrorTypeInternal.CONNECTION_CLOSE;
+            case CONNECTION_RESET:
+                return FaultInjectionConnectionErrorTypeInternal.CONNECTION_RESET;
+            default:
+                throw new IllegalStateException("FaultInjectionConnectionErrorType " + connectionErrorType + " is not supported");
+        }
+    }
+
+    private FaultInjectionServerErrorTypeInternal getEffectiveErrorType(FaultInjectionServerErrorType serverErrorType) {
+        switch (serverErrorType) {
+            case GONE:
+                return FaultInjectionServerErrorTypeInternal.GONE;
+
+            case RETRY_WITH:
+                return FaultInjectionServerErrorTypeInternal.RETRY_WITH;
+
+            case TOO_MANY_REQUEST:
+                return FaultInjectionServerErrorTypeInternal.TOO_MANY_REQUEST;
+
+            case TIMEOUT:
+                return FaultInjectionServerErrorTypeInternal.TIMEOUT;
+
+            case INTERNAL_SERVER_ERROR:
+                return FaultInjectionServerErrorTypeInternal.INTERNAL_SERVER_ERROR;
+
+            case READ_SESSION_NOT_AVAILABLE:
+                return FaultInjectionServerErrorTypeInternal.READ_SESSION_NOT_AVAILABLE;
+
+            case PARTITION_IS_MIGRATING:
+                return FaultInjectionServerErrorTypeInternal.PARTITION_IS_MIGRATING;
+
+            default:
+                throw new IllegalArgumentException("Server error type " + serverErrorType + " is not supported");
+        }
+    }
+
+    private FaultInjectionConnectionTypeInternal getEffectiveConnectionType(FaultInjectionConnectionType connectionType) {
+        switch (connectionType) {
+            case DIRECT:
+                return FaultInjectionConnectionTypeInternal.DIRECT;
+            default:
+                throw new IllegalArgumentException("Connection type " + connectionType + " is not supported");
         }
     }
 
