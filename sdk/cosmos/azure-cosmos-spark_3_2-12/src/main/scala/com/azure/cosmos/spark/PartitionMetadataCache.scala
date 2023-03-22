@@ -73,6 +73,7 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
             cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
             cosmosContainerConfig: CosmosContainerConfig,
             feedRange: NormalizedRange,
+            executorCountBroadcast: Broadcast[Int],
             maxStaleness: Option[Duration] = None): SMono[PartitionMetadata] = {
 
     requireNotNull(cosmosClientConfig, "cosmosClientConfig")
@@ -95,10 +96,11 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
             cosmosClientStateHandles,
             cosmosContainerConfig,
             feedRange,
+            executorCountBroadcast,
             maxStaleness)
         }
       case None => this.getOrCreate(
-        key, userConfig, cosmosClientConfig, cosmosClientStateHandles, cosmosContainerConfig, feedRange, maxStaleness)
+        key, userConfig, cosmosClientConfig, cosmosClientStateHandles, cosmosContainerConfig, feedRange, executorCountBroadcast, maxStaleness)
     }
   }
 
@@ -108,13 +110,14 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
 
   private[this] def getOrCreate
   (
-    key: String,
-    userConfig: Map[String, String],
-    cosmosClientConfig: CosmosClientConfiguration,
-    cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
-    cosmosContainerConfig: CosmosContainerConfig,
-    feedRange: NormalizedRange,
-    maxStaleness: Option[Duration] = None
+      key: String,
+      userConfig: Map[String, String],
+      cosmosClientConfig: CosmosClientConfiguration,
+      cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
+      cosmosContainerConfig: CosmosContainerConfig,
+      feedRange: NormalizedRange,
+      executorCountBroadcast: Broadcast[Int],
+      maxStaleness: Option[Duration] = None
   ) : SMono[PartitionMetadata] = {
 
     val nowEpochMs = Instant.now.toEpochMilli
@@ -133,7 +136,8 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
             metadata.cosmosContainerConfig,
             metadata.feedRange,
             metadata.firstLsn,
-            tolerateNotFound = true
+            tolerateNotFound = true,
+            executorCountBroadcast
           )
             .flatMap(updatedMetadata => {
               val key = PartitionMetadata.createKey(
@@ -162,7 +166,8 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
                   cosmosClientStateHandles,
                   cosmosContainerConfig,
                   feedRange,
-                  key)
+                  key,
+                  executorCountBroadcast)
               }
 
               partitionMetadata
@@ -174,18 +179,20 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
         cosmosClientStateHandles,
         cosmosContainerConfig,
         feedRange,
-        key)
+        key,
+        executorCountBroadcast)
     }
   }
 
   private[this] def create
   (
-    userConfig: Map[String, String],
-    cosmosClientConfiguration: CosmosClientConfiguration,
-    cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
-    cosmosContainerConfig: CosmosContainerConfig,
-    feedRange: NormalizedRange,
-    key: String
+      userConfig: Map[String, String],
+      cosmosClientConfiguration: CosmosClientConfiguration,
+      cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
+      cosmosContainerConfig: CosmosContainerConfig,
+      feedRange: NormalizedRange,
+      key: String,
+      executorCountBroadcast: Broadcast[Int]
   ): SMono[PartitionMetadata] = {
 
     readPartitionMetadata(
@@ -195,7 +202,8 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
       cosmosContainerConfig,
       feedRange,
       None,
-      tolerateNotFound = false
+      tolerateNotFound = false,
+      executorCountBroadcast
     )
       .map(metadata => {
         cache.put(key, metadata.get)
@@ -208,13 +216,14 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
 
   private def readPartitionMetadata
   (
-    userConfig: Map[String, String],
-    cosmosClientConfiguration: CosmosClientConfiguration,
-    cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
-    cosmosContainerConfig: CosmosContainerConfig,
-    feedRange: NormalizedRange,
-    firstLsn: Option[Long],
-    tolerateNotFound: Boolean
+      userConfig: Map[String, String],
+      cosmosClientConfiguration: CosmosClientConfiguration,
+      cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
+      cosmosContainerConfig: CosmosContainerConfig,
+      feedRange: NormalizedRange,
+      firstLsn: Option[Long],
+      tolerateNotFound: Boolean,
+      executorCountBroadcast: Broadcast[Int]
   ): SMono[Option[PartitionMetadata]] = {
 
     TransientErrorsRetryPolicy.executeWithRetry(() =>
@@ -225,19 +234,21 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
         cosmosContainerConfig,
         feedRange,
         firstLsn,
-        tolerateNotFound))
+        tolerateNotFound,
+        executorCountBroadcast))
   }
 
   //scalastyle:off method.length
   private def readPartitionMetadataImpl
   (
-    userConfig: Map[String, String],
-    cosmosClientConfiguration: CosmosClientConfiguration,
-    cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
-    cosmosContainerConfig: CosmosContainerConfig,
-    feedRange: NormalizedRange,
-    previouslyCalculatedFirstLsn: Option[Long],
-    tolerateNotFound: Boolean
+      userConfig: Map[String, String],
+      cosmosClientConfiguration: CosmosClientConfiguration,
+      cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
+      cosmosContainerConfig: CosmosContainerConfig,
+      feedRange: NormalizedRange,
+      previouslyCalculatedFirstLsn: Option[Long],
+      tolerateNotFound: Boolean,
+      executorCountBroadcast: Broadcast[Int]
   ): SMono[Option[PartitionMetadata]] = {
 
     val cosmosClientMetadataCache =
@@ -263,7 +274,8 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
             userConfig,
             cosmosContainerConfig,
             clientCacheItems(0).get,
-            clientCacheItems(1))
+            clientCacheItems(1),
+            executorCountBroadcast)
 
         val optionsFromNow = CosmosChangeFeedRequestOptions.createForProcessingFromNow(
           SparkBridgeImplementationInternal.toFeedRange(feedRange))
@@ -341,6 +353,7 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
               assertNotNull(lastTotalDocumentSize.get, "lastTotalDocumentSize"),
               if (firstLsn.get >= 0) { Some(firstLsn.get)} else { None },
               assertNotNullOrEmpty(lastContinuationToken.get, "fromNow continuationToken"),
+              executorCountBroadcast,
               startLsn = math.max(firstLsn.get(), 0),
               endLsn = None
             ))
@@ -457,7 +470,8 @@ private object PartitionMetadataCache extends BasicLoggingTrait {
         metadataSnapshot.cosmosContainerConfig,
         metadataSnapshot.feedRange,
         metadataSnapshot.firstLsn,
-        tolerateNotFound = true
+        tolerateNotFound = true,
+        metadataSnapshot.executorCountBroadcast
       )
         .map(metadata => {
           val key = PartitionMetadata.createKey(

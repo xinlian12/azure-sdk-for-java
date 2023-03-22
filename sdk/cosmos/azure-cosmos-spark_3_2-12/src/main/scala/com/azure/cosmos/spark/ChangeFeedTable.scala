@@ -5,7 +5,6 @@ package com.azure.cosmos.spark
 import com.azure.cosmos.CosmosException
 import com.azure.cosmos.implementation.CosmosClientMetadataCachesSnapshot
 import com.azure.cosmos.models.PartitionKey
-import com.azure.cosmos.spark.catalog.CosmosCatalogCosmosSDKClient
 import com.azure.cosmos.spark.diagnostics.LoggerHelper
 import com.fasterxml.jackson.databind.node.ObjectNode
 import org.apache.spark.broadcast.Broadcast
@@ -78,9 +77,14 @@ private class ChangeFeedTable(val session: SparkSession,
   private val cosmosClientConfig = CosmosClientConfiguration(
     effectiveUserConfig,
     useEventualConsistency = readConfig.forceEventualConsistency)
-  // This can only be used for data operation against a certain container.
-  private lazy val containerStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots] =
+
+  protected val executorCountListener = CosmosSparkExecutorCountListener()
+
+    // This can only be used for data operation against a certain container.
+  private lazy val containerStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots] = {
     initializeAndBroadcastCosmosClientStatesForContainer()
+  }
+
 
   override def name(): String = tableName
 
@@ -100,7 +104,8 @@ private class ChangeFeedTable(val session: SparkSession,
       new CaseInsensitiveStringMap(effectiveOptions.asJava),
       schema(),
       containerStateHandles,
-      diagnosticsConfig)
+      diagnosticsConfig,
+      executorCountListener.getExecutorCountBroadcast())
   }
 
   override def schema(): StructType = {
@@ -130,7 +135,8 @@ private class ChangeFeedTable(val session: SparkSession,
       clientCacheItem,
       throughputControlClientCacheItem,
       userConfig,
-      defaultSchema)
+      defaultSchema,
+      executorCountListener.getExecutorCountBroadcast())
   }
 
   // This can be used only when databaseName and ContainerName are specified.
@@ -156,7 +162,8 @@ private class ChangeFeedTable(val session: SparkSession,
             effectiveUserConfig,
             cosmosContainerConfig,
             clientCacheItems(0).get,
-            clientCacheItems(1))
+            clientCacheItems(1),
+            executorCountListener.getExecutorCountBroadcast())
 
         try {
           container.readItem(

@@ -10,10 +10,11 @@ import org.apache.spark.sql.types.StructType
 
 private class ItemsBatchWriter
 (
-  userConfig: Map[String, String],
-  inputSchema: StructType,
-  cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-  diagnosticsConfig: DiagnosticsConfig
+    userConfig: Map[String, String],
+    inputSchema: StructType,
+    cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
+    diagnosticsConfig: DiagnosticsConfig,
+    executorCountBroadcast: Broadcast[Int]
 )
   extends BatchWrite
     with StreamingWrite {
@@ -22,11 +23,11 @@ private class ItemsBatchWriter
   log.logInfo(s"Instantiated ${this.getClass.getSimpleName}")
 
   override def createBatchWriterFactory(physicalWriteInfo: PhysicalWriteInfo): DataWriterFactory = {
-    new ItemsDataWriteFactory(userConfig, inputSchema, cosmosClientStateHandles, diagnosticsConfig)
+    new ItemsDataWriteFactory(userConfig, inputSchema, cosmosClientStateHandles, diagnosticsConfig, executorCountBroadcast)
   }
 
   override def createStreamingWriterFactory(physicalWriteInfo: PhysicalWriteInfo): StreamingDataWriterFactory = {
-    new ItemsDataWriteFactory(userConfig, inputSchema, cosmosClientStateHandles, diagnosticsConfig)
+    new ItemsDataWriteFactory(userConfig, inputSchema, cosmosClientStateHandles, diagnosticsConfig, executorCountBroadcast
   }
 
   override def commit(writerCommitMessages: Array[WriterCommitMessage]): Unit = {

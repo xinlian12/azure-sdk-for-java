@@ -23,13 +23,14 @@ import java.time.Duration
 // For now we are creating only one spark partition
 private case class ItemsPartitionReader
 (
-  config: Map[String, String],
-  feedRange: NormalizedRange,
-  readSchema: StructType,
-  cosmosQuery: CosmosParameterizedQuery,
-  diagnosticsContext: DiagnosticsContext,
-  cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-  diagnosticsConfig: DiagnosticsConfig
+    config: Map[String, String],
+    feedRange: NormalizedRange,
+    readSchema: StructType,
+    cosmosQuery: CosmosParameterizedQuery,
+    diagnosticsContext: DiagnosticsContext,
+    cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
+    diagnosticsConfig: DiagnosticsConfig,
+    executorCountBroadcast: Broadcast[Int]
 )
   extends PartitionReader[InternalRow] {
 
@@ -70,7 +71,8 @@ private case class ItemsPartitionReader
       config,
       containerTargetConfig,
       clientCacheItem,
-      throughputControlClientCacheItemOpt)
+      throughputControlClientCacheItemOpt,
+      executorCountBroadcast)
   SparkUtils.safeOpenConnectionInitCaches(cosmosAsyncContainer, log)
 
   private val cosmosSerializationConfig = CosmosSerializationConfig.parseSerializationConfig(config)

@@ -7,6 +7,7 @@ import com.azure.cosmos.models.{CosmosQueryRequestOptions, DedicatedGatewayReque
 import com.azure.cosmos.spark.diagnostics.BasicLoggingTrait
 import com.azure.cosmos.util.CosmosPagedIterable
 import com.fasterxml.jackson.databind.JsonNode
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 
 import java.time.Duration
@@ -95,16 +96,18 @@ private object CosmosTableSchemaInferrer
   private[spark] def inferSchema(clientCacheItem: CosmosClientCacheItem,
                                  throughputControlClientCacheItemOpt: Option[CosmosClientCacheItem],
                                  userConfig: Map[String, String],
-                                 defaultSchema: StructType): StructType = {
+                                 defaultSchema: StructType,
+                                 executorCountBroadcast: Broadcast[Int]): StructType = {
 
     TransientErrorsRetryPolicy.executeWithRetry(() =>
-      inferSchemaImpl(clientCacheItem, throughputControlClientCacheItemOpt, userConfig, defaultSchema))
+      inferSchemaImpl(clientCacheItem, throughputControlClientCacheItemOpt, userConfig, defaultSchema, executorCountBroadcast))
   }
 
   private[this] def inferSchemaImpl(clientCacheItem: CosmosClientCacheItem,
                                     throughputControlClientCacheItemOpt: Option[CosmosClientCacheItem],
                                     userConfig: Map[String, String],
-                                    defaultSchema: StructType): StructType = {
+                                    defaultSchema: StructType,
+                                    executorCountBroadcast: Broadcast[Int]): StructType = {
     val cosmosInferenceConfig = CosmosSchemaInferenceConfig.parseCosmosInferenceConfig(userConfig)
     val cosmosReadConfig = CosmosReadConfig.parseCosmosReadConfig(userConfig)
     if (cosmosInferenceConfig.inferSchemaEnabled) {
@@ -114,7 +117,8 @@ private object CosmosTableSchemaInferrer
           userConfig,
           cosmosContainerConfig,
           clientCacheItem,
-          throughputControlClientCacheItemOpt)
+          throughputControlClientCacheItemOpt,
+          executorCountBroadcast)
       SparkUtils.safeOpenConnectionInitCaches(sourceContainer, (msg, e) => logWarning(msg, e))
       val queryOptions = new CosmosQueryRequestOptions()
       queryOptions.setMaxBufferedItemCount(cosmosInferenceConfig.inferSchemaSamplingSize)

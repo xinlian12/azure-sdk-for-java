@@ -10,7 +10,7 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
-class CosmosPartitionPlannerSpec extends UnitSpec {
+class CosmosPartitionPlannerSpec extends UnitSpec with Spark {
   private[this] val rnd = scala.util.Random
 
   it should "calculateEndLsn without readLimit" in {
@@ -56,7 +56,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val metadata2 = PartitionMetadata(
       Map[String, String](),
@@ -71,7 +72,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val calculate = CosmosPartitionPlanner.calculateEndLsn(
       Array[PartitionMetadata](metadata1, metadata2),
@@ -83,7 +85,7 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
 
   it should "calculateEndLsn should have latestLsn >= startLsn when latestLsn==0 (no continuation)" in {
 
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -124,7 +126,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val metadata2 = PartitionMetadata(
       Map[String, String](),
@@ -139,7 +142,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val calculate = CosmosPartitionPlanner.calculateEndLsn(
       Array[PartitionMetadata](metadata1, metadata2),
@@ -151,7 +155,7 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
 
   it should "calculateEndLsn should return startLsn when lastLsn < startLsn (possible with replication lag)" in {
 
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -192,7 +196,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val metadata2 = PartitionMetadata(
       Map[String, String](),
@@ -207,7 +212,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val calculate = CosmosPartitionPlanner.calculateEndLsn(
       Array[PartitionMetadata](metadata1, metadata2),
@@ -219,7 +225,7 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
 
   it should "calculateEndLsn with readLimit should honor estimated lag" in {
 
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -257,7 +263,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn = 2050,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val metadata2 = PartitionMetadata(
       Map[String, String](),
@@ -272,7 +279,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn = 1750,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val calculate = CosmosPartitionPlanner.calculateEndLsn(
       Array[PartitionMetadata](metadata1, metadata2),
@@ -285,7 +293,7 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
 
   it should "calculateEndLsn with readLimit should proceed at least 1 LSN when there is any lag" in {
 
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -323,7 +331,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn = 2050,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val metadata2 = PartitionMetadata(
       Map[String, String](),
@@ -338,7 +347,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn = 1750,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val metadata3 = PartitionMetadata(
       Map[String, String](),
@@ -353,7 +363,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn = 2150,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val calculate = CosmosPartitionPlanner.calculateEndLsn(
       Array[PartitionMetadata](metadata1, metadata2, metadata3),
@@ -367,7 +378,7 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
 
   it should "calculateEndLsn with readLimit should exceed weightedGap if totalWeighted gap < maxReadLimit" in {
 
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -405,7 +416,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn = 2100,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val metadata2 = PartitionMetadata(
       Map[String, String](),
@@ -420,7 +432,8 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       startLsn = 2100,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val calculate = CosmosPartitionPlanner.calculateEndLsn(
       Array[PartitionMetadata](metadata1, metadata2),

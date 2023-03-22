@@ -18,12 +18,13 @@ import java.util.UUID
 // scalastyle:off multiple.string.literals
 private class ChangeFeedMicroBatchStream
 (
-  val session: SparkSession,
-  val schema: StructType,
-  val config: Map[String, String],
-  val cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-  val checkpointLocation: String,
-  diagnosticsConfig: DiagnosticsConfig
+    val session: SparkSession,
+    val schema: StructType,
+    val config: Map[String, String],
+    val cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
+    val checkpointLocation: String,
+    diagnosticsConfig: DiagnosticsConfig,
+    executorCountBroadcast: Broadcast[Int]
 ) extends MicroBatchStream
   with SupportsAdmissionControl {
 
@@ -55,7 +56,8 @@ private class ChangeFeedMicroBatchStream
       config,
       containerConfig,
       clientCacheItem,
-      throughputControlClientCacheItemOpt)
+      throughputControlClientCacheItemOpt,
+      executorCountBroadcast)
   SparkUtils.safeOpenConnectionInitCaches(container, log)
 
   private var latestOffsetSnapshot: Option[ChangeFeedOffset] = None
@@ -119,7 +121,8 @@ private class ChangeFeedMicroBatchStream
       schema,
       DiagnosticsContext(correlationActivityId, checkpointLocation),
       cosmosClientStateHandles,
-      diagnosticsConfig)
+      diagnosticsConfig,
+      executorCountBroadcast)
   }
 
   /**
@@ -152,7 +155,8 @@ private class ChangeFeedMicroBatchStream
       this.containerConfig,
       this.partitioningConfig,
       this.defaultParallelism,
-      this.container
+      this.container,
+      executorCountBroadcast
     )
 
     if (offset.changeFeedState != startChangeFeedOffset.changeFeedState) {

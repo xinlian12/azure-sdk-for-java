@@ -28,12 +28,13 @@ private object ChangeFeedPartitionReader {
 // For now we are creating only one spark partition per physical partition
 private case class ChangeFeedPartitionReader
 (
-  partition: CosmosInputPartition,
-  config: Map[String, String],
-  readSchema: StructType,
-  diagnosticsContext: DiagnosticsContext,
-  cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-  diagnosticsConfig: DiagnosticsConfig
+    partition: CosmosInputPartition,
+    config: Map[String, String],
+    readSchema: StructType,
+    diagnosticsContext: DiagnosticsContext,
+    cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
+    diagnosticsConfig: DiagnosticsConfig,
+    executorCountBroadcast: Broadcast[Int]
 ) extends PartitionReader[InternalRow] {
 
   @transient private lazy val log = LoggerHelper.getLogger(diagnosticsConfig, this.getClass)
@@ -61,7 +62,8 @@ private case class ChangeFeedPartitionReader
       config,
       containerTargetConfig,
       clientCacheItem,
-      throughputControlClientCacheItemOpt)
+      throughputControlClientCacheItemOpt,
+      executorCountBroadcast)
   SparkUtils.safeOpenConnectionInitCaches(cosmosAsyncContainer, log)
 
   private val cosmosSerializationConfig = CosmosSerializationConfig.parseSerializationConfig(config)

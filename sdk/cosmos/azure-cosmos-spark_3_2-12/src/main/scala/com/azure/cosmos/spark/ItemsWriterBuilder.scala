@@ -14,10 +14,11 @@ import scala.collection.JavaConverters._
 
 private class ItemsWriterBuilder
 (
-  userConfig: CaseInsensitiveStringMap,
-  inputSchema: StructType,
-  cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-  diagnosticsConfig: DiagnosticsConfig
+    userConfig: CaseInsensitiveStringMap,
+    inputSchema: StructType,
+    cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
+    diagnosticsConfig: DiagnosticsConfig,
+    executorCountBroadcast: Broadcast[Int]
 )
   extends WriteBuilder {
   @transient private lazy val log = LoggerHelper.getLogger(diagnosticsConfig, this.getClass)
@@ -28,12 +29,14 @@ private class ItemsWriterBuilder
       userConfig.asCaseSensitiveMap().asScala.toMap,
       inputSchema,
       cosmosClientStateHandles,
-      diagnosticsConfig)
+      diagnosticsConfig,
+      executorCountBroadcast)
 
   override def buildForStreaming(): StreamingWrite =
     new ItemsBatchWriter(
       userConfig.asCaseSensitiveMap().asScala.toMap,
       inputSchema,
       cosmosClientStateHandles,
-      diagnosticsConfig)
+      diagnosticsConfig,
+      executorCountBroadcast)
 }

@@ -6,7 +6,7 @@ import com.azure.cosmos.CosmosException
 import com.azure.cosmos.implementation.CosmosClientMetadataCachesSnapshot
 import com.azure.cosmos.models.PartitionKey
 import com.azure.cosmos.spark.CosmosTableSchemaInferrer.{IdAttributeName, RawJsonBodyAttributeName, TimestampAttributeName}
-import com.azure.cosmos.spark.diagnostics.LoggerHelper
+import com.azure.cosmos.spark.diagnostics.{BasicLoggingTrait, LoggerHelper}
 import com.fasterxml.jackson.databind.node.ObjectNode
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
@@ -47,7 +47,8 @@ private[spark] class ItemsReadOnlyTable(val sparkSession: SparkSession,
                                         val tableProperties: util.Map[String, String] =
                                           Collections.emptyMap[String, String])
   extends Table
-    with SupportsRead {
+    with SupportsRead
+    with BasicLoggingTrait {
 
   private[this] val tablePropertiesClone = Collections.unmodifiableMap[String, String](tableProperties)
   protected val diagnosticsConfig: DiagnosticsConfig = DiagnosticsConfig.parseDiagnosticsConfig(userConfig.asScala.toMap)
@@ -57,6 +58,9 @@ private[spark] class ItemsReadOnlyTable(val sparkSession: SparkSession,
   // This can only be used for data operation against a certain container.
   protected lazy val containerStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots] =
     initializeAndBroadcastCosmosClientStatesForContainer()
+  protected val executorCountListener = CosmosSparkExecutorCountListener()
+  logInfo(s"initializeAndBroadcastExecutorCount result is defined ${executorCountListener.getExecutorCountBroadcast().value}")
+
   protected val effectiveUserConfig: Map[String, String] = CosmosConfig.getEffectiveConfig(
     databaseName,
     containerName,
@@ -70,7 +74,6 @@ private[spark] class ItemsReadOnlyTable(val sparkSession: SparkSession,
     s"${cosmosContainerConfig.database}.${cosmosContainerConfig.container}"
   log.logInfo(s"Instantiated ${this.getClass.getSimpleName} for $tableName")
   //scalastyle:on multiple.string.literals
-
   override def name(): String = tableName
 
   override def properties(): util.Map[String, String] = {
@@ -98,7 +101,8 @@ private[spark] class ItemsReadOnlyTable(val sparkSession: SparkSession,
           effectiveOptions).asJava),
       schema(),
       containerStateHandles,
-      diagnosticsConfig)
+      diagnosticsConfig,
+      executorCountListener.getExecutorCountBroadcast())
   }
 
   override def schema(): StructType = {
@@ -126,7 +130,8 @@ private[spark] class ItemsReadOnlyTable(val sparkSession: SparkSession,
       clientCacheItem,
       throughputControlClientCacheItemOpt,
       userConfig,
-      ItemsTable.defaultSchemaForInferenceDisabled)
+      ItemsTable.defaultSchemaForInferenceDisabled,
+      executorCountListener.getExecutorCountBroadcast())
   }
 
   // This can be used only when databaseName and ContainerName are specified.
@@ -150,7 +155,8 @@ private[spark] class ItemsReadOnlyTable(val sparkSession: SparkSession,
             effectiveUserConfig,
             cosmosContainerConfig,
             clientCacheItems(0).get,
-            clientCacheItems(1))
+            clientCacheItems(1),
+            executorCountListener.getExecutorCountBroadcast())
         try {
           container.readItem(
             UUID.randomUUID().toString,

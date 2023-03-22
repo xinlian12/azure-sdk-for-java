@@ -17,11 +17,12 @@ import java.util.UUID
 
 private class ChangeFeedBatch
 (
-  session: SparkSession,
-  schema: StructType,
-  config: Map[String, String],
-  cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-  diagnosticsConfig: DiagnosticsConfig
+    session: SparkSession,
+    schema: StructType,
+    config: Map[String, String],
+    cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
+    diagnosticsConfig: DiagnosticsConfig,
+    executorCountBroadcast: Broadcast[Int]
 ) extends Batch {
 
   @transient private lazy val log = LoggerHelper.getLogger(diagnosticsConfig, this.getClass)
@@ -58,7 +59,8 @@ private class ChangeFeedBatch
           config,
           containerConfig,
           cacheItems(0).get,
-          cacheItems(1))
+          cacheItems(1),
+          executorCountBroadcast)
 
       val hasBatchCheckpointLocation = changeFeedConfig.batchCheckpointLocation.isDefined &&
         !Strings.isNullOrWhiteSpace(changeFeedConfig.batchCheckpointLocation.get)
@@ -132,7 +134,8 @@ private class ChangeFeedBatch
         containerConfig,
         partitioningConfig,
         this.defaultParallelism,
-        container
+        container,
+        executorCountBroadcast
       )
 
       if(hasBatchCheckpointLocation) {
@@ -185,6 +188,7 @@ private class ChangeFeedBatch
       schema,
       DiagnosticsContext(correlationActivityId, "Batch"),
       cosmosClientStateHandles,
-      diagnosticsConfig)
+      diagnosticsConfig,
+      executorCountBroadcast)
   }
 }

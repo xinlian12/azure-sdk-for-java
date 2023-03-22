@@ -10,7 +10,7 @@ import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 import java.util.{Base64, UUID}
 
-class PartitionMetadataSpec extends UnitSpec {
+class PartitionMetadataSpec extends UnitSpec with Spark {
   private[this] val rnd = scala.util.Random
 
   //scalastyle:off multiple.string.literals
@@ -52,7 +52,7 @@ class PartitionMetadataSpec extends UnitSpec {
 
   it should "create instance with valid parameters via apply in incremental mode" in {
 
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -94,7 +94,8 @@ class PartitionMetadataSpec extends UnitSpec {
       0,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val viaApply = PartitionMetadata(
       Map[String, String](),
@@ -105,7 +106,8 @@ class PartitionMetadataSpec extends UnitSpec {
       docCount,
       docSizeInKB,
       firstLsn,
-      createChangeFeedState(latestLsn, "INCREMENTAL"))
+      createChangeFeedState(latestLsn, "INCREMENTAL"),
+      spark.sparkContext.broadcast(1))
 
     viaCtor.cosmosClientConfig should be theSameInstanceAs viaApply.cosmosClientConfig
     viaCtor.cosmosClientConfig should be theSameInstanceAs clientConfig
@@ -129,7 +131,7 @@ class PartitionMetadataSpec extends UnitSpec {
 
   it should "create instance with valid parameters via apply in full fidelity mode" in {
 
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -171,7 +173,8 @@ class PartitionMetadataSpec extends UnitSpec {
       0,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val viaApply = PartitionMetadata(
       Map[String, String](),
@@ -182,7 +185,8 @@ class PartitionMetadataSpec extends UnitSpec {
       docCount,
       docSizeInKB,
       firstLsn,
-      createChangeFeedState(latestLsn, "FULL_FIDELITY"))
+      createChangeFeedState(latestLsn, "FULL_FIDELITY"),
+      spark.sparkContext.broadcast(1))
 
     viaCtor.cosmosClientConfig should be theSameInstanceAs viaApply.cosmosClientConfig
     viaCtor.cosmosClientConfig should be theSameInstanceAs clientConfig
@@ -206,7 +210,7 @@ class PartitionMetadataSpec extends UnitSpec {
 
   it should "withEndLsn honors the new end LSN" in {
 
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -249,7 +253,8 @@ class PartitionMetadataSpec extends UnitSpec {
       startLsn,
       Some(endLsn),
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     original.latestLsn shouldEqual latestLsn
     original.firstLsn shouldEqual firstLsn
@@ -265,7 +270,7 @@ class PartitionMetadataSpec extends UnitSpec {
   }
 
   it should "clone the meta data for a new sub range" in {
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -308,7 +313,8 @@ class PartitionMetadataSpec extends UnitSpec {
       startLsn,
       Some(endLsn),
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val newRange = NormalizedRange("AA", "AB")
     val newStartLsn = rnd.nextInt()
@@ -319,7 +325,7 @@ class PartitionMetadataSpec extends UnitSpec {
   }
 
   it should "calculate weighted gap when document count per LSN is > 1" in {
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -360,14 +366,15 @@ class PartitionMetadataSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val gap = metadata.getWeightedLsnGap
     gap shouldBe (docCount.toDouble / (latestLsn - firstLsn.get) * (latestLsn - startLsn)).toLong
   }
 
   it should "weighted gap should be at least 1" in {
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -408,14 +415,15 @@ class PartitionMetadataSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val gap = metadata.getWeightedLsnGap
     gap shouldBe 1
   }
 
   it should "calculate weighted gap when document count per LSN is < 1" in {
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -456,14 +464,15 @@ class PartitionMetadataSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val gap = metadata.getWeightedLsnGap
     gap shouldBe (docCount.toDouble / (latestLsn - firstLsn.get) * (latestLsn - startLsn)).toLong
   }
 
   it should "calculate weighted gap when latestLsn==startLsn" in {
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -504,14 +513,15 @@ class PartitionMetadataSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val gap = metadata.getWeightedLsnGap
     gap shouldBe 0
   }
 
   it should "calculate avg. document count per LSN correctly when there are no documents" in {
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -552,14 +562,15 @@ class PartitionMetadataSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     val gap = metadata.getAvgItemsPerLsn
     gap shouldBe 1d
   }
 
   it should "calculate avg. document count per LSN correctly" in {
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -600,7 +611,8 @@ class PartitionMetadataSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     metadata.getAvgItemsPerLsn shouldBe 10d
 
@@ -618,13 +630,14 @@ class PartitionMetadataSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     metadata.getAvgItemsPerLsn shouldBe 0.1d
   }
 
   it should "calculate avg. document count per LSN correctly when firstLsn was empty" in {
-    val clientConfig = spark.CosmosClientConfiguration(
+    val clientConfig = CosmosClientConfiguration(
       UUID.randomUUID().toString,
       UUID.randomUUID().toString,
       CosmosMasterKeyAuthConfig(UUID.randomUUID().toString),
@@ -665,7 +678,8 @@ class PartitionMetadataSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     metadata.getAvgItemsPerLsn shouldBe 10d
 
@@ -683,7 +697,8 @@ class PartitionMetadataSpec extends UnitSpec {
       startLsn,
       None,
       createdAt,
-      lastRetrievedAt)
+      lastRetrievedAt,
+      spark.sparkContext.broadcast(1))
 
     metadata.getAvgItemsPerLsn shouldBe 1d
   }
@@ -691,27 +706,27 @@ class PartitionMetadataSpec extends UnitSpec {
   //scalastyle:off null
   it should "throw due to missing clientConfig" in {
     assertThrows[IllegalArgumentException](
-      PartitionMetadata(Map[String, String](), null, None, contCfg, fr, dc, ds, fLsn, lLsn, 0, None, lrAt, cAt))
+      PartitionMetadata(Map[String, String](), null, None, contCfg, fr, dc, ds, fLsn, lLsn, 0, None, lrAt, cAt, spark.sparkContext.broadcast(1)))
   }
 
   it should "throw due to missing containerConfig" in {
     assertThrows[IllegalArgumentException](
-      PartitionMetadata(Map[String, String](), clientCfg, None, null, fr, dc, ds, fLsn, lLsn, 0, None, lrAt, cAt))
+      PartitionMetadata(Map[String, String](), clientCfg, None, null, fr, dc, ds, fLsn, lLsn, 0, None, lrAt, cAt, spark.sparkContext.broadcast(1)))
   }
 
   it should "throw due to missing feedRange" in {
     assertThrows[IllegalArgumentException](
-      PartitionMetadata(Map[String, String](), clientCfg, None, contCfg, null, dc, ds, fLsn, lLsn, 0, None, lrAt, cAt))
+      PartitionMetadata(Map[String, String](), clientCfg, None, contCfg, null, dc, ds, fLsn, lLsn, 0, None, lrAt, cAt, spark.sparkContext.broadcast(1)))
   }
 
   it should "throw due to missing lastRetrievedAt" in {
     assertThrows[IllegalArgumentException](
-      PartitionMetadata(Map[String, String](), clientCfg, None, contCfg, fr, dc, ds, fLsn, lLsn, 0, None, null, cAt))
+      PartitionMetadata(Map[String, String](), clientCfg, None, contCfg, fr, dc, ds, fLsn, lLsn, 0, None, null, cAt, spark.sparkContext.broadcast(1)))
   }
 
   it should "throw due to missing lastUpdatedAt" in {
     assertThrows[IllegalArgumentException](
-      PartitionMetadata(Map[String, String](), clientCfg, None, contCfg, fr, dc, ds, fLsn, lLsn, 0, None, lrAt, null))
+      PartitionMetadata(Map[String, String](), clientCfg, None, contCfg, fr, dc, ds, fLsn, lLsn, 0, None, lrAt, null, spark.sparkContext.broadcast(1)))
   }
   //scalastyle:on null
   //scalastyle:on multiple.string.literals

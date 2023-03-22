@@ -4,65 +4,138 @@
 package com.azure.cosmos.spark
 
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers
+import com.azure.cosmos.spark.diagnostics.BasicLoggingTrait
 import com.azure.cosmos.{CosmosAsyncContainer, ThroughputControlGroupConfigBuilder}
 import org.apache.spark.broadcast.Broadcast
 import reactor.core.scala.publisher.SMono
 
-private object ThroughputControlHelper {
+import java.util.concurrent.Callable
+import java.util.concurrent.atomic.AtomicReference
+
+private object ThroughputControlHelper
+    extends BasicLoggingTrait {
+
+    private val executorCountBroadcastTracker = new AtomicReference[Broadcast[Int]]()
+
     def getContainer(userConfig: Map[String, String],
                      cosmosContainerConfig: CosmosContainerConfig,
                      cacheItem: CosmosClientCacheItem,
-                     throughputControlCacheItemOpt: Option[CosmosClientCacheItem]): CosmosAsyncContainer = {
+                     throughputControlCacheItemOpt: Option[CosmosClientCacheItem],
+                     executorCountBroadcast: Broadcast[Int]): CosmosAsyncContainer = {
+        logInfo(s"Getting container with executor count ${executorCountBroadcast.value}")
 
         val throughputControlConfigOpt = CosmosThroughputControlConfig.parseThroughputControlConfig(userConfig)
 
         val container = cacheItem.cosmosClient.getDatabase(cosmosContainerConfig.database).getContainer(cosmosContainerConfig.container)
 
         if (throughputControlConfigOpt.isDefined) {
-            assert(throughputControlCacheItemOpt.isDefined)
-            val throughputControlCacheItem = throughputControlCacheItemOpt.get
             val throughputControlConfig = throughputControlConfigOpt.get
-            val groupConfigBuilder = new ThroughputControlGroupConfigBuilder()
-                .groupName(throughputControlConfig.groupName)
-                .defaultControlGroup(true)
 
-            if (throughputControlConfig.targetThroughput.isDefined) {
-                groupConfigBuilder.targetThroughput(throughputControlConfig.targetThroughput.get)
-            }
-            if (throughputControlConfig.targetThroughputThreshold.isDefined) {
-                groupConfigBuilder.targetThroughputThreshold(throughputControlConfig.targetThroughputThreshold.get)
-            }
+            if (throughputControlConfig.globalControlUseDedicatedContainer) {
+                assert(throughputControlCacheItemOpt.isDefined)
+                val throughputControlCacheItem = throughputControlCacheItemOpt.get
 
-            val globalThroughputControlConfigBuilder = throughputControlCacheItem.cosmosClient.createGlobalThroughputControlConfigBuilder(
-                throughputControlConfig.globalControlDatabase,
-                throughputControlConfig.globalControlContainer)
-
-            if (throughputControlConfig.globalControlRenewInterval.isDefined) {
-                globalThroughputControlConfigBuilder.setControlItemRenewInterval(throughputControlConfig.globalControlRenewInterval.get)
-            }
-            if (throughputControlConfig.globalControlExpireInterval.isDefined) {
-                globalThroughputControlConfigBuilder.setControlItemExpireInterval(throughputControlConfig.globalControlExpireInterval.get)
-            }
-
-            // Currently CosmosDB data plane SDK does not support query database/container throughput by using AAD authentication
-            // As a mitigation we are going to pass a throughput query mono which internally use management SDK to query throughput
-            val throughputQueryMonoOpt = getThroughputQueryMono(userConfig, cacheItem, cosmosContainerConfig)
-            throughputQueryMonoOpt match {
-                case Some(throughputQueryMono) =>
-                    ImplementationBridgeHelpers.CosmosAsyncContainerHelper.getCosmosAsyncContainerAccessor
-                        .enableGlobalThroughputControlGroup(
-                            container,
-                            groupConfigBuilder.build(),
-                            globalThroughputControlConfigBuilder.build(),
-                            throughputQueryMono.asJava())
-                case None =>
-                    container.enableGlobalThroughputControlGroup(
-                        groupConfigBuilder.build(),
-                        globalThroughputControlConfigBuilder.build())
+                this.enableGlobalThroughputControlGroup(
+                    userConfig,
+                    cosmosContainerConfig,
+                    container,
+                    cacheItem,
+                    throughputControlCacheItem,
+                    throughputControlConfig)
+            } else {
+                executorCountBroadcastTracker.set(executorCountBroadcast)
+                this.enableGlobalThroughputControlSimpleGroup(
+                    userConfig,
+                    cosmosContainerConfig,
+                    container,
+                    cacheItem,
+                    throughputControlConfig
+                )
             }
         }
 
         container
+    }
+
+    private def enableGlobalThroughputControlGroup(
+                                                  userConfig: Map[String, String],
+                                                  cosmosContainerConfig: CosmosContainerConfig,
+                                                  container: CosmosAsyncContainer,
+                                                  cacheItem: CosmosClientCacheItem,
+                                                  throughputControlCacheItem: CosmosClientCacheItem,
+                                                  throughputControlConfig: CosmosThroughputControlConfig): Unit = {
+
+        val groupConfigBuilder = new ThroughputControlGroupConfigBuilder()
+            .groupName(throughputControlConfig.groupName)
+            .defaultControlGroup(true)
+
+        if (throughputControlConfig.targetThroughput.isDefined) {
+            groupConfigBuilder.targetThroughput(throughputControlConfig.targetThroughput.get)
+        }
+        if (throughputControlConfig.targetThroughputThreshold.isDefined) {
+            groupConfigBuilder.targetThroughputThreshold(throughputControlConfig.targetThroughputThreshold.get)
+        }
+
+        val globalThroughputControlConfigBuilder = throughputControlCacheItem.cosmosClient.createGlobalThroughputControlConfigBuilder(
+            throughputControlConfig.globalControlDatabase,
+            throughputControlConfig.globalControlContainer)
+
+        if (throughputControlConfig.globalControlRenewInterval.isDefined) {
+            globalThroughputControlConfigBuilder.setControlItemRenewInterval(throughputControlConfig.globalControlRenewInterval.get)
+        }
+        if (throughputControlConfig.globalControlExpireInterval.isDefined) {
+            globalThroughputControlConfigBuilder.setControlItemExpireInterval(throughputControlConfig.globalControlExpireInterval.get)
+        }
+
+        // Currently CosmosDB data plane SDK does not support query database/container throughput by using AAD authentication
+        // As a mitigation we are going to pass a throughput query mono which internally use management SDK to query throughput
+        val throughputQueryMonoOpt = getThroughputQueryMono(userConfig, cacheItem, cosmosContainerConfig)
+        throughputQueryMonoOpt match {
+            case Some(throughputQueryMono) =>
+                ImplementationBridgeHelpers.CosmosAsyncContainerHelper.getCosmosAsyncContainerAccessor
+                    .enableGlobalThroughputControlGroup(
+                        container,
+                        groupConfigBuilder.build(),
+                        globalThroughputControlConfigBuilder.build(),
+                        throughputQueryMono.asJava())
+            case None =>
+                container.enableGlobalThroughputControlGroup(
+                    groupConfigBuilder.build(),
+                    globalThroughputControlConfigBuilder.build())
+        }
+    }
+
+    private def enableGlobalThroughputControlSimpleGroup(
+                                                            userConfig: Map[String, String],
+                                                            cosmosContainerConfig: CosmosContainerConfig,
+                                                            container: CosmosAsyncContainer,
+                                                            cacheItem: CosmosClientCacheItem,
+                                                            throughputControlConfig: CosmosThroughputControlConfig): Unit = {
+
+        val groupConfigBuilder = new ThroughputControlGroupConfigBuilder()
+            .groupName(throughputControlConfig.groupName)
+            .defaultControlGroup(true)
+
+        if (throughputControlConfig.targetThroughput.isDefined) {
+            groupConfigBuilder.targetThroughput(throughputControlConfig.targetThroughput.get)
+        }
+        if (throughputControlConfig.targetThroughputThreshold.isDefined) {
+            groupConfigBuilder.targetThroughputThreshold(throughputControlConfig.targetThroughputThreshold.get)
+        }
+
+        val executorCountCallable: Callable[Integer] = () => {
+            this.executorCountBroadcastTracker.get().value
+        }
+
+        val throughputQueryMonoOpt = getThroughputQueryMono(userConfig, cacheItem, cosmosContainerConfig)
+        ImplementationBridgeHelpers
+            .CosmosAsyncContainerHelper
+            .getCosmosAsyncContainerAccessor
+            .enableGlobalThroughputControlSimpleGroup(
+                container,
+                groupConfigBuilder.build(),
+                executorCountCallable,
+                if (throughputQueryMonoOpt.isDefined) throughputQueryMonoOpt.get.asJava() else null)
     }
 
     def getThroughputControlClientCacheItem(userConfig: Map[String, String],
@@ -71,7 +144,8 @@ private object ThroughputControlHelper {
         val throughputControlConfigOpt = CosmosThroughputControlConfig.parseThroughputControlConfig(userConfig)
         val diagnosticConfig = DiagnosticsConfig.parseDiagnosticsConfig(userConfig)
 
-        if (throughputControlConfigOpt.isDefined) {
+        if (throughputControlConfigOpt.isDefined
+            && throughputControlConfigOpt.get.globalControlUseDedicatedContainer) {
             val throughputControlClientConfig =
                 CosmosClientConfiguration.apply(throughputControlConfigOpt.get.cosmosAccountConfig, diagnosticConfig, false)
 

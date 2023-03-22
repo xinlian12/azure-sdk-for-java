@@ -16,7 +16,8 @@ import java.util.concurrent.atomic.AtomicInteger
 private class ItemsDataWriteFactory(userConfig: Map[String, String],
                                     inputSchema: StructType,
                                     cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-                                    diagnosticsConfig: DiagnosticsConfig)
+                                    diagnosticsConfig: DiagnosticsConfig,
+                                    executorCountBroadcast: Broadcast[Int])
   extends DataWriterFactory
     with StreamingDataWriterFactory {
 
@@ -91,7 +92,8 @@ private class ItemsDataWriteFactory(userConfig: Map[String, String],
         userConfig,
         cosmosTargetContainerConfig,
         clientCacheItem,
-        throughputControlClientCacheItemOpt)
+        throughputControlClientCacheItemOpt,
+        executorCountBroadcast)
     SparkUtils.safeOpenConnectionInitCaches(container, log)
 
     private val containerDefinition = container.read().block().getProperties

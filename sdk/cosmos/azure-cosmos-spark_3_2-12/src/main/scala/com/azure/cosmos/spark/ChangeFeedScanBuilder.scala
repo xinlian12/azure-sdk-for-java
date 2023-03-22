@@ -17,11 +17,12 @@ import scala.collection.JavaConverters._
 
 private case class ChangeFeedScanBuilder
 (
-  session: SparkSession,
-  config: CaseInsensitiveStringMap,
-  inputSchema: StructType,
-  cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-  diagnosticsConfig: DiagnosticsConfig
+    session: SparkSession,
+    config: CaseInsensitiveStringMap,
+    inputSchema: StructType,
+    cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
+    diagnosticsConfig: DiagnosticsConfig,
+    executorCountBroadcast: Broadcast[Int]
 )
   extends ScanBuilder
     with SupportsPushDownFilters
@@ -54,7 +55,8 @@ private case class ChangeFeedScanBuilder
       inputSchema,
       config.asScala.toMap,
       cosmosClientStateHandles,
-      diagnosticsConfig)
+      diagnosticsConfig,
+      executorCountBroadcast)
   }
 
   /**

@@ -11,11 +11,12 @@ import org.apache.spark.sql.types.StructType
 
 private case class ChangeFeedScan
 (
-  session: SparkSession,
-  schema: StructType,
-  config: Map[String, String],
-  cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-  diagnosticsConfig: DiagnosticsConfig
+    session: SparkSession,
+    schema: StructType,
+    config: Map[String, String],
+    cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
+    diagnosticsConfig: DiagnosticsConfig,
+    executorCountBroadcast: Broadcast[Int]
 )
   extends Scan {
 
@@ -46,7 +47,7 @@ private case class ChangeFeedScan
    *                                       `TableCapability.BATCH_READ`
    */
   override def toBatch: Batch = {
-    new ChangeFeedBatch(session, schema, config, cosmosClientStateHandles, diagnosticsConfig)
+    new ChangeFeedBatch(session, schema, config, cosmosClientStateHandles, diagnosticsConfig, executorCountBroadcast)
   }
 
   /**
@@ -62,6 +63,6 @@ private case class ChangeFeedScan
    *                                       `TableCapability.MICRO_BATCH_READ`
    */
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-    new ChangeFeedMicroBatchStream(session, schema, config, cosmosClientStateHandles, checkpointLocation: String, diagnosticsConfig)
+    new ChangeFeedMicroBatchStream(session, schema, config, cosmosClientStateHandles, checkpointLocation: String, diagnosticsConfig, executorCountBroadcast)
   }
 }

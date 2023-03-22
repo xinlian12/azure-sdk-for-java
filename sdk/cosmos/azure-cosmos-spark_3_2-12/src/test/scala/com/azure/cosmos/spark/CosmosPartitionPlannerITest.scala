@@ -70,7 +70,8 @@ class CosmosPartitionPlannerITest
       None,
       containerConfig,
       restrictivePartitioningConfig,
-      false
+      false,
+      spark.sparkContext.broadcast(1)
     )
 
     partitionMetadata should have size cosmosBEPartitionCount
@@ -316,7 +317,8 @@ class CosmosPartitionPlannerITest
       None,
       containerConfig,
       partitioningConfig,
-      false
+      false,
+      spark.sparkContext.broadcast(1)
     )
 
     val partitionMetadata = if (startLsn.isDefined) {
@@ -435,7 +437,8 @@ class CosmosPartitionPlannerITest
           startLsn = 0,
           None,
           new AtomicLong(nowEpochMs),
-          new AtomicLong(nowEpochMs)))
+          new AtomicLong(nowEpochMs),
+          spark.sparkContext.broadcast(1)))
     }
   }
 

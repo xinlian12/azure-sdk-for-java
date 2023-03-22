@@ -27,8 +27,10 @@ private object PartitionMetadata {
             totalDocumentSizeInKB: Long,
             firstLsn: Option[Long],
             fromNowContinuationToken: String,
+            executorCountBroadcast: Broadcast[Int],
             startLsn: Long = 0,
-            endLsn: Option[Long] = None): PartitionMetadata = {
+            endLsn: Option[Long] = None
+): PartitionMetadata = {
     // scalastyle:on parameter.number
 
     val nowEpochMs = Instant.now().toEpochMilli
@@ -49,26 +51,28 @@ private object PartitionMetadata {
       startLsn,
       endLsn,
       new AtomicLong(nowEpochMs),
-      new AtomicLong(nowEpochMs)
+      new AtomicLong(nowEpochMs),
+      executorCountBroadcast
     )
   }
 }
 
 private[cosmos] case class PartitionMetadata
 (
-  userConfig: Map[String, String],
-  cosmosClientConfig: CosmosClientConfiguration,
-  cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
-  cosmosContainerConfig: CosmosContainerConfig,
-  feedRange: NormalizedRange,
-  documentCount: Long,
-  totalDocumentSizeInKB: Long,
-  firstLsn: Option[Long],
-  latestLsn: Long,
-  startLsn: Long,
-  endLsn: Option[Long],
-  lastRetrieved: AtomicLong,
-  lastUpdated: AtomicLong
+    userConfig: Map[String, String],
+    cosmosClientConfig: CosmosClientConfiguration,
+    cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
+    cosmosContainerConfig: CosmosContainerConfig,
+    feedRange: NormalizedRange,
+    documentCount: Long,
+    totalDocumentSizeInKB: Long,
+    firstLsn: Option[Long],
+    latestLsn: Long,
+    startLsn: Long,
+    endLsn: Option[Long],
+    lastRetrieved: AtomicLong,
+    lastUpdated: AtomicLong,
+    executorCountBroadcast: Broadcast[Int]
 )  extends BasicLoggingTrait {
 
   requireNotNull(feedRange, "feedRange")
@@ -92,7 +96,8 @@ private[cosmos] case class PartitionMetadata
       startLsn,
       this.endLsn,
       new AtomicLong(this.lastRetrieved.get),
-      new AtomicLong(this.lastUpdated.get)
+      new AtomicLong(this.lastUpdated.get),
+      this.executorCountBroadcast
     )
   }
 
@@ -110,7 +115,8 @@ private[cosmos] case class PartitionMetadata
       startLsn,
       Some(explicitEndLsn),
       new AtomicLong(this.lastRetrieved.get),
-      new AtomicLong(this.lastUpdated.get)
+      new AtomicLong(this.lastUpdated.get),
+      this.executorCountBroadcast
     )
   }
 

@@ -253,16 +253,17 @@ private object CosmosPartitionPlanner extends BasicLoggingTrait {
   // scalastyle:off parameter.number
   def getLatestOffset
   (
-    userConfig: Map[String, String],
-    startOffset: ChangeFeedOffset,
-    readLimit: ReadLimit,
-    maxStaleness: Duration,
-    clientConfiguration: CosmosClientConfiguration,
-    cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-    containerConfig: CosmosContainerConfig,
-    partitioningConfig: CosmosPartitioningConfig,
-    defaultParallelism: Int,
-    container: CosmosAsyncContainer
+      userConfig: Map[String, String],
+      startOffset: ChangeFeedOffset,
+      readLimit: ReadLimit,
+      maxStaleness: Duration,
+      clientConfiguration: CosmosClientConfiguration,
+      cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
+      containerConfig: CosmosContainerConfig,
+      partitioningConfig: CosmosPartitioningConfig,
+      defaultParallelism: Int,
+      container: CosmosAsyncContainer,
+      executorCountBroadcast: Broadcast[Int]
   ): ChangeFeedOffset = {
 
     TransientErrorsRetryPolicy.executeWithRetry(() =>
@@ -276,7 +277,8 @@ private object CosmosPartitionPlanner extends BasicLoggingTrait {
         containerConfig,
         partitioningConfig,
         defaultParallelism,
-        container))
+        container,
+        executorCountBroadcast))
   }
   // scalastyle:on parameter.number
 
@@ -285,16 +287,17 @@ private object CosmosPartitionPlanner extends BasicLoggingTrait {
   // Based on a start offset, calculate which is the next end offset
   private[this] def getLatestOffsetImpl
   (
-    userConfig: Map[String, String],
-    startOffset: ChangeFeedOffset,
-    readLimit: ReadLimit,
-    maxStaleness: Duration,
-    clientConfiguration: CosmosClientConfiguration,
-    cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-    containerConfig: CosmosContainerConfig,
-    partitioningConfig: CosmosPartitioningConfig,
-    defaultParallelism: Int,
-    container: CosmosAsyncContainer
+      userConfig: Map[String, String],
+      startOffset: ChangeFeedOffset,
+      readLimit: ReadLimit,
+      maxStaleness: Duration,
+      clientConfiguration: CosmosClientConfiguration,
+      cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
+      containerConfig: CosmosContainerConfig,
+      partitioningConfig: CosmosPartitioningConfig,
+      defaultParallelism: Int,
+      container: CosmosAsyncContainer,
+      executorCountBroadcast: Broadcast[Int]
   ): ChangeFeedOffset = {
     assertOnSparkDriver()
     assertNotNull(startOffset, "startOffset")
@@ -306,7 +309,9 @@ private object CosmosPartitionPlanner extends BasicLoggingTrait {
       containerConfig,
       partitioningConfig,
       true,
-      Some(maxStaleness)
+      executorCountBroadcast,
+      Some(maxStaleness),
+
     )
 
     val defaultMaxPartitionSizeInMB = DefaultPartitionSizeInMB
@@ -621,10 +626,11 @@ private object CosmosPartitionPlanner extends BasicLoggingTrait {
 
   private[this] def getFeedRanges
   (
-    userConfig: Map[String, String],
-    cosmosClientConfig: CosmosClientConfiguration,
-    cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
-    cosmosContainerConfig: CosmosContainerConfig
+      userConfig: Map[String, String],
+      cosmosClientConfig: CosmosClientConfiguration,
+      cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
+      cosmosContainerConfig: CosmosContainerConfig,
+      executorCountBroadcast: Broadcast[Int]
   ) = {
 
     assertNotNull(cosmosClientConfig, "cosmosClientConfig")
@@ -654,7 +660,8 @@ private object CosmosPartitionPlanner extends BasicLoggingTrait {
             userConfig,
             cosmosContainerConfig,
             clientCacheItems(0).get,
-            clientCacheItems(1))
+            clientCacheItems(1),
+            executorCountBroadcast)
         SparkUtils.safeOpenConnectionInitCaches(container, (msg, e) => logWarning(msg, e))
 
         ContainerFeedRangesCache
@@ -666,13 +673,14 @@ private object CosmosPartitionPlanner extends BasicLoggingTrait {
   }
 
   def getFilteredPartitionMetadata(
-                            userConfig: Map[String, String],
-                            cosmosClientConfig: CosmosClientConfiguration,
-                            cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
-                            cosmosContainerConfig: CosmosContainerConfig,
-                            partitionConfig: CosmosPartitioningConfig,
-                            isChangeFeed: Boolean,
-                            maxStaleness: Option[Duration] = None
+                                      userConfig: Map[String, String],
+                                      cosmosClientConfig: CosmosClientConfiguration,
+                                      cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
+                                      cosmosContainerConfig: CosmosContainerConfig,
+                                      partitionConfig: CosmosPartitioningConfig,
+                                      isChangeFeed: Boolean,
+                                      executorCountBroadcast: Broadcast[Int],
+                                      maxStaleness: Option[Duration] = None,
                           ): Array[PartitionMetadata] = {
 
     TransientErrorsRetryPolicy.executeWithRetry(() =>
@@ -683,17 +691,19 @@ private object CosmosPartitionPlanner extends BasicLoggingTrait {
         cosmosContainerConfig,
         partitionConfig,
         isChangeFeed,
-        maxStaleness))
+        maxStaleness,
+        executorCountBroadcast))
   }
 
   private[this] def getPartitionMetadataImpl(
-      userConfig: Map[String, String],
-      cosmosClientConfig: CosmosClientConfiguration,
-      cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
-      cosmosContainerConfig: CosmosContainerConfig,
-      partitionConfig: CosmosPartitioningConfig,
-      isChangeFeed: Boolean,
-      maxStaleness: Option[Duration] = None
+                                                userConfig: Map[String, String],
+                                                cosmosClientConfig: CosmosClientConfiguration,
+                                                cosmosClientStateHandles: Option[Broadcast[CosmosClientMetadataCachesSnapshots]],
+                                                cosmosContainerConfig: CosmosContainerConfig,
+                                                partitionConfig: CosmosPartitioningConfig,
+                                                isChangeFeed: Boolean,
+                                                maxStaleness: Option[Duration] = None,
+                                                executorCountBroadcast: Broadcast[Int]
   ): Array[PartitionMetadata] = {
 
     assertOnSparkDriver()
@@ -702,7 +712,8 @@ private object CosmosPartitionPlanner extends BasicLoggingTrait {
         userConfig,
         cosmosClientConfig,
         cosmosClientStateHandles,
-        cosmosContainerConfig)
+        cosmosContainerConfig,
+        executorCountBroadcast)
       .map(feedRangeList =>
         partitionConfig.feedRangeFiler match {
           case Some(epkRangesInScope) => feedRangeList
@@ -727,6 +738,7 @@ private object CosmosPartitionPlanner extends BasicLoggingTrait {
                   cosmosClientStateHandles,
                   cosmosContainerConfig,
                   normalizedRange,
+                  executorCountBroadcast,
                   maxStaleness
                 )
               } else {
@@ -743,7 +755,8 @@ private object CosmosPartitionPlanner extends BasicLoggingTrait {
                   0,
                   None,
                   new AtomicLong(0),
-                  new AtomicLong(0)
+                  new AtomicLong(0),
+                  executorCountBroadcast
                 ))
               })
           .collectSeq()

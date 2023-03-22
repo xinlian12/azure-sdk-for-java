@@ -36,7 +36,8 @@ class PartitionMetadataCacheITest
       clientConfig,
       None,
       containerConfig,
-      feedRange).block()
+      feedRange,
+      spark.sparkContext.broadcast(1)).block()
     newItem.feedRange shouldEqual feedRange
     newItem.lastRetrieved.get should be >= startEpochMs
     newItem.lastUpdated.get should be >= startEpochMs
@@ -47,7 +48,7 @@ class PartitionMetadataCacheITest
     this.reinitialize()
     val startEpochMs = Instant.now.toEpochMilli
 
-    val newItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange).block()
+    val newItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1)).block()
     newItem.feedRange shouldEqual feedRange
     newItem.lastUpdated.get should be >= startEpochMs
     newItem.lastRetrieved.get should be >=  startEpochMs
@@ -60,7 +61,7 @@ class PartitionMetadataCacheITest
     //scalastyle:on magic.number
 
     val nextRetrievedItem =
-      PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange).block()
+      PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1)).block()
     nextRetrievedItem.feedRange shouldEqual feedRange
     nextRetrievedItem.lastUpdated.get shouldEqual initialLastUpdated
     nextRetrievedItem.lastRetrieved.get should be > initialLastRetrieved
@@ -70,7 +71,7 @@ class PartitionMetadataCacheITest
   it should "retrieve new item after purge" in {
     this.reinitialize()
 
-    val newItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange).block()
+    val newItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1)).block()
     val initialLastUpdated = newItem.lastUpdated.get
     PartitionMetadataCache.purge(containerConfig, feedRange) shouldEqual true
 
@@ -79,7 +80,7 @@ class PartitionMetadataCacheITest
     //scalastyle:on magic.number
 
     val nextRetrievedItem =
-      PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange).block()
+      PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1)).block()
     nextRetrievedItem.lastUpdated.get should be > initialLastUpdated
   }
 
@@ -87,7 +88,7 @@ class PartitionMetadataCacheITest
   it should "delete cached item after TTL elapsed" in {
     this.reinitialize()
 
-    val newItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange).block()
+    val newItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1)).block()
     val initialLastUpdated = newItem.lastUpdated.get
 
     //scalastyle:off magic.number
@@ -107,7 +108,7 @@ class PartitionMetadataCacheITest
   it should "automatically update the cached item after staleness threshold elapsed" in {
     this.reinitialize()
 
-    val newItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange).block()
+    val newItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1)).block()
     val initialLastUpdated = newItem.lastUpdated.get
 
     //scalastyle:off magic.number
@@ -120,7 +121,7 @@ class PartitionMetadataCacheITest
     //scalastyle:on magic.number
 
     val candidate =
-      PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange).block()
+      PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1)).block()
     candidate.lastUpdated.get should be > initialLastUpdated
 
     PartitionMetadataCache.purge(containerConfig, feedRange) shouldEqual true
@@ -132,21 +133,21 @@ class PartitionMetadataCacheITest
     this.reinitialize()
 
     val newItem =
-      PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange).block()
+      PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1)).block()
     var initialLastUpdated = newItem.lastUpdated.get
 
     //scalastyle:off magic.number
     Thread.sleep(500)
 
     var candidate: PartitionMetadata = PartitionMetadataCache(
-      Map[String, String](), clientConfig, None, containerConfig, feedRange, Some(Duration.ofMillis(400))).block()
+      Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1), Some(Duration.ofMillis(400))).block()
 
     candidate.lastUpdated.get should be > initialLastUpdated
     initialLastUpdated = candidate.lastUpdated.get
     Thread.sleep(1)
     //scalastyle:on magic.number
     candidate = PartitionMetadataCache(
-      Map[String, String](), clientConfig, None, containerConfig, feedRange, Some(Duration.ZERO)).block()
+      Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1), Some(Duration.ZERO)).block()
     candidate.lastUpdated.get should be > initialLastUpdated
 
     PartitionMetadataCache.purge(containerConfig, feedRange) shouldEqual true
@@ -175,7 +176,8 @@ class PartitionMetadataCacheITest
       startLsn = 0,
       None,
       new AtomicLong(startEpochMs),
-      new AtomicLong(startEpochMs))
+      new AtomicLong(startEpochMs),
+      spark.sparkContext.broadcast(1))
 
     PartitionMetadataCache.injectTestData(containerConfig, feedRange, testMetadata)
 
@@ -183,7 +185,7 @@ class PartitionMetadataCacheITest
     Thread.sleep(10)
     //scalastyle:on magic.number
 
-    val newItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange).block()
+    val newItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1)).block()
     newItem.feedRange shouldEqual feedRange
     newItem.lastRetrieved.get should be >= startEpochMs
     newItem.lastUpdated.get shouldEqual startEpochMs
@@ -192,7 +194,7 @@ class PartitionMetadataCacheITest
     val reinitializedEpochMs = Instant.now.toEpochMilli
     this.reinitialize()
 
-    val realItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange).block()
+    val realItem = PartitionMetadataCache(Map[String, String](), clientConfig, None, containerConfig, feedRange, spark.sparkContext.broadcast(1)).block()
     realItem.lastUpdated.get should be >= reinitializedEpochMs
     realItem should not (be theSameInstanceAs testMetadata)
   }

@@ -19,7 +19,8 @@ private case class ItemsScan(session: SparkSession,
                              readConfig: CosmosReadConfig,
                              cosmosQuery: CosmosParameterizedQuery,
                              cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-                             diagnosticsConfig: DiagnosticsConfig)
+                             diagnosticsConfig: DiagnosticsConfig,
+                             executorCountBroadcast: Broadcast[Int])
   extends Scan
     with Batch {
 
@@ -69,7 +70,8 @@ private case class ItemsScan(session: SparkSession,
       Some(cosmosClientStateHandles),
       containerConfig,
       partitioningConfig,
-      false
+      false,
+      executorCountBroadcast
     )
 
     val calledFrom = s"ItemsScan($description()).planInputPartitions"
@@ -89,7 +91,8 @@ private case class ItemsScan(session: SparkSession,
             config,
             containerConfig,
             clientCacheItems(0).get,
-            clientCacheItems(1))
+            clientCacheItems(1),
+            executorCountBroadcast)
         SparkUtils.safeOpenConnectionInitCaches(container, log)
 
         CosmosPartitionPlanner
@@ -114,7 +117,8 @@ private case class ItemsScan(session: SparkSession,
       cosmosQuery,
       DiagnosticsContext(correlationActivityId, cosmosQuery.queryText),
       cosmosClientStateHandles,
-      DiagnosticsConfig.parseDiagnosticsConfig(config))
+      DiagnosticsConfig.parseDiagnosticsConfig(config),
+      executorCountBroadcast)
   }
 
   override def toBatch: Batch = {

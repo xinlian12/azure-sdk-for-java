@@ -115,7 +115,9 @@ public class PkRangesThroughputRequestController implements IThroughputRequestCo
 
     private double calculateThroughputPerPkRange() {
         checkArgument(this.pkRanges != null && this.pkRanges.size() > 0, "Pk range count can not be 0");
-        return this.scheduledThroughput / this.pkRanges.size();
+        double throughput = this.scheduledThroughput / this.pkRanges.size();
+        System.out.println("scheduled throughput per pkRange is " + throughput);
+        return throughput;
     }
 
     private Mono<List<PartitionKeyRange>> getPartitionKeyRanges(Range<String> range) {

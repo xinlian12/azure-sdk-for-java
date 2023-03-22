@@ -11,11 +11,12 @@ import org.apache.spark.sql.types.StructType
 
 private case class ChangeFeedScanPartitionReaderFactory
 (
-  config: Map[String, String],
-  readSchema: StructType,
-  diagnosticsOperationContext: DiagnosticsContext,
-  cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
-  diagnosticsConfig: DiagnosticsConfig
+    config: Map[String, String],
+    readSchema: StructType,
+    diagnosticsOperationContext: DiagnosticsContext,
+    cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
+    diagnosticsConfig: DiagnosticsConfig,
+    executorCountBroadcast: Broadcast[Int]
 ) extends PartitionReaderFactory {
 
   @transient private lazy val log = LoggerHelper.getLogger(diagnosticsConfig, this.getClass)
@@ -30,6 +31,7 @@ private case class ChangeFeedScanPartitionReaderFactory
       readSchema,
       diagnosticsOperationContext,
       cosmosClientStateHandles,
-      diagnosticsConfig)
+      diagnosticsConfig,
+      executorCountBroadcast)
   }
 }
