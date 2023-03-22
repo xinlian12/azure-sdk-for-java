@@ -16,6 +16,7 @@ import com.azure.cosmos.implementation.RetryWithException;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.directconnectivity.WFConstants;
+import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdRequestArgs;
 import com.azure.cosmos.test.faultinjection.FaultInjectionServerErrorType;
 
 import java.time.Duration;
@@ -52,8 +53,8 @@ public class FaultInjectionServerErrorResultInternal {
         return delay;
     }
 
-    public boolean isApplicable(String ruleId, RxDocumentServiceRequest request) {
-        return this.times == null || request.faultInjectionRequestContext.getFaultInjectionRuleApplyCount(ruleId) < this.times;
+    public boolean isApplicable(String ruleId, RntbdRequestArgs requestArgs) {
+        return this.times == null || requestArgs.serviceRequest().faultInjectionRequestContext.getFaultInjectionRuleApplyCount(ruleId) < this.times;
     }
 
     public CosmosException getInjectedServerError(RxDocumentServiceRequest request) {

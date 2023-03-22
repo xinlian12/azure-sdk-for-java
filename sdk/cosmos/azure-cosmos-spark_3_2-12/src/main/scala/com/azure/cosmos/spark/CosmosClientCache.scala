@@ -4,7 +4,6 @@ package com.azure.cosmos.spark
 
 import com.azure.core.management.AzureEnvironment
 import com.azure.core.management.profile.AzureProfile
-import com.azure.cosmos.implementation.clienttelemetry.TagName
 import com.azure.cosmos.implementation.{CosmosClientMetadataCachesSnapshot, CosmosDaemonThreadFactory, SparkBridgeImplementationInternal, Strings}
 import com.azure.cosmos.models.{CosmosClientTelemetryConfig, CosmosMetricCategory, CosmosMetricTagName, CosmosMicrometerMetricsOptions}
 import com.azure.cosmos.spark.CosmosPredicates.isOnSparkDriver
@@ -504,7 +503,6 @@ private[spark] object CosmosClientCache extends BasicLoggingTrait {
           case None =>
             logWarning(s"ApplicationEndListener:onApplicationEnd (${ctx.hashCode}) - not monitored anymore")
         }
-
     }
   }
 }

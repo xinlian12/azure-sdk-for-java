@@ -4,15 +4,44 @@
 package com.azure.cosmos.spark
 
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers
+import com.azure.cosmos.spark.CosmosPredicates.isOnSparkDriver
+import com.azure.cosmos.spark.diagnostics.BasicLoggingTrait
 import com.azure.cosmos.{CosmosAsyncContainer, ThroughputControlGroupConfigBuilder}
+import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.sql.SparkSession
 import reactor.core.scala.publisher.SMono
 
-private object ThroughputControlHelper {
+import java.util.concurrent.Callable
+import java.util.concurrent.atomic.AtomicReference
+import scala.collection.concurrent.TrieMap
+
+private object ThroughputControlHelper extends BasicLoggingTrait{
+
+    private val executorListenerReference = new AtomicReference[SparkExecutorListener]()
+    private[this] val monitoredSparkApplications = new TrieMap[SparkContext, Int]
+
     def getContainer(userConfig: Map[String, String],
                      cosmosContainerConfig: CosmosContainerConfig,
                      cacheItem: CosmosClientCacheItem,
                      throughputControlCacheItemOpt: Option[CosmosClientCacheItem]): CosmosAsyncContainer = {
+
+        if (isOnSparkDriver()) {
+            SparkSession.getActiveSession match {
+                case Some(session) =>
+                    val ctx = session.sparkContext
+                    val executorListener: SparkExecutorListener = SparkExecutorListener()
+                    monitoredSparkApplications.putIfAbsent(ctx, 0) match {
+                        case Some(_) =>
+                        case None =>
+                            logInfo(s"Registering executor listener for Spark Context '${ctx.hashCode}'")
+                            executorListenerReference.set(executorListener)
+                            executorListener.initializeAndBroadcastExecutorCount()
+                            ctx.addSparkListener(executorListener)
+                    }
+                case None =>
+            }
+        }
 
         val throughputControlConfigOpt = CosmosThroughputControlConfig.parseThroughputControlConfig(userConfig)
 
@@ -33,32 +62,55 @@ private object ThroughputControlHelper {
                 groupConfigBuilder.targetThroughputThreshold(throughputControlConfig.targetThroughputThreshold.get)
             }
 
-            val globalThroughputControlConfigBuilder = throughputControlCacheItem.cosmosClient.createGlobalThroughputControlConfigBuilder(
-                throughputControlConfig.globalControlDatabase,
-                throughputControlConfig.globalControlContainer)
+            if (throughputControlConfig.globalControlUseDedicatedContainer) {
+                val globalThroughputControlConfigBuilder = throughputControlCacheItem.cosmosClient.createGlobalThroughputControlConfigBuilder(
+                    throughputControlConfig.globalControlDatabase,
+                    throughputControlConfig.globalControlContainer)
 
-            if (throughputControlConfig.globalControlRenewInterval.isDefined) {
-                globalThroughputControlConfigBuilder.setControlItemRenewInterval(throughputControlConfig.globalControlRenewInterval.get)
-            }
-            if (throughputControlConfig.globalControlExpireInterval.isDefined) {
-                globalThroughputControlConfigBuilder.setControlItemExpireInterval(throughputControlConfig.globalControlExpireInterval.get)
-            }
+                if (throughputControlConfig.globalControlRenewInterval.isDefined) {
+                    globalThroughputControlConfigBuilder.setControlItemRenewInterval(throughputControlConfig.globalControlRenewInterval.get)
+                }
+                if (throughputControlConfig.globalControlExpireInterval.isDefined) {
+                    globalThroughputControlConfigBuilder.setControlItemExpireInterval(throughputControlConfig.globalControlExpireInterval.get)
+                }
 
-            // Currently CosmosDB data plane SDK does not support query database/container throughput by using AAD authentication
-            // As a mitigation we are going to pass a throughput query mono which internally use management SDK to query throughput
-            val throughputQueryMonoOpt = getThroughputQueryMono(userConfig, cacheItem, cosmosContainerConfig)
-            throughputQueryMonoOpt match {
-                case Some(throughputQueryMono) =>
-                    ImplementationBridgeHelpers.CosmosAsyncContainerHelper.getCosmosAsyncContainerAccessor
-                        .enableGlobalThroughputControlGroup(
-                            container,
+                // Currently CosmosDB data plane SDK does not support query database/container throughput by using AAD authentication
+                // As a mitigation we are going to pass a throughput query mono which internally use management SDK to query throughput
+                val throughputQueryMonoOpt = getThroughputQueryMono(userConfig, cacheItem, cosmosContainerConfig)
+                throughputQueryMonoOpt match {
+                    case Some(throughputQueryMono) =>
+                        ImplementationBridgeHelpers.CosmosAsyncContainerHelper.getCosmosAsyncContainerAccessor
+                            .enableGlobalThroughputControlGroup(
+                                container,
+                                groupConfigBuilder.build(),
+                                globalThroughputControlConfigBuilder.build(),
+                                throughputQueryMono.asJava())
+                    case None =>
+                        container.enableGlobalThroughputControlGroup(
                             groupConfigBuilder.build(),
-                            globalThroughputControlConfigBuilder.build(),
-                            throughputQueryMono.asJava())
-                case None =>
-                    container.enableGlobalThroughputControlGroup(
+                            globalThroughputControlConfigBuilder.build())
+                }
+
+            } else {
+                val executorCountCallable: Callable[Integer] = () => {
+                    if (this.executorListenerReference.get() == null) {
+                        logInfo(s"The executor listener is not initialized, returning 1")
+                        1
+                    } else {
+                        this.executorListenerReference.get().getExecutorCountBroadcast().value
+                    }
+                }
+
+                val throughputQueryMonoOpt = getThroughputQueryMono(userConfig, cacheItem, cosmosContainerConfig)
+
+                ImplementationBridgeHelpers
+                    .CosmosAsyncContainerHelper
+                    .getCosmosAsyncContainerAccessor
+                    .enableGlobalThroughputControlSimpleGroup(
+                        container,
                         groupConfigBuilder.build(),
-                        globalThroughputControlConfigBuilder.build())
+                        executorCountCallable,
+                        if (throughputQueryMonoOpt.isDefined) throughputQueryMonoOpt.get.asJava() else null)
             }
         }
 

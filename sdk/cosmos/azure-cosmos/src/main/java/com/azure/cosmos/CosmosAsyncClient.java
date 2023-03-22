@@ -615,7 +615,7 @@ public final class CosmosAsyncClient implements Closeable {
     public GlobalThroughputControlConfigBuilder createGlobalThroughputControlConfigBuilder(String databaseId, String containerId) {
         return new GlobalThroughputControlConfigBuilder(this, databaseId, containerId);
     }
-
+    
     void openConnectionsAndInitCaches() {
         blockListVoidResponse(openConnectionsAndInitCachesInternal());
     }
