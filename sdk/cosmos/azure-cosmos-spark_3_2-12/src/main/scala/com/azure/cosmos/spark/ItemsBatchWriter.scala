@@ -27,7 +27,7 @@ private class ItemsBatchWriter
   }
 
   override def createStreamingWriterFactory(physicalWriteInfo: PhysicalWriteInfo): StreamingDataWriterFactory = {
-    new ItemsDataWriteFactory(userConfig, inputSchema, cosmosClientStateHandles, diagnosticsConfig, executorCountBroadcast
+    new ItemsDataWriteFactory(userConfig, inputSchema, cosmosClientStateHandles, diagnosticsConfig, executorCountBroadcast)
   }
 
   override def commit(writerCommitMessages: Array[WriterCommitMessage]): Unit = {
