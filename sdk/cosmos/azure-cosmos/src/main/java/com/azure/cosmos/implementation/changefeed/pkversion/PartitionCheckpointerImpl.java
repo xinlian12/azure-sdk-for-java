@@ -26,6 +26,7 @@ class PartitionCheckpointerImpl implements PartitionCheckpointer {
 
     public PartitionCheckpointerImpl(LeaseCheckpointer leaseCheckpointer, Lease lease) {
         this.leaseCheckpointer = leaseCheckpointer;
+        logger.info("Initializing PartitionCheckpointerImpl with leasetoken {} {}", lease.getLeaseToken(), lease.getContinuationToken());
         this.lease = lease;
     }
 
@@ -38,6 +39,7 @@ class PartitionCheckpointerImpl implements PartitionCheckpointer {
 
         if (cancellationToken.isCancellationRequested()) return Mono.error(new TaskCancelledException());
 
+        logger.info("going to checkpoint leaseToken {} {} {}", lease.getLeaseToken(), lease.getConcurrencyToken(), lease.getTimestamp());
         return this.leaseCheckpointer.checkpoint(
             this.lease,
             continuationState.getContinuation().getCurrentContinuationToken().getToken(),

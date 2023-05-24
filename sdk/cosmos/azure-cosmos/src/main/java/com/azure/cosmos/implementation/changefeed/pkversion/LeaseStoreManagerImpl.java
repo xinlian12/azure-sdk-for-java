@@ -469,6 +469,8 @@ public class LeaseStoreManagerImpl implements LeaseStoreManager, LeaseStoreManag
             "SELECT * FROM c WHERE STARTSWITH(c.id, @PartitionLeasePrefix)",
             Collections.singletonList(param));
 
+        logger.info("get all lease documents which starts with {}", prefix);
+
         Flux<FeedResponse<InternalObjectNode>> query = this.leaseDocumentClient.queryItems(
             this.settings.getLeaseCollectionLink(),
             querySpec,

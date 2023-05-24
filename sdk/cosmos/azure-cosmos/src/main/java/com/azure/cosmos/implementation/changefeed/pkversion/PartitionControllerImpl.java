@@ -66,6 +66,7 @@ class PartitionControllerImpl implements PartitionController {
     public synchronized Mono<Lease> addOrUpdateLease(final Lease lease) {
         WorkerTask workerTask = this.currentlyOwnedPartitions.get(lease.getLeaseToken());
         if (workerTask != null && workerTask.isRunning()) {
+            logger.info("update lease {} {}", lease.getLeaseToken(), lease.getTimestamp());
             return this.leaseManager.updateProperties(lease)
                 .map(updatedLease -> {
                     logger.debug("Partition {}: updated.", updatedLease.getLeaseToken());
@@ -103,7 +104,7 @@ class PartitionControllerImpl implements PartitionController {
 
         return this.leaseContainer.getOwnedLeases()
             .flatMap( lease -> {
-                logger.info("Acquired lease for PartitionId '{}' on startup.", lease.getLeaseToken());
+                logger.info("Acquired lease for PartitionId '{}' {} on startup. {}", lease.getLeaseToken(), lease.getContinuationToken(), lease.getTimestamp());
                 return this.addOrUpdateLease(lease);
             }).then();
     }

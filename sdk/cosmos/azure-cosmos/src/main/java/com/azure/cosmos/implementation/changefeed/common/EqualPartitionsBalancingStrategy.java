@@ -72,6 +72,7 @@ public class EqualPartitionsBalancingStrategy implements PartitionLoadBalancingS
 
                 return Collections.singletonList(expiredLease);
             } else {
+                logger.info("partitions need for me {}", partitionsNeededForMe);
                 for (Lease lease : expiredLeases) {
                     this.logger.info("Found unused or expired lease {} (owner was {}); previous lease count for instance owner {} is {} and maxScaleCount {} ",
                         lease.getLeaseToken(), lease.getOwner(), this.hostName, myCount, this.maxPartitionCount);
@@ -187,7 +188,12 @@ public class EqualPartitionsBalancingStrategy implements PartitionLoadBalancingS
 
 
         Instant leaseExpireTime = Instant.parse(lease.getTimestamp()).plus(this.leaseExpirationInterval);
-        this.logger.debug("Current lease timestamp: {}, current time: {}", leaseExpireTime, Instant.now());
+        this.logger.info(
+            "Current lease {} timestamp: {}, current time: {}, {}",
+            lease.getLeaseToken(),
+            leaseExpireTime,
+            Instant.now(),
+            leaseExpirationInterval);
         return leaseExpireTime.isBefore(Instant.now());
     }
 }

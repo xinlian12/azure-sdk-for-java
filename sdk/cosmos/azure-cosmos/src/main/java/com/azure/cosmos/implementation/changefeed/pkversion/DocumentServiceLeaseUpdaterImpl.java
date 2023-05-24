@@ -53,10 +53,18 @@ class DocumentServiceLeaseUpdaterImpl implements ServiceItemLeaseUpdater {
 
         cachedLease.setServiceItemLease(localLease);
 
+        logger.info("Going to replace lease {} {}", cachedLease.getLeaseToken(), cachedLease.getTimestamp());
+
         return
             Mono.just(this)
             .flatMap( value -> this.tryReplaceLease(cachedLease, itemId, partitionKey))
             .map(leaseDocument -> {
+                Lease serviceItemLease= ServiceItemLease.fromDocument(leaseDocument);
+                logger.info(
+                    "The lease {} {} has been updated successfully with timestamp {}",
+                    serviceItemLease.getLeaseToken(),
+                    serviceItemLease.getContinuationToken(),
+                    serviceItemLease.getTimestamp());
                 cachedLease.setServiceItemLease(ServiceItemLease.fromDocument(leaseDocument));
                 return cachedLease;
             })
@@ -129,9 +137,13 @@ class DocumentServiceLeaseUpdaterImpl implements ServiceItemLeaseUpdater {
 
     private Mono<InternalObjectNode> tryReplaceLease(Lease lease, String itemId, PartitionKey partitionKey)
                                                                                         throws LeaseLostException {
+        logger.info("tryReplaceLease {} {} with timestamp {}", lease.getLeaseToken(), lease.getContinuationToken(), lease.getTimestamp());
         return this.client.replaceItem(itemId, partitionKey, lease, this.getCreateIfMatchOptions(lease))
-            .map(cosmosItemResponse -> BridgeInternal.getProperties(cosmosItemResponse))
+            .map(cosmosItemResponse -> {
+                return BridgeInternal.getProperties(cosmosItemResponse);
+            })
             .onErrorResume(re -> {
+                logger.info("tryReplaceLease {} {} failed with {}", lease.getLeaseToken(), lease.getContinuationToken(), re.getMessage());
                 if (re instanceof CosmosException) {
                     CosmosException ex = (CosmosException) re;
                     switch (ex.getStatusCode()) {

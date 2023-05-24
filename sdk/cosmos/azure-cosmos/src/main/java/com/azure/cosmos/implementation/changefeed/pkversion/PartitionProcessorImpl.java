@@ -81,7 +81,7 @@ class PartitionProcessorImpl implements PartitionProcessor {
 
     @Override
     public Mono<Void> run(CancellationToken cancellationToken) {
-        logger.info("Partition {}: processing task started with owner {}.", this.lease.getLeaseToken(), this.lease.getOwner());
+        logger.info("Partition {} {}: processing task started with owner {}.", this.lease.getLeaseToken(), this.lease.getContinuationToken(), this.lease.getOwner());
         this.isFirstQueryForChangeFeeds = true;
         this.checkpointer.setCancellationToken(cancellationToken);
 
