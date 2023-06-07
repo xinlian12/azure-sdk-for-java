@@ -15,7 +15,9 @@ import com.azure.cosmos.implementation.directconnectivity.HttpUtils;
 import com.azure.cosmos.implementation.directconnectivity.RequestHelper;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
 import com.azure.cosmos.implementation.directconnectivity.WebExceptionUtility;
+import com.azure.cosmos.implementation.faultinjection.GatewayServerErrorInjector;
 import com.azure.cosmos.implementation.faultinjection.IFaultInjectorProvider;
+import com.azure.cosmos.implementation.faultinjection.IGatewayServerErrorInjector;
 import com.azure.cosmos.implementation.http.HttpClient;
 import com.azure.cosmos.implementation.http.HttpHeaders;
 import com.azure.cosmos.implementation.http.HttpRequest;
@@ -25,12 +27,15 @@ import com.azure.cosmos.implementation.routing.PartitionKeyInternal;
 import com.azure.cosmos.implementation.routing.PartitionKeyInternalHelper;
 import com.azure.cosmos.implementation.throughputControl.ThroughputControlStore;
 import com.azure.cosmos.models.CosmosContainerIdentity;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelOption;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -60,6 +65,7 @@ public class RxGatewayStoreModel implements RxStoreModel {
     private final HttpClient httpClient;
     private final QueryCompatibilityMode queryCompatibilityMode;
     private final GlobalEndpointManager globalEndpointManager;
+    private final GatewayServerErrorInjector gatewayServerErrorInjector;
     private ConsistencyLevel defaultConsistencyLevel;
     private ISessionContainer sessionContainer;
     private ThroughputControlStore throughputControlStore;
@@ -108,6 +114,7 @@ public class RxGatewayStoreModel implements RxStoreModel {
 
         this.httpClient = httpClient;
         this.sessionContainer = sessionContainer;
+        this.gatewayServerErrorInjector = new GatewayServerErrorInjector();
     }
 
     void setGatewayServiceConfigurationReader(GatewayServiceConfigurationReader gatewayServiceConfigurationReader) {
@@ -247,6 +254,25 @@ public class RxGatewayStoreModel implements RxStoreModel {
             }
 
             Mono<HttpResponse> httpResponseMono = this.httpClient.send(httpRequest, responseTimeout);
+
+            Utils.ValueHolder<CosmosException> exceptionResultValueHolder = new Utils.ValueHolder<>();
+            if (this.gatewayServerErrorInjector.injectGatewayServerResponseError(request, exceptionResultValueHolder)) {
+                Throwable exception = exceptionResultValueHolder.v;
+                return Mono.error(exception);
+            }
+
+            Utils.ValueHolder<Duration> injectedDelay = new Utils.ValueHolder<>();
+            Utils.ValueHolder<Exception> injectedException = new Utils.ValueHolder<>();
+            if (this.gatewayServerErrorInjector.injectGatewayServerResponseDelayBeforeProcessing(request, injectedDelay)) {
+                return Mono.delay(injectedDelay.v)
+                    .flatMap(delayedTime -> toDocumentServiceResponse(httpResponseMono, request, httpRequest));
+            }
+
+            if (this.gatewayServerErrorInjector.injectGatewayServerResponseDelayAfterProcessing(request, injectedDelay)) {
+                return toDocumentServiceResponse(httpResponseMono, request, httpRequest)
+                    .delayElement(injectedDelay.v);
+            }
+
             return toDocumentServiceResponse(httpResponseMono, request, httpRequest);
 
         } catch (Exception e) {
@@ -537,7 +563,7 @@ public class RxGatewayStoreModel implements RxStoreModel {
 
     @Override
     public void configureFaultInjectorProvider(IFaultInjectorProvider injectorProvider) {
-        throw new NotImplementedException("configureFaultInjectorProvider is not supported in RxGatewayStoreModel");
+        this.gatewayServerErrorInjector.registerServerErrorInjector(injectorProvider.getGatewayServerErrorInjector());
     }
 
     @Override

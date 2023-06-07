@@ -18,6 +18,7 @@ import com.azure.cosmos.implementation.ShouldRetryResult;
 import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.WebExceptionRetryPolicy;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
+import com.azure.cosmos.implementation.apachecommons.lang.tuple.Pair;
 import com.azure.cosmos.implementation.caches.RxCollectionCache;
 import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
 import com.azure.cosmos.implementation.directconnectivity.AddressSelector;
@@ -122,6 +123,20 @@ public class FaultInjectionRuleProcessor {
             && this.connectionMode != ConnectionMode.DIRECT) {
             throw new IllegalArgumentException("Direct connection type rule is not supported when client is not in direct mode.");
         }
+
+        if (rule.getCondition().getOperationType() != null) {
+            if (rule.getCondition().getConnectionType() == FaultInjectionConnectionType.DIRECT
+                && this.isMetadataRequest(rule.getCondition().getOperationType())) {
+                throw new IllegalArgumentException("Only gateway connection type is supported for resource type " + rule.getCondition().getOperationType());
+            }
+        }
+    }
+
+    private boolean isMetadataRequest(FaultInjectionOperationType operationType) {
+        return operationType == FaultInjectionOperationType.GET_QUERY_PLAN
+            || operationType == FaultInjectionOperationType.GET_SERVER_ADDRESSES
+            || operationType == FaultInjectionOperationType.READ_CONTAINER
+            || operationType == FaultInjectionOperationType.READ_DATABASE_ACCOUNT;
     }
 
     private Mono<IFaultInjectionRuleInternal> getEffectiveRule(
@@ -166,7 +181,11 @@ public class FaultInjectionRuleProcessor {
                     effectiveCondition.setRegionEndpoints(regionEndpoints);
                 }
 
-                // TODO: add handling for gateway mode
+                if (rule.getCondition().getConnectionType() == FaultInjectionConnectionType.GATEWAY) {
+                    // for gateway requests, there is no need to get the rntbd physical addresses, return
+                    // TODO: what if customer only want to inject error on one partition, should we check by the partitionId information on the header
+                    return Mono.just(effectiveCondition);
+                }
 
                 // Direct connection mode, populate physical addresses
                 boolean primaryAddressesOnly = this.isWriteOnly(rule.getCondition());
@@ -226,30 +245,36 @@ public class FaultInjectionRuleProcessor {
         return Mono.just(rule)
             .flatMap(originalRule -> Mono.just(this.getRegionEndpoints(rule.getCondition())))
             .flatMap(regionEndpoints -> {
+                if (rule.getCondition().getConnectionType() == FaultInjectionConnectionType.GATEWAY) {
+                    return Mono.just(Pair.of(regionEndpoints, new ArrayList()));
+                }
                 return this.resolvePhysicalAddresses(
                         regionEndpoints,
                         rule.getCondition().getEndpoints(),
                         this.isWriteOnly(rule.getCondition()),
                         documentCollection)
-                    .map(physicalAddresses -> {
+                    .flatMap(physicalAddresses -> {
                         List<URI> effectiveAddresses =
                             physicalAddresses
                                 .stream()
                                 .map(address -> RntbdUtils.getServerKey(address))
                                 .collect(Collectors.toList());
 
-                        FaultInjectionConnectionErrorResult result = (FaultInjectionConnectionErrorResult) rule.getResult();
-                        return new FaultInjectionConnectionErrorRule(
-                            rule.getId(),
-                            rule.isEnabled(),
-                            rule.getStartDelay(),
-                            rule.getDuration(),
-                            regionEndpoints,
-                            effectiveAddresses,
-                            rule.getCondition().getConnectionType(),
-                            result
-                        );
+                        return Mono.just(Pair.of(regionEndpoints, effectiveAddresses));
                     });
+            })
+            .map(pair -> {
+                FaultInjectionConnectionErrorResult result = (FaultInjectionConnectionErrorResult) rule.getResult();
+                return new FaultInjectionConnectionErrorRule(
+                    rule.getId(),
+                    rule.isEnabled(),
+                    rule.getStartDelay(),
+                    rule.getDuration(),
+                    pair.getLeft(),
+                    pair.getRight(),
+                    rule.getCondition().getConnectionType(),
+                    result
+                );
             });
     }
 

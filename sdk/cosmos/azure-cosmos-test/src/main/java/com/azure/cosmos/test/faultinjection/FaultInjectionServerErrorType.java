@@ -9,7 +9,7 @@ package com.azure.cosmos.test.faultinjection;
 public enum FaultInjectionServerErrorType {
 
     /** 410 from server */
-    GONE,
+    GONE, // Only applicable in direct mode.
 
     /** 449 from server */
     RETRY_WITH,
@@ -36,5 +36,9 @@ public enum FaultInjectionServerErrorType {
     RESPONSE_DELAY,
 
     /** simulate high channel acquisition, when it is over connection timeout, can simulate connectionTimeoutException */
-    CONNECTION_DELAY
+    CONNECTION_DELAY,
+    /**
+     * simulate staled addresses being returned from gateway
+     */
+    STALED_ADDRESSES
 }

@@ -5,11 +5,13 @@ package com.azure.cosmos.implementation.http;
 
 import com.azure.cosmos.implementation.DiagnosticsClientContext;
 import com.azure.cosmos.implementation.LifeCycleUtils;
+import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -51,6 +53,11 @@ public class SharedGatewayHttpClient implements HttpClient {
     @Override
     public Mono<HttpResponse> send(HttpRequest request, Duration responseTimeout) {
         return httpClient.send(request, responseTimeout);
+    }
+
+    @Override
+    public List<Channel> getAllChannels() {
+        return null;
     }
 
     public int getReferenceCounter() {

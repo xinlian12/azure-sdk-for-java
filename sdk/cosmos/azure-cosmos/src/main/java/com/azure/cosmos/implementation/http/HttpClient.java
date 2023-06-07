@@ -2,10 +2,12 @@
 // Licensed under the MIT License.
 package com.azure.cosmos.implementation.http;
 
+import io.netty.channel.Channel;
 import reactor.core.publisher.Mono;
 import reactor.netty.resources.ConnectionProvider;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * A generic interface for sending HTTP requests and getting responses.
@@ -28,6 +30,7 @@ public interface HttpClient {
      * @return A {@link Mono} that emits response asynchronously
      */
     Mono<HttpResponse> send(HttpRequest request, Duration responseTimeout);
+    List<Channel> getAllChannels();
 
     /**
      * Create HttpClient with FixedChannelPool {@link HttpClientConfig}

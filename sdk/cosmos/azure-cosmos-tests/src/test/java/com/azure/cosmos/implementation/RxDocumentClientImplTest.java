@@ -31,6 +31,7 @@ import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.models.ModelBridgeInternal;
 import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.models.PartitionKeyDefinition;
+import io.netty.channel.Channel;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -284,6 +285,11 @@ public class RxDocumentClientImplTest {
 
             @Override
             public Mono<HttpResponse> send(HttpRequest request, Duration responseTimeout) {
+                return null;
+            }
+
+            @Override
+            public List<Channel> getAllChannels() {
                 return null;
             }
 

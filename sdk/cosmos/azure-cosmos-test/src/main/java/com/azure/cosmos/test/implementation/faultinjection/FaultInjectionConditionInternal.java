@@ -63,7 +63,7 @@ public class FaultInjectionConditionInternal {
         }
     }
 
-    public boolean isApplicable(String ruleId, RntbdRequestArgs requestArgs) {
+    public boolean isApplicable(String ruleId, FaultInjectionRequestArgs requestArgs) {
         for (IFaultInjectionConditionValidator conditionValidator : this.validators) {
             if (!conditionValidator.isApplicable(ruleId, requestArgs)) {
                 return false;
@@ -75,7 +75,7 @@ public class FaultInjectionConditionInternal {
 
     // region ConditionValidators
     interface IFaultInjectionConditionValidator {
-        boolean isApplicable(String ruleId, RntbdRequestArgs requestArgs);
+        boolean isApplicable(String ruleId, FaultInjectionRequestArgs requestArgs);
     }
 
     static class RegionEndpointValidator implements IFaultInjectionConditionValidator {
@@ -84,16 +84,16 @@ public class FaultInjectionConditionInternal {
             this.regionEndpoints = regionEndpoints;
         }
         @Override
-        public boolean isApplicable(String ruleId, RntbdRequestArgs requestArgs) {
-            boolean isApplicable = this.regionEndpoints.contains(requestArgs.serviceRequest().faultInjectionRequestContext.getLocationEndpointToRoute());
+        public boolean isApplicable(String ruleId, FaultInjectionRequestArgs requestArgs) {
+            boolean isApplicable = this.regionEndpoints.contains(requestArgs.getServiceRequest().faultInjectionRequestContext.getLocationEndpointToRoute());
             if (!isApplicable) {
-                requestArgs.serviceRequest().faultInjectionRequestContext
-                    .recordFaultInjectionRuleEvaluation(requestArgs.transportRequestId(),
+                requestArgs.getServiceRequest().faultInjectionRequestContext
+                    .recordFaultInjectionRuleEvaluation(requestArgs.getRequestIdentifier(),
                         String.format(
                             "%s [RegionEndpoint mismatch: Expected [%s], Actual [%s]]",
                             ruleId,
                             this.regionEndpoints.stream().map(URI::toString).collect(Collectors.toList()),
-                            requestArgs.serviceRequest().faultInjectionRequestContext.getLocationEndpointToRoute()));
+                            requestArgs.getServiceRequest().faultInjectionRequestContext.getLocationEndpointToRoute()));
             }
 
             return isApplicable;
@@ -107,16 +107,16 @@ public class FaultInjectionConditionInternal {
         }
 
         @Override
-        public boolean isApplicable(String ruleId, RntbdRequestArgs requestArgs) {
-            boolean isApplicable = requestArgs.serviceRequest().getOperationType() == operationType;
+        public boolean isApplicable(String ruleId, FaultInjectionRequestArgs requestArgs) {
+            boolean isApplicable = requestArgs.getServiceRequest().getOperationType() == operationType;
             if (!isApplicable) {
-                requestArgs.serviceRequest().faultInjectionRequestContext
-                    .recordFaultInjectionRuleEvaluation(requestArgs.transportRequestId(),
+                requestArgs.getServiceRequest().faultInjectionRequestContext
+                    .recordFaultInjectionRuleEvaluation(requestArgs.getRequestIdentifier(),
                         String.format(
                             "%s [OperationType mismatch: Expected [%s], Actual [%s]]",
                             ruleId,
                             operationType,
-                            requestArgs.serviceRequest().getOperationType()));
+                            requestArgs.getServiceRequest().getOperationType()));
             }
 
             return isApplicable;
@@ -131,19 +131,20 @@ public class FaultInjectionConditionInternal {
         }
 
         @Override
-        public boolean isApplicable(String ruleId, RntbdRequestArgs requestArgs) {
-            boolean isApplicable = StringUtils.equals(this.containerResourceId, requestArgs.serviceRequest().requestContext.resolvedCollectionRid);
+        public boolean isApplicable(String ruleId, FaultInjectionRequestArgs requestArgs) {
+            boolean isApplicable = StringUtils.equals(this.containerResourceId, requestArgs.getServiceRequest().requestContext.resolvedCollectionRid);
             if (!isApplicable) {
-                requestArgs.serviceRequest().faultInjectionRequestContext
-                    .recordFaultInjectionRuleEvaluation(requestArgs.transportRequestId(),
+                requestArgs.getServiceRequest().faultInjectionRequestContext
+                    .recordFaultInjectionRuleEvaluation(requestArgs.getRequestIdentifier(),
                         String.format(
                             "%s [ContainerRid mismatch: Expected [%s], Actual [%s]]",
                             ruleId,
                             containerResourceId,
-                            requestArgs.serviceRequest().requestContext.resolvedCollectionRid));
+                            requestArgs.getServiceRequest().requestContext.resolvedCollectionRid));
             }
 
-            return isApplicable;        }
+            return isApplicable;
+        }
     }
 
     static class AddressValidator implements IFaultInjectionConditionValidator {
@@ -153,22 +154,22 @@ public class FaultInjectionConditionInternal {
         }
 
         @Override
-        public boolean isApplicable(String ruleId, RntbdRequestArgs requestArgs) {
+        public boolean isApplicable(String ruleId, FaultInjectionRequestArgs requestArgs) {
             if (addresses != null
                 && addresses.size() > 0) {
 
                 boolean isApplicable = this.addresses
                     .stream()
-                    .anyMatch(address -> requestArgs.physicalAddressUri().getURIAsString().startsWith(address.toString()));
+                    .anyMatch(address -> requestArgs.getPhysicalAddressUri().getURIAsString().startsWith(address.toString()));
 
                 if (!isApplicable) {
-                    requestArgs.serviceRequest().faultInjectionRequestContext
-                        .recordFaultInjectionRuleEvaluation(requestArgs.transportRequestId(),
+                    requestArgs.getServiceRequest().faultInjectionRequestContext
+                        .recordFaultInjectionRuleEvaluation(requestArgs.getRequestIdentifier(),
                             String.format(
                                 "%s [Addresses mismatch: Expected [%s], Actual [%s]]",
                                 ruleId,
                                 addresses,
-                                requestArgs.physicalAddressUri().getURIAsString()));
+                                requestArgs.getPhysicalAddressUri().getURIAsString()));
                 }
 
                 return isApplicable;
@@ -180,11 +181,11 @@ public class FaultInjectionConditionInternal {
 
     static class PrimaryAddressValidator implements IFaultInjectionConditionValidator {
         @Override
-        public boolean isApplicable(String ruleId, RntbdRequestArgs requestArgs) {
-            boolean isApplicable = requestArgs.physicalAddressUri().isPrimary();
+        public boolean isApplicable(String ruleId, FaultInjectionRequestArgs requestArgs) {
+            boolean isApplicable = requestArgs.getPhysicalAddressUri().isPrimary();
             if (!isApplicable) {
-                requestArgs.serviceRequest().faultInjectionRequestContext
-                    .recordFaultInjectionRuleEvaluation(requestArgs.transportRequestId(),
+                requestArgs.getServiceRequest().faultInjectionRequestContext
+                    .recordFaultInjectionRuleEvaluation(requestArgs.getRequestIdentifier(),
                         String.format(
                             "%s [NonPrimary addresses]",
                             ruleId));

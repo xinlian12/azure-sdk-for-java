@@ -4,6 +4,7 @@ package com.azure.cosmos.implementation.http;
 
 import com.azure.cosmos.implementation.Configs;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.logging.LogLevel;
@@ -32,6 +33,8 @@ import java.lang.invoke.WrongMethodTypeException;
 import java.nio.charset.Charset;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -48,6 +51,7 @@ public class ReactorNettyClient implements HttpClient {
     private static final Logger logger = LoggerFactory.getLogger(ReactorNettyClient.class.getSimpleName());
 
     private static final MethodHandle HTTP_CLIENT_WARMUP;
+    private final List<Channel> establishedChannels = new ArrayList<>();
 
     static {
         MethodHandle httpClientWarmup = null;
@@ -163,6 +167,24 @@ public class ReactorNettyClient implements HttpClient {
         final AtomicReference<ReactorNettyHttpResponse> responseReference = new AtomicReference<>();
 
         return this.httpClient
+            .doOnChannelInit(((connectionObserver, channel, remoteAddress) -> {
+                System.out.println("doOnChannelInit " + channel.id() + " " + channel.isActive() + " " + channel.remoteAddress());
+            }))
+            .doOnConnected((conn) -> {
+                System.out.println("Adding channel to list " + conn.channel().id());
+                this.establishedChannels.add(conn.channel());
+            })
+            .doOnDisconnected((conn) -> {
+                System.out.println("Disconnected, remove from list " + conn.channel().id() + " " + conn.channel().isActive());
+                //this.establishedChannels.remove(conn.channel());
+            })
+            .mapConnect((conn) -> {
+                return conn
+                    .flatMap(connection -> {
+                        System.out.println("mapConnect " + connection.channel().id() + " " + connection.channel().isActive() + " " + connection.channel().remoteAddress());
+                        return Mono.just(connection);
+                    });
+            })
             .keepAlive(this.httpClientConfig.isConnectionKeepAlive())
             .port(request.port())
             .responseTimeout(responseTimeout)
@@ -190,6 +212,11 @@ public class ReactorNettyClient implements HttpClient {
                 return throwable;
             })
             .single();
+    }
+
+    @Override
+    public List<Channel> getAllChannels() {
+        return this.establishedChannels;
     }
 
     /**

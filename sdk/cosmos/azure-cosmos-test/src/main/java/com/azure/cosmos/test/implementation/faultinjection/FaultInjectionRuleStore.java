@@ -7,6 +7,7 @@ import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.implementation.AsyncDocumentClient;
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
+import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdRequestArgs;
 import com.azure.cosmos.test.faultinjection.FaultInjectionConnectionType;
@@ -78,7 +79,7 @@ public class FaultInjectionRuleStore {
     public FaultInjectionServerErrorRule findRntbdServerResponseDelayRule(RntbdRequestArgs requestArgs) {
         for (FaultInjectionServerErrorRule serverResponseDelayRule : this.serverResponseDelayRuleSet) {
             if (serverResponseDelayRule.getConnectionType() == FaultInjectionConnectionType.DIRECT
-                && serverResponseDelayRule.isApplicable(requestArgs)) {
+                && serverResponseDelayRule.isApplicable(this.getFaultInjectionRequestArgs(requestArgs))) {
                 return serverResponseDelayRule;
             }
         }
@@ -89,8 +90,19 @@ public class FaultInjectionRuleStore {
     public FaultInjectionServerErrorRule findRntbdServerResponseErrorRule(RntbdRequestArgs requestArgs) {
         for (FaultInjectionServerErrorRule serverResponseDelayRule : this.serverResponseErrorRuleSet) {
             if (serverResponseDelayRule.getConnectionType() == FaultInjectionConnectionType.DIRECT
-                && serverResponseDelayRule.isApplicable(requestArgs)) {
+                && serverResponseDelayRule.isApplicable(this.getFaultInjectionRequestArgs(requestArgs))) {
                 return serverResponseDelayRule;
+            }
+        }
+
+        return null;
+    }
+
+    public FaultInjectionServerErrorRule findGatewayServerResponseErrorRule(RxDocumentServiceRequest request) {
+        for (FaultInjectionServerErrorRule serverErrorRule : this.serverResponseErrorRuleSet) {
+            if (serverErrorRule.getConnectionType() == FaultInjectionConnectionType.GATEWAY
+                && serverErrorRule.isApplicable(this.getFaultInjectionRequestArgs(request))) {
+                return serverErrorRule;
             }
         }
 
@@ -100,7 +112,7 @@ public class FaultInjectionRuleStore {
     public FaultInjectionServerErrorRule findRntbdServerConnectionDelayRule(RntbdRequestArgs requestArgs) {
         for (FaultInjectionServerErrorRule serverResponseDelayRule : this.serverConnectionDelayRuleSet) {
             if (serverResponseDelayRule.getConnectionType() == FaultInjectionConnectionType.DIRECT
-                && serverResponseDelayRule.isApplicable(requestArgs)) {
+                && serverResponseDelayRule.isApplicable(this.getFaultInjectionRequestArgs(requestArgs))) {
                 return serverResponseDelayRule;
             }
         }
@@ -114,5 +126,20 @@ public class FaultInjectionRuleStore {
 
     public boolean removeRule(FaultInjectionConnectionErrorRule rule) {
         return this.connectionErrorRuleSet.remove(rule);
+    }
+
+    private FaultInjectionRequestArgs getFaultInjectionRequestArgs(RntbdRequestArgs rntbdRequestArgs) {
+        return new FaultInjectionRequestArgs(
+            String.valueOf(rntbdRequestArgs.transportRequestId()),
+            rntbdRequestArgs.serviceRequest(),
+            rntbdRequestArgs.physicalAddressUri());
+    }
+
+    // used to resolve for gateway
+    private FaultInjectionRequestArgs getFaultInjectionRequestArgs(RxDocumentServiceRequest serviceRequest) {
+        return new FaultInjectionRequestArgs(
+            String.valueOf(serviceRequest.getActivityId()),
+            serviceRequest,
+            null);
     }
 }

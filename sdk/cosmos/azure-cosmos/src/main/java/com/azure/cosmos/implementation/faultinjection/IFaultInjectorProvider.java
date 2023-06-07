@@ -16,6 +16,8 @@ public interface IFaultInjectorProvider {
      */
     IRntbdServerErrorInjector getRntbdServerErrorInjector();
 
+    IGatewayServerErrorInjector getGatewayServerErrorInjector();
+
     /***
      * Register the rntbd connection error injector.
      * @param provider the rntbd endpoint provider.

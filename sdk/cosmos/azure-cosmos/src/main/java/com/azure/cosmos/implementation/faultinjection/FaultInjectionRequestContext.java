@@ -17,8 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class FaultInjectionRequestContext {
     private final Map<String, Integer> hitCountByRuleMap;
-    private final Map<Long, String> transportRequestIdRuleIdMap;
-    private final Map<Long, List<String>> transportRequestIdRuleEvaluationMap;
+    private final Map<String, String> transportRequestIdRuleIdMap;
+    private final Map<String, List<String>> transportRequestIdRuleEvaluationMap;
 
     private volatile URI locationEndpointToRoute;
 
@@ -41,7 +41,7 @@ public class FaultInjectionRequestContext {
         this.transportRequestIdRuleEvaluationMap = new ConcurrentHashMap<>();
     }
 
-    public void applyFaultInjectionRule(long transportId, String ruleId) {
+    public void applyFaultInjectionRule(String requestIdentifier, String ruleId) {
         this.hitCountByRuleMap.compute(ruleId, (id, count) -> {
             if (count == null) {
                 return 1;
@@ -51,11 +51,11 @@ public class FaultInjectionRequestContext {
             return count;
         });
 
-        this.transportRequestIdRuleIdMap.put(transportId, ruleId);
+        this.transportRequestIdRuleIdMap.put(requestIdentifier, ruleId);
     }
 
-    public void recordFaultInjectionRuleEvaluation(long transportId, String ruleEvaluationResult) {
-        this.transportRequestIdRuleEvaluationMap.compute(transportId, (id, evaluations) -> {
+    public void recordFaultInjectionRuleEvaluation(String requestIdentifier, String ruleEvaluationResult) {
+        this.transportRequestIdRuleEvaluationMap.compute(requestIdentifier, (id, evaluations) -> {
             if (evaluations == null) {
                 evaluations = new ArrayList<>();
             }

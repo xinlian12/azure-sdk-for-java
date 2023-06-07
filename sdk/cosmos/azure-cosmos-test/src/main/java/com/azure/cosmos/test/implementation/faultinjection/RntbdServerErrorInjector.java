@@ -46,7 +46,7 @@ public class RntbdServerErrorInjector implements IRntbdServerErrorInjector {
 
             requestArgs.serviceRequest().faultInjectionRequestContext
                 .applyFaultInjectionRule(
-                    requestRecord.transportRequestId(),
+                    String.valueOf(requestRecord.transportRequestId()),
                     serverResponseDelayRule.getId());
 
             writeRequestWithDelayConsumer.accept(serverResponseDelayRule.getResult().getDelay());
@@ -74,7 +74,7 @@ public class RntbdServerErrorInjector implements IRntbdServerErrorInjector {
 
             requestArgs.serviceRequest().faultInjectionRequestContext
                 .applyFaultInjectionRule(
-                    requestRecord.transportRequestId(),
+                    String.valueOf(requestRecord.transportRequestId()),
                     serverResponseDelayRule.getId());
 
             writeRequestWithDelayConsumer.accept(serverResponseDelayRule.getResult().getDelay());
@@ -94,7 +94,7 @@ public class RntbdServerErrorInjector implements IRntbdServerErrorInjector {
         if (serverResponseErrorRule != null) {
             requestArgs.serviceRequest().faultInjectionRequestContext
                 .applyFaultInjectionRule(
-                    requestRecord.transportRequestId(),
+                    String.valueOf(requestRecord.transportRequestId()),
                     serverResponseErrorRule.getId());
 
             CosmosException cause = serverResponseErrorRule.getInjectedServerError(requestArgs.serviceRequest());
@@ -121,7 +121,7 @@ public class RntbdServerErrorInjector implements IRntbdServerErrorInjector {
         if (serverConnectionDelayRule != null) {
             requestArgs.serviceRequest().faultInjectionRequestContext
                 .applyFaultInjectionRule(
-                    requestRecord.getRequestId(),
+                    String.valueOf(requestRecord.getRequestId()),
                     serverConnectionDelayRule.getId());
             openConnectionWithDelayConsumer.accept(serverConnectionDelayRule.getResult().getDelay());
             return true;
