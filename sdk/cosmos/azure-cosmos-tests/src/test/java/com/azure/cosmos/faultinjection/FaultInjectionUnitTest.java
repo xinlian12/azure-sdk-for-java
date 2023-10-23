@@ -2,6 +2,16 @@
 // Licensed under the MIT License.
 package com.azure.cosmos.faultinjection;
 
+import com.azure.cosmos.ConsistencyLevel;
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.cosmos.CosmosException;
+import com.azure.cosmos.implementation.TestConfigurations;
+import com.azure.cosmos.implementation.throughputControl.TestItem;
+import com.azure.cosmos.models.CosmosBulkOperations;
+import com.azure.cosmos.models.CosmosItemOperation;
+import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.test.faultinjection.FaultInjectionCondition;
 import com.azure.cosmos.test.faultinjection.FaultInjectionConditionBuilder;
 import com.azure.cosmos.test.faultinjection.FaultInjectionConnectionErrorType;
@@ -13,8 +23,11 @@ import com.azure.cosmos.test.faultinjection.FaultInjectionRuleBuilder;
 import com.azure.cosmos.test.faultinjection.FaultInjectionServerErrorType;
 import org.assertj.core.api.Assertions;
 import org.testng.annotations.Test;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -150,5 +163,35 @@ public class FaultInjectionUnitTest {
         } catch (IllegalArgumentException e) {
             assertTrue(e.getMessage().contains("STALED_ADDRESSES exception can not be injected for rule with gateway connection type"));
         }
+    }
+
+    @Test
+    public void inOrderBatchProcessing() {
+        CosmosAsyncClient client = new CosmosClientBuilder()
+            .key(TestConfigurations.MASTER_KEY)
+            .endpoint(TestConfigurations.HOST)
+            .consistencyLevel(ConsistencyLevel.SESSION)
+            .buildAsyncClient();
+
+        CosmosAsyncContainer container = client.getDatabase("TestDatabase").getContainer("TestContainer");
+        TestItem createdItem = TestItem.createNewItem();
+        container.createItem(createdItem).block().getItem();
+
+        List<CosmosItemOperation> cosmosItemOperations = new ArrayList<>();
+        cosmosItemOperations.add(
+            CosmosBulkOperations.getCreateItemOperation(createdItem, new PartitionKey(createdItem.getId())));
+        cosmosItemOperations.add(
+            CosmosBulkOperations.getReadItemOperation(createdItem.getId(), new PartitionKey(createdItem.getId())));
+
+        container.executeBulkOperations(Flux.fromIterable(cosmosItemOperations))
+            .flatMap(itemResponse -> {
+                System.out.println(itemResponse.getResponse().getStatusCode() + "  " + itemResponse);
+                return Mono.empty();
+            })
+            .onErrorResume(throwable -> {
+                System.out.println(((CosmosException)throwable).getStatusCode());
+                return Mono.empty();
+            })
+            .blockLast();
     }
 }

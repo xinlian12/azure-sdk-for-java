@@ -1786,7 +1786,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
         request.getHeaders().put(HttpConstants.HttpHeaders.IS_BATCH_REQUEST, Boolean.TRUE.toString());
         request.getHeaders().put(HttpConstants.HttpHeaders.IS_BATCH_ATOMIC, String.valueOf(serverBatchRequest.isAtomicBatch()));
         request.getHeaders().put(HttpConstants.HttpHeaders.SHOULD_BATCH_CONTINUE_ON_ERROR, String.valueOf(serverBatchRequest.isShouldContinueOnError()));
-
+        request.getHeaders().put(HttpConstants.HttpHeaders.IS_BATCH_ORDERED, String.valueOf(serverBatchRequest.isBatchOrdered()));
         request.setNumberOfItemsInBatchRequest(serverBatchRequest.getOperations().size());
 
         return request;

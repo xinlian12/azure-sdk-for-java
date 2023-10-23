@@ -27,6 +27,8 @@ public abstract class ServerBatchRequest {
     private boolean isAtomicBatch = false;
     private boolean shouldContinueOnError = false;
 
+    private boolean isBatchOrdered = false;
+
     /**
      * Initializes a new {@link ServerBatchRequest request} instance.
      *
@@ -120,5 +122,13 @@ public abstract class ServerBatchRequest {
 
     void setShouldContinueOnError(boolean shouldContinueOnError) {
         this.shouldContinueOnError = shouldContinueOnError;
+    }
+
+    void setIsBatchOrdered(boolean isBatchOrdered) {
+        this.isBatchOrdered = isBatchOrdered;
+    }
+
+    public boolean isBatchOrdered() {
+        return this.isBatchOrdered;
     }
 }

@@ -57,7 +57,8 @@ public final class PartitionKeyRangeServerBatchRequest extends ServerBatchReques
             maxOperationCount);
 
         request.setAtomicBatch(false);
-        request.setShouldContinueOnError(true);
+        request.setShouldContinueOnError(false);
+        request.setIsBatchOrdered(true);
 
         List<CosmosItemOperation> pendingOperations = request.createBodyOfBatchRequest(operations);
 
