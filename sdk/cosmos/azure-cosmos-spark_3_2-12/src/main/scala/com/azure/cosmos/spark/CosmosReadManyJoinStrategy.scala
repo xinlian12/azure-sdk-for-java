@@ -1,7 +1,6 @@
-package com.azure.cosmos.extension
+package com.azure.cosmos.spark
 
 import com.azure.cosmos.models.SparkModelBridgeInternal
-import com.azure.cosmos.spark.{CosmosConstants, ItemsScan, ItemsTable}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, ExprId, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys

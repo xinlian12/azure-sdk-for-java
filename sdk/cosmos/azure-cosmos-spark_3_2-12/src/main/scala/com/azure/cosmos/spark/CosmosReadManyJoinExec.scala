@@ -1,6 +1,5 @@
-package com.azure.cosmos.extension
+package com.azure.cosmos.spark
 
-import com.azure.cosmos.spark.ItemsScan
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId, Expression, SafeProjection}
@@ -19,10 +18,6 @@ case class CosmosReadManyJoinExec (
                                       aliasMap: Map[String, ExprId],
                                       cosmosPlan: BatchScanExec) extends UnaryExecNode {
     val cosmosScan = cosmosPlan.scan.asInstanceOf[ItemsScan]
-    val containerConfig = CosmosContainerConfig.parseCosmosContainerConfig(cosmosScan.config)
-    val table = containerConfig.container
-
-
 
     val (left, right) = if (cosmosSide == BuildLeft) {
         (cosmosPlan, otherBranchPlan)
@@ -52,6 +47,7 @@ case class CosmosReadManyJoinExec (
 //                it.map(row => projection.apply(row).copy())
 //            })
 
+        if (otherBranchPlan.)
         System.out.print("Delegates back the original spark plan")
         cosmosPlan.doExecute()
     }
@@ -66,7 +62,6 @@ case class CosmosReadManyJoinExec (
             val id = mappedRow.toSeq(otherBranchPlan.schema).head
             val partitionKeyValue = id
             // how to pass don
-            cosmosPlan.execute().filter()
 
             System.out.println(mappedRow)
         })
