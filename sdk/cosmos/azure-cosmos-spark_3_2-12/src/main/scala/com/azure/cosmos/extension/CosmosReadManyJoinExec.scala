@@ -1,13 +1,12 @@
-package com.azure.cosmos.spark
+package com.azure.cosmos.extension
 
-import com.azure.cosmos.models.SparkModelBridgeInternal
+import com.azure.cosmos.spark.ItemsScan
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId, Expression, SafeProjection, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId, Expression, SafeProjection}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildSide}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, InnerLike, JoinType, LeftExistence, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
-import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 
 case class CosmosReadManyJoinExec (
@@ -46,8 +45,6 @@ case class CosmosReadManyJoinExec (
             otherBranchPlan
                 .execute()
                 .repartition(cosmosPlan.partitions.length)
-
-        otherBranchPlan.transform()
         readResult(unsafeKeyRows)
 
 //            .mapPartitions(it => {

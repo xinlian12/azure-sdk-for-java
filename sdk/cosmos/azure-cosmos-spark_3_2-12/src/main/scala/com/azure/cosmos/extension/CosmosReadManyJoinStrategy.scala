@@ -1,13 +1,14 @@
-package com.azure.cosmos.spark
+package com.azure.cosmos.extension
 
 import com.azure.cosmos.models.SparkModelBridgeInternal
+import com.azure.cosmos.spark.{CosmosConstants, ItemsScan, ItemsTable}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, ExprId, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, QueryPlan, RightOuter}
-import org.apache.spark.sql.execution.{ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation, DataSourceV2Strategy}
+import org.apache.spark.sql.execution.{ProjectExec, SparkPlan}
 import org.apache.spark.sql.{SparkSession, Strategy}
 
 import scala.collection.mutable.ArrayBuffer
