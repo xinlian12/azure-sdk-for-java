@@ -29,7 +29,7 @@ class PartitionMetadataSpec extends UnitSpec {
     subscriptionId = None,
     tenantId = None,
     resourceGroupName = None,
-    azureEnvironment = AzureEnvironment.AZURE,
+      azureEnvironment = AzureEnvironment.AZURE.toString,
     sparkEnvironmentInfo = ""
   )
 
@@ -69,7 +69,7 @@ class PartitionMetadataSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = ""
     )
 
@@ -148,7 +148,7 @@ class PartitionMetadataSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = ""
     )
 
@@ -227,7 +227,7 @@ class PartitionMetadataSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = ""
     )
 
@@ -288,7 +288,7 @@ class PartitionMetadataSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = ""
     )
 
@@ -344,7 +344,7 @@ class PartitionMetadataSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = ""
     )
 
@@ -394,7 +394,7 @@ class PartitionMetadataSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = ""
     )
 
@@ -444,7 +444,7 @@ class PartitionMetadataSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = ""
     )
 
@@ -494,7 +494,7 @@ class PartitionMetadataSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = ""
     )
 
@@ -544,7 +544,7 @@ class PartitionMetadataSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = ""
     )
 
@@ -594,7 +594,7 @@ class PartitionMetadataSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = ""
     )
 
@@ -661,7 +661,7 @@ class PartitionMetadataSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = ""
     )
 

@@ -313,7 +313,7 @@ private object CosmosConfig {
   }
 }
 
-private case class CosmosAccountConfig(endpoint: String,
+case class CosmosAccountConfig(endpoint: String,
                                        authConfig: CosmosAuthConfig,
                                        accountName: String,
                                        applicationName: Option[String],
@@ -323,7 +323,7 @@ private case class CosmosAccountConfig(endpoint: String,
                                        subscriptionId: Option[String],
                                        tenantId: Option[String],
                                        resourceGroupName: Option[String],
-                                       azureEnvironment: AzureEnvironment)
+                                       azureEnvironment: String)
 
 private object CosmosAccountConfig {
   private val DefaultAzureEnvironmentType = AzureEnvironmentType.Azure
@@ -502,7 +502,7 @@ private object CosmosAccountConfig {
       subscriptionIdOpt,
       tenantIdOpt,
       resourceGroupNameOpt,
-      azureEnvironmentOpt.get)
+      azureEnvironmentOpt.get.toString)
   }
 }
 
@@ -584,7 +584,7 @@ private object CosmosAuthConfig {
     }
 }
 
-private case class CosmosReadConfig(forceEventualConsistency: Boolean,
+case class CosmosReadConfig(forceEventualConsistency: Boolean,
                                     schemaConversionMode: SchemaConversionMode,
                                     maxItemCount: Int,
                                     prefetchBufferSize: Int,
@@ -592,7 +592,7 @@ private case class CosmosReadConfig(forceEventualConsistency: Boolean,
                                     customQuery: Option[CosmosParameterizedQuery],
                                     throughputControlConfig: Option[CosmosThroughputControlConfig] = None)
 
-private object SchemaConversionModes extends Enumeration {
+object SchemaConversionModes extends Enumeration {
   type SchemaConversionMode = Value
 
   val Relaxed: SchemaConversionModes.Value = Value("Relaxed")
@@ -1423,7 +1423,7 @@ private object ChangeFeedStartFromModes extends Enumeration {
   val PointInTime: ChangeFeedStartFromModes.Value = Value("PointInTime")
 }
 
-private object PriorityLevels extends Enumeration {
+object PriorityLevels extends Enumeration {
   type PriorityLevel = Value
 
   val Low: PriorityLevels.Value = Value("Low")
@@ -1553,7 +1553,7 @@ private object CosmosChangeFeedConfig {
   }
 }
 
-private case class CosmosThroughputControlConfig(cosmosAccountConfig: CosmosAccountConfig,
+case class CosmosThroughputControlConfig(cosmosAccountConfig: CosmosAccountConfig,
                                                  groupName: String,
                                                  targetThroughput: Option[Int],
                                                  targetThroughputThreshold: Option[Double],

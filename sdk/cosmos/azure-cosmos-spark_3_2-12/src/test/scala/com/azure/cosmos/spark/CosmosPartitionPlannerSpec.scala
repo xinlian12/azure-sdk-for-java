@@ -30,7 +30,7 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+      azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = "")
 
     val containerConfig = CosmosContainerConfig(UUID.randomUUID().toString, UUID.randomUUID().toString)
@@ -99,7 +99,7 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = "")
 
     val containerConfig = CosmosContainerConfig(UUID.randomUUID().toString, UUID.randomUUID().toString)
@@ -168,7 +168,7 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = "")
 
     val containerConfig = CosmosContainerConfig(UUID.randomUUID().toString, UUID.randomUUID().toString)
@@ -237,7 +237,7 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = "")
 
     val containerConfig = CosmosContainerConfig(UUID.randomUUID().toString, UUID.randomUUID().toString)
@@ -304,7 +304,7 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = "")
 
     val containerConfig = CosmosContainerConfig(UUID.randomUUID().toString, UUID.randomUUID().toString)
@@ -387,7 +387,7 @@ class CosmosPartitionPlannerSpec extends UnitSpec {
       subscriptionId = None,
       tenantId = None,
       resourceGroupName = None,
-      azureEnvironment = AzureEnvironment.AZURE,
+        azureEnvironment = AzureEnvironment.AZURE.toString,
       sparkEnvironmentInfo = "")
 
     val containerConfig = CosmosContainerConfig(UUID.randomUUID().toString, UUID.randomUUID().toString)

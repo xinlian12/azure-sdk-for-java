@@ -143,7 +143,7 @@ private[spark] object CosmosClientCache extends BasicLoggingTrait {
                         cosmosClientConfiguration.databaseAccountName,
                         createCosmosManagementClient(
                             cosmosClientConfiguration.subscriptionId.get,
-                            cosmosClientConfiguration.azureEnvironment,
+                            AzureEnvironment.AZURE,
                             aadAuthConfig),
                         cosmosAsyncClient)
             case _ =>
@@ -188,7 +188,7 @@ private[spark] object CosmosClientCache extends BasicLoggingTrait {
           case masterKeyAuthConfig: CosmosMasterKeyAuthConfig => builder.key(masterKeyAuthConfig.accountKey)
           case aadAuthConfig: CosmosAadAuthConfig =>
               val tokenCredential = new ClientSecretCredentialBuilder()
-                  .authorityHost(cosmosClientConfiguration.azureEnvironment.getActiveDirectoryEndpoint())
+                  .authorityHost(AzureEnvironment.AZURE.getActiveDirectoryEndpoint())
                   .tenantId(aadAuthConfig.tenantId)
                   .clientId(aadAuthConfig.clientId)
                   .clientSecret(aadAuthConfig.clientSecret)

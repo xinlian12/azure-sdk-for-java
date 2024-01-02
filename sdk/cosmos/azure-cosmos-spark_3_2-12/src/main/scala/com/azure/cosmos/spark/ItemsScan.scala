@@ -12,8 +12,9 @@ import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionRead
 import org.apache.spark.sql.types.StructType
 
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
-private case class ItemsScan(session: SparkSession,
+case class ItemsScan(session: SparkSession,
                              schema: StructType,
                              config: Map[String, String],
                              readConfig: CosmosReadConfig,
@@ -37,6 +38,7 @@ private case class ItemsScan(session: SparkSession,
   private val containerConfig = CosmosContainerConfig.parseCosmosContainerConfig(config)
   private val partitioningConfig = CosmosPartitioningConfig.parseCosmosPartitioningConfig(config)
   private val defaultMinPartitionCount = 1 + (2 * session.sparkContext.defaultParallelism)
+  private val useReadManyJoin = new AtomicBoolean(false)
 
   override def description(): String = {
     s"""Cosmos ItemsScan: ${containerConfig.database}.${containerConfig.container}
@@ -68,6 +70,7 @@ private case class ItemsScan(session: SparkSession,
   }
 
   override def planInputPartitions(): Array[InputPartition] = {
+    System.out.println("planInputPartitions has been called")
     val partitionMetadata = CosmosPartitionPlanner.getFilteredPartitionMetadata(
       config,
       clientConfiguration,
@@ -114,6 +117,7 @@ private case class ItemsScan(session: SparkSession,
   override def createReaderFactory(): PartitionReaderFactory = {
     val correlationActivityId = UUID.randomUUID()
     log.logInfo(s"Creating ItemsScan with CorrelationActivityId '${correlationActivityId.toString}' for query '${cosmosQuery.queryText}'")
+      log.logInfo("Use readManyJoin being set " + useReadManyJoin.get())
     ItemsScanPartitionReaderFactory(config,
       schema,
       cosmosQuery,

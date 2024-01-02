@@ -23,7 +23,7 @@ private[spark] case class CosmosClientConfiguration (
                                                       subscriptionId: Option[String],
                                                       tenantId: Option[String],
                                                       resourceGroupName: Option[String],
-                                                      azureEnvironment: AzureEnvironment,
+                                                      azureEnvironment: String,
                                                       sparkEnvironmentInfo: String)
 
 private[spark] object CosmosClientConfiguration {
