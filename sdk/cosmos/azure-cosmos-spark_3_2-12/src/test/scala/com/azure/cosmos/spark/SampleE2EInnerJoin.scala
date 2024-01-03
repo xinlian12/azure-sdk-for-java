@@ -49,9 +49,9 @@ object SampleE2EInnerJoin {
           ("ab2732df-3753-440c-946f-9e3811ddc51e")
       ).toDF("id")
 
-    val results = df.join(innerJoinDf).where(df("id") === innerJoinDf("id")).collect()
-    println(results.length)
-    println(results)
+    val results = df.join(innerJoinDf).where(df("id") === innerJoinDf("id")).explain()
+//    println(results.length)
+//    println(results)
 
     spark.close()
   }

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 package com.azure.cosmos.spark
 
-import com.azure.cosmos.models.{CosmosParameterizedQuery, SqlParameter, SqlQuerySpec}
+import com.azure.cosmos.models.{CosmosItemIdentity, CosmosParameterizedQuery, SqlParameter, SqlQuerySpec}
 import com.azure.cosmos.spark.CosmosPredicates.requireNotNull
 import com.azure.cosmos.spark.diagnostics.{DiagnosticsContext, LoggerHelper}
 import org.apache.spark.broadcast.Broadcast
@@ -118,16 +118,24 @@ case class ItemsScan(session: SparkSession,
     val correlationActivityId = UUID.randomUUID()
     log.logInfo(s"Creating ItemsScan with CorrelationActivityId '${correlationActivityId.toString}' for query '${cosmosQuery.queryText}'")
       log.logInfo("Use readManyJoin being set " + useReadManyJoin.get())
+
+      System.out.println("getting the results bac")
     ItemsScanPartitionReaderFactory(config,
       schema,
       cosmosQuery,
       DiagnosticsContext(correlationActivityId, cosmosQuery.queryText),
       cosmosClientStateHandles,
       DiagnosticsConfig.parseDiagnosticsConfig(config),
-      sparkEnvironmentInfo)
+      sparkEnvironmentInfo,
+        useReadManyJoin)
   }
 
   override def toBatch: Batch = {
     this
   }
+
+    def applyReadManyFilter(cosmosItemIdentities: List[CosmosItemIdentity]): Unit = {
+        System.out.print("hahahaha, okie, finally set the filters")
+        useReadManyJoin.set(true)
+    }
 }

@@ -10,6 +10,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.types.StructType
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 private case class ItemsScanPartitionReaderFactory
 (
   config: Map[String, String],
@@ -18,7 +20,8 @@ private case class ItemsScanPartitionReaderFactory
   diagnosticsOperationContext: DiagnosticsContext,
   cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
   diagnosticsConfig: DiagnosticsConfig,
-  sparkEnvironmentInfo: String
+  sparkEnvironmentInfo: String,
+  useReadManyFilter: AtomicBoolean
 ) extends PartitionReaderFactory {
 
   @transient private lazy val log = LoggerHelper.getLogger(diagnosticsConfig, this.getClass)
@@ -27,7 +30,7 @@ private case class ItemsScanPartitionReaderFactory
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val feedRange = partition.asInstanceOf[CosmosInputPartition].feedRange
     log.logInfo(s"Creating an ItemsPartitionReader to read from feed-range [$feedRange]")
-
+    System.out.println("lallalal, the reader at this moment is " + useReadManyFilter)
     ItemsPartitionReader(config,
       feedRange,
       readSchema,

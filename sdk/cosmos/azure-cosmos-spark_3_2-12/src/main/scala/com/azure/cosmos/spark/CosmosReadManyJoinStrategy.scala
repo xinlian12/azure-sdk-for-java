@@ -4,9 +4,10 @@ import com.azure.cosmos.models.SparkModelBridgeInternal
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, ExprId, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, QueryPlan, RightOuter}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation, DataSourceV2Strategy}
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.{ProjectExec, SparkPlan}
 import org.apache.spark.sql.{SparkSession, Strategy}
 
@@ -27,6 +28,11 @@ case class CosmosReadManyJoinStrategy(spark: SparkSession) extends Strategy with
             val childLogicalPlan = plan.asInstanceOf[ReturnAnswer].child
             childLogicalPlan match {
                 case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, leftChild, rightChild, joinHint) =>
+                    val plannedJoin = spark.sessionState.planner.JoinSelection(childLogicalPlan.asInstanceOf[Join])
+
+                    plannedJoin match {
+                        case BroadcastHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right, isNullAwareAntiJoin)
+                    }
                     if (hasValidReadManyJoin(joinType, leftKeys, rightKeys, condition, leftChild, rightChild)) {
                         val (otherBranch, joinTargetBranch, buildType) = {
                             if (leftValid(joinType, leftKeys, leftChild, rightChild)) {
@@ -50,6 +56,7 @@ case class CosmosReadManyJoinStrategy(spark: SparkSession) extends Strategy with
                                 // Construct Cosmos direct join exec
                                 val readManyJoin =
                                     CosmosReadManyJoinExec(
+                                        spark,
                                         leftKeys,
                                         rightKeys,
                                         joinType,
