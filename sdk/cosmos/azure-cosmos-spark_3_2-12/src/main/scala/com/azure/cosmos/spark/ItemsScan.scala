@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 package com.azure.cosmos.spark
 
-import com.azure.cosmos.models.{CosmosParameterizedQuery, SqlParameter, SqlQuerySpec}
+import com.azure.cosmos.models.{CosmosItemIdentity, CosmosParameterizedQuery, PartitionKey, SqlParameter, SqlQuerySpec}
 import com.azure.cosmos.spark.CosmosPredicates.requireNotNull
 import com.azure.cosmos.spark.diagnostics.{DiagnosticsContext, LoggerHelper}
 import org.apache.spark.broadcast.Broadcast
@@ -12,8 +12,10 @@ import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionRead
 import org.apache.spark.sql.types.StructType
 
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
+import scala.collection.mutable.ArrayBuffer
 
-private case class ItemsScan(session: SparkSession,
+case class ItemsScan(session: SparkSession,
                              schema: StructType,
                              config: Map[String, String],
                              readConfig: CosmosReadConfig,
@@ -37,8 +39,9 @@ private case class ItemsScan(session: SparkSession,
   private val containerConfig = CosmosContainerConfig.parseCosmosContainerConfig(config)
   private val partitioningConfig = CosmosPartitioningConfig.parseCosmosPartitioningConfig(config)
   private val defaultMinPartitionCount = 1 + (2 * session.sparkContext.defaultParallelism)
+  private val readManyFilters = new AtomicReference[List[CosmosItemIdentity]](List.empty)
 
-  override def description(): String = {
+    override def description(): String = {
     s"""Cosmos ItemsScan: ${containerConfig.database}.${containerConfig.container}
        | - Cosmos Query: ${toPrettyString(cosmosQuery.toSqlQuerySpec)}""".stripMargin
   }
@@ -120,10 +123,19 @@ private case class ItemsScan(session: SparkSession,
       DiagnosticsContext(correlationActivityId, cosmosQuery.queryText),
       cosmosClientStateHandles,
       DiagnosticsConfig.parseDiagnosticsConfig(config),
-      sparkEnvironmentInfo)
+      sparkEnvironmentInfo,
+      readManyFilters)
   }
 
   override def toBatch: Batch = {
     this
   }
+
+    def filterByIdAndPartitionKey(idAndPartitionKeys: List[String]): Unit = {
+        val cosmosItemIdentity = new ArrayBuffer[CosmosItemIdentity]()
+        idAndPartitionKeys.foreach(identity => {
+            cosmosItemIdentity += new CosmosItemIdentity(new PartitionKey(identity), identity)
+        })
+        readManyFilters.set(cosmosItemIdentity.toList)
+    }
 }
