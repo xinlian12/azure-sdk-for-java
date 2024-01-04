@@ -32,7 +32,7 @@ private object ItemsTable {
  * @param userConfig         The effective user configuration
  * @param userProvidedSchema The user provided schema - can be null/none
  */
-private class ItemsTable(override val sparkSession: SparkSession,
+class ItemsTable(override val sparkSession: SparkSession,
                          override val transforms: Array[Transform],
                          override val databaseName: Option[String],
                          override val containerName: Option[String],

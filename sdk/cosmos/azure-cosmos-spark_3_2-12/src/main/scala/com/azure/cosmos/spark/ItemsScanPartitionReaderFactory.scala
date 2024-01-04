@@ -3,12 +3,14 @@
 
 package com.azure.cosmos.spark
 
-import com.azure.cosmos.models.CosmosParameterizedQuery
+import com.azure.cosmos.models.{CosmosItemIdentity, CosmosParameterizedQuery}
 import com.azure.cosmos.spark.diagnostics.{DiagnosticsContext, LoggerHelper}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.types.StructType
+
+import java.util.concurrent.atomic.AtomicReference
 
 private case class ItemsScanPartitionReaderFactory
 (
@@ -18,7 +20,8 @@ private case class ItemsScanPartitionReaderFactory
   diagnosticsOperationContext: DiagnosticsContext,
   cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
   diagnosticsConfig: DiagnosticsConfig,
-  sparkEnvironmentInfo: String
+  sparkEnvironmentInfo: String,
+  readManyFilters: AtomicReference[List[CosmosItemIdentity]]
 ) extends PartitionReaderFactory {
 
   @transient private lazy val log = LoggerHelper.getLogger(diagnosticsConfig, this.getClass)
@@ -28,14 +31,28 @@ private case class ItemsScanPartitionReaderFactory
     val feedRange = partition.asInstanceOf[CosmosInputPartition].feedRange
     log.logInfo(s"Creating an ItemsPartitionReader to read from feed-range [$feedRange]")
 
-    ItemsPartitionReader(config,
-      feedRange,
-      readSchema,
-      cosmosQuery,
-      diagnosticsOperationContext,
-      cosmosClientStateHandles,
-      diagnosticsConfig,
-      sparkEnvironmentInfo
-    )
+    if (readManyFilters.get().isEmpty) {
+        ItemsPartitionReader(config,
+            feedRange,
+            readSchema,
+            cosmosQuery,
+            diagnosticsOperationContext,
+            cosmosClientStateHandles,
+            diagnosticsConfig,
+            sparkEnvironmentInfo)
+    } else {
+        ItemsPartitionReaderWithReadManyFilter(
+            config,
+            feedRange,
+            readSchema,
+            cosmosQuery,
+            diagnosticsOperationContext,
+            cosmosClientStateHandles,
+            diagnosticsConfig,
+            sparkEnvironmentInfo,
+            readManyFilters
+        )
+    }
+
   }
 }
