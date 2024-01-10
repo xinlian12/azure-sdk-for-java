@@ -43,6 +43,7 @@ private case class ItemsScanBuilder(session: SparkSession,
 
     // return the filters that spark need to evaluate
     this.processedPredicates.get.filtersNotSupportedByCosmos
+//      filters
   }
 
   /**

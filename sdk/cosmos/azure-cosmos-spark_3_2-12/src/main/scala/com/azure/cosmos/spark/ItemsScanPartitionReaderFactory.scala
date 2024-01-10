@@ -3,12 +3,16 @@
 
 package com.azure.cosmos.spark
 
-import com.azure.cosmos.models.CosmosParameterizedQuery
+import com.azure.cosmos.implementation.SparkBridgeImplementationInternal
+import com.azure.cosmos.models.{CosmosItemIdentity, CosmosParameterizedQuery}
 import com.azure.cosmos.spark.diagnostics.{DiagnosticsContext, LoggerHelper}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.types.StructType
+
+import java.util.concurrent.atomic.AtomicReference
+import scala.collection.mutable.ListBuffer
 
 private case class ItemsScanPartitionReaderFactory
 (
@@ -18,7 +22,8 @@ private case class ItemsScanPartitionReaderFactory
   diagnosticsOperationContext: DiagnosticsContext,
   cosmosClientStateHandles: Broadcast[CosmosClientMetadataCachesSnapshots],
   diagnosticsConfig: DiagnosticsConfig,
-  sparkEnvironmentInfo: String
+  sparkEnvironmentInfo: String,
+  partitionFilterMap: AtomicReference[Map[NormalizedRange, ListBuffer[CosmosItemIdentity]]]
 ) extends PartitionReaderFactory {
 
   @transient private lazy val log = LoggerHelper.getLogger(diagnosticsConfig, this.getClass)
@@ -27,15 +32,42 @@ private case class ItemsScanPartitionReaderFactory
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val feedRange = partition.asInstanceOf[CosmosInputPartition].feedRange
     log.logInfo(s"Creating an ItemsPartitionReader to read from feed-range [$feedRange]")
+    System.out.println("Creating reader")
 
-    ItemsPartitionReader(config,
-      feedRange,
-      readSchema,
-      cosmosQuery,
-      diagnosticsOperationContext,
-      cosmosClientStateHandles,
-      diagnosticsConfig,
-      sparkEnvironmentInfo
-    )
+   // Decide which partition read we are going to create
+   if (partitionFilterMap.get() == null) {
+       ItemsPartitionReader(config,
+           feedRange,
+           readSchema,
+           cosmosQuery,
+           diagnosticsOperationContext,
+           cosmosClientStateHandles,
+           diagnosticsConfig,
+           sparkEnvironmentInfo
+       )
+   } else {
+       // find the cosmosItemIdentity filters
+       val aggregatedFilter = new ListBuffer[CosmosItemIdentity]
+       partitionFilterMap.get().keys
+           .filter(feedRange => {
+               SparkBridgeImplementationInternal.doRangesOverlap(
+                   feedRange,
+                   partition.asInstanceOf[CosmosInputPartition].feedRange)
+           })
+           .foreach(filterRange => {
+               partitionFilterMap.get().get(filterRange).foreach(itemIdentity => aggregatedFilter += itemIdentity)
+           })
+
+       ItemsPartitionReaderWithReadMany(
+           config,
+           feedRange,
+           readSchema,
+           diagnosticsOperationContext,
+           cosmosClientStateHandles,
+           diagnosticsConfig,
+           sparkEnvironmentInfo,
+           aggregatedFilter.toList
+       )
+   }
   }
 }

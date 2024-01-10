@@ -3,22 +3,21 @@
 
 package com.azure.cosmos.implementation
 
-import com.azure.cosmos.{CosmosAsyncClient, CosmosClientBuilder, DirectConnectionConfig, SparkBridgeInternal}
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers.CosmosClientBuilderHelper
 import com.azure.cosmos.implementation.changefeed.common.{ChangeFeedMode, ChangeFeedStartFromInternal, ChangeFeedState, ChangeFeedStateV1}
 import com.azure.cosmos.implementation.query.CompositeContinuationToken
 import com.azure.cosmos.implementation.routing.Range
-import com.azure.cosmos.models.{FeedRange, PartitionKey, PartitionKeyBuilder, SparkModelBridgeInternal}
-import com.azure.cosmos.spark.{ChangeFeedOffset, NormalizedRange}
+import com.azure.cosmos.models.{FeedRange, PartitionKey, PartitionKeyBuilder, PartitionKeyDefinition, SparkModelBridgeInternal}
 import com.azure.cosmos.spark.diagnostics.BasicLoggingTrait
+import com.azure.cosmos.spark.{ChangeFeedOffset, NormalizedRange}
+import com.azure.cosmos.{CosmosAsyncClient, CosmosClientBuilder, DirectConnectionConfig, SparkBridgeInternal}
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.google.gson.Gson
 
-import scala.::
 import scala.collection.mutable
 
 // scalastyle:off underscore.import
 import com.azure.cosmos.implementation.feedranges._
+
 import scala.collection.JavaConverters._
 // scalastyle:on underscore.import
 
@@ -185,14 +184,22 @@ private[cosmos] object SparkBridgeImplementationInternal extends BasicLoggingTra
     partitionKeyValue: Object,
     partitionKeyDefinitionJson: String
   ): NormalizedRange = {
-
-    val feedRange = FeedRange
-      .forLogicalPartition(new PartitionKey(partitionKeyValue))
-      .asInstanceOf[FeedRangePartitionKeyImpl]
-
     val pkDefinition = SparkModelBridgeInternal.createPartitionKeyDefinitionFromJson(partitionKeyDefinitionJson)
-    val effectiveRange = feedRange.getEffectiveRange(pkDefinition)
-    rangeToNormalizedRange(effectiveRange)
+    partitionKeyToNormalizedRange(new PartitionKey(partitionKeyValue), pkDefinition)
+  }
+
+  private[cosmos] def partitionKeyToNormalizedRange
+  (
+      partitionKeyValue: PartitionKey,
+      partitionKeyDefinitionJson: PartitionKeyDefinition
+  ): NormalizedRange = {
+
+      val feedRange = FeedRange
+          .forLogicalPartition(partitionKeyValue)
+          .asInstanceOf[FeedRangePartitionKeyImpl]
+
+      val effectiveRange = feedRange.getEffectiveRange(partitionKeyDefinitionJson)
+      rangeToNormalizedRange(effectiveRange)
   }
 
   private[cosmos] def hierarchicalPartitionKeyValuesToNormalizedRange
