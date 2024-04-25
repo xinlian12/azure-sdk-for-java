@@ -317,7 +317,9 @@ public final class BulkExecutor<TContext> implements Disposable {
                     maxConcurrentCosmosPartitions,
                     this.operationContextText);
 
+                System.out.println("adding buffer");
                 return this.inputOperations
+                    .onBackpressureBuffer()
                     .publishOn(CosmosSchedulers.BULK_EXECUTOR_BOUNDED_ELASTIC)
                     .onErrorMap(throwable -> {
                         logger.error("{}: Skipping an error operation while processing. Cause: {}, Context: {}",
