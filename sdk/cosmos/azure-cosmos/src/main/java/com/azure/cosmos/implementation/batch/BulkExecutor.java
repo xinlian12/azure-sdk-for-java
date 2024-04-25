@@ -864,24 +864,8 @@ public final class BulkExecutor<TContext> implements Disposable {
             }
         }
 
-        return withContext(context -> {
-            final Mono<CosmosBatchResponse> responseMono = this.docClientWrapper.executeBatchRequest(
-                BridgeInternal.getLink(this.container), serverRequest, options, false);
-
-            return clientAccessor.getDiagnosticsProvider(this.cosmosClient)
-                .traceEnabledBatchResponsePublisher(
-                    responseMono,
-                    context,
-                    this.bulkSpanName,
-                    this.container.getDatabase().getId(),
-                    this.container.getId(),
-                    this.cosmosClient,
-                    options.getConsistencyLevel(),
-                    OperationType.Batch,
-                    ResourceType.Document,
-                    options,
-                    this.cosmosBulkExecutionOptions.getMaxMicroBatchSize());
-        });
+        return this.docClientWrapper.executeBatchRequest(
+            BridgeInternal.getLink(this.container), serverRequest, options, false);
     }
 
     private void completeAllSinks() {
