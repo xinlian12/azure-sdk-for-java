@@ -38,7 +38,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 
-import static com.azure.cosmos.implementation.CosmosSchedulers.BULK_EXECUTOR_REQUEST_BOUNDED_ELASTIC;
+import static com.azure.cosmos.implementation.CosmosSchedulers.BULK_EXECUTOR_RESPONSE_BOUNDED_ELASTIC;
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
 
 /**
@@ -328,7 +328,7 @@ public class CosmosContainer {
         Flux<CosmosBulkOperationResponse<TContext>> bulkResponse) {
 
         try {
-            return bulkResponse.publishOn(BULK_EXECUTOR_REQUEST_BOUNDED_ELASTIC).collectList().block();
+            return bulkResponse.publishOn(BULK_EXECUTOR_RESPONSE_BOUNDED_ELASTIC).collectList().block();
         } catch (Exception ex) {
             final Throwable throwable = Exceptions.unwrap(ex);
             if (throwable instanceof CosmosException) {

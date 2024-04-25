@@ -44,14 +44,6 @@ public class CosmosSchedulers {
         true
     );
 
-    public final static Scheduler BULK_EXECUTOR_REQUEST_BOUNDED_ELASTIC = Schedulers.newBoundedElastic(
-        Schedulers.DEFAULT_BOUNDED_ELASTIC_SIZE,
-        Schedulers.DEFAULT_BOUNDED_ELASTIC_QUEUESIZE,
-        "bulk-executor-test-request",
-        TTL_FOR_SCHEDULER_WORKER_IN_SECONDS,
-        true
-    );
-
     public final static Scheduler BULK_EXECUTOR_RESPONSE_BOUNDED_ELASTIC = Schedulers.newBoundedElastic(
         Schedulers.DEFAULT_BOUNDED_ELASTIC_SIZE,
         Schedulers.DEFAULT_BOUNDED_ELASTIC_QUEUESIZE,
