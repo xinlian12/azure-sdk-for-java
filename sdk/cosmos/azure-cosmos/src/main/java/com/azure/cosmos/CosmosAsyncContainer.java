@@ -1301,7 +1301,7 @@ public class CosmosAsyncContainer {
         return Flux.deferContextual(context -> {
             final BulkExecutor<TContext> executor = new BulkExecutor<>(this, operations, cosmosBulkExecutionOptions);
 
-            return executor.execute().publishOn(CosmosSchedulers.BULK_EXECUTOR_BOUNDED_ELASTIC);
+            return executor.execute().publishOn(CosmosSchedulers.BULK_EXECUTOR_RESPONSE_BOUNDED_ELASTIC);
         });
     }
 
