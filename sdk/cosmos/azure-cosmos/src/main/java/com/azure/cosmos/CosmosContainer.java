@@ -904,7 +904,7 @@ public class CosmosContainer {
     public <TContext> Iterable<CosmosBulkOperationResponse<TContext>> executeBulkOperations(
         Iterable<CosmosItemOperation> operations) {
 
-        return this.blockBulkResponse(asyncContainer.executeBulkOperations(Flux.fromIterable(operations).publishOn(BULK_EXECUTOR_REQUEST_BOUNDED_ELASTIC)));
+        return this.blockBulkResponse(asyncContainer.executeBulkOperations(Flux.fromIterable(operations)));
     }
 
     /**
