@@ -592,7 +592,7 @@ public final class BulkExecutor<TContext> implements Disposable {
         PartitionScopeThresholds thresholds) {
 
         return this.executeBatchRequest(serverRequest)
-            .subscribeOn(CosmosSchedulers.BULK_EXECUTOR_BOUNDED_ELASTIC)
+            .subscribeOn(CosmosSchedulers.BULK_EXECUTOR_DIAGNOSTICS_PROVIDER)
             .flatMapMany(response -> {
 
                 if (diagnosticsTracker != null && response.getDiagnostics() != null) {

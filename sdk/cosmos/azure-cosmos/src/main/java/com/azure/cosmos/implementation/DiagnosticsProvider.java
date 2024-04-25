@@ -816,7 +816,6 @@ public final class DiagnosticsProvider {
     private static void subscribe(Tracer tracer, CoreSubscriber<? super Object> actual) {
         Context context = getContextFromReactorOrNull(actual.currentContext());
         if (context != null) {
-            System.out.println("subscribe " + Thread.currentThread().getName());
             AutoCloseable scope = tracer.makeSpanCurrent(context);
             try {
                 actual.onSubscribe(Operators.scalarSubscription(actual, DUMMY_VALUE));

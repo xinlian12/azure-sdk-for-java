@@ -44,6 +44,15 @@ public class CosmosSchedulers {
         true
     );
 
+    // Custom bounded elastic scheduler process bulk execution tasks
+    public final static Scheduler BULK_EXECUTOR_DIAGNOSTICS_PROVIDER = Schedulers.newBoundedElastic(
+        2 * Schedulers.DEFAULT_BOUNDED_ELASTIC_SIZE,
+        Schedulers.DEFAULT_BOUNDED_ELASTIC_QUEUESIZE,
+        "diagnostics-provider",
+        TTL_FOR_SCHEDULER_WORKER_IN_SECONDS,
+        true
+    );
+
     public final static Scheduler BULK_EXECUTOR_REQUEST_BOUNDED_ELASTIC = Schedulers.newBoundedElastic(
         Schedulers.DEFAULT_BOUNDED_ELASTIC_SIZE,
         Schedulers.DEFAULT_BOUNDED_ELASTIC_QUEUESIZE,
