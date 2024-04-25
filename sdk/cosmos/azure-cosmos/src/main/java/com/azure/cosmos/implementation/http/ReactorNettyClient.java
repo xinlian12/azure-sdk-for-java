@@ -136,11 +136,10 @@ public class ReactorNettyClient implements HttpClient {
         this.httpClient = this.httpClient.secure(sslContextSpec -> sslContextSpec.sslContext(configs.getSslContext()))
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) configs.getConnectionAcquireTimeout().toMillis())
             .httpResponseDecoder(httpResponseDecoderSpec ->
-                httpResponseDecoderSpec.validateHeaders(true));
-//                httpResponseDecoderSpec.maxInitialLineLength(configs.getMaxHttpInitialLineLength())
-//                    .maxHeaderSize(configs.getMaxHttpHeaderSize())
-//                    .maxChunkSize(configs.getMaxHttpChunkSize())
-//                    .validateHeaders(true));
+                httpResponseDecoderSpec.maxInitialLineLength(configs.getMaxHttpInitialLineLength())
+                    .maxHeaderSize(configs.getMaxHttpHeaderSize())
+                    .maxChunkSize(configs.getMaxHttpChunkSize())
+                    .validateHeaders(true));
     }
 
     @Override
