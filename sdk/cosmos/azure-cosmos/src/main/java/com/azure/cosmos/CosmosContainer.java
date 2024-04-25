@@ -38,6 +38,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 
+import static com.azure.cosmos.implementation.CosmosSchedulers.BULK_EXECUTOR_REQUEST_BOUNDED_ELASTIC;
 import static com.azure.cosmos.implementation.CosmosSchedulers.BULK_EXECUTOR_RESPONSE_BOUNDED_ELASTIC;
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
 
@@ -903,7 +904,7 @@ public class CosmosContainer {
     public <TContext> Iterable<CosmosBulkOperationResponse<TContext>> executeBulkOperations(
         Iterable<CosmosItemOperation> operations) {
 
-        return this.blockBulkResponse(asyncContainer.executeBulkOperations(Flux.fromIterable(operations)));
+        return this.blockBulkResponse(asyncContainer.executeBulkOperations(Flux.fromIterable(operations).publishOn(BULK_EXECUTOR_REQUEST_BOUNDED_ELASTIC)));
     }
 
     /**
@@ -933,7 +934,7 @@ public class CosmosContainer {
         Iterable<CosmosItemOperation> operations,
         CosmosBulkExecutionOptions bulkOptions) {
 
-        return this.blockBulkResponse(asyncContainer.executeBulkOperations(Flux.fromIterable(operations), bulkOptions));
+        return this.blockBulkResponse(asyncContainer.executeBulkOperations(Flux.fromIterable(operations).publishOn(BULK_EXECUTOR_REQUEST_BOUNDED_ELASTIC), bulkOptions));
     }
 
     /**
