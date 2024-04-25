@@ -344,6 +344,7 @@ public class RxGatewayStoreModel implements RxStoreModel {
                                                                       HttpRequest httpRequest) {
 
         return httpResponseMono.flatMap(httpResponse -> {
+            System.out.println(Thread.currentThread().getName());
 
             // header key/value pairs
             HttpHeaders httpResponseHeaders = httpResponse.headers();
