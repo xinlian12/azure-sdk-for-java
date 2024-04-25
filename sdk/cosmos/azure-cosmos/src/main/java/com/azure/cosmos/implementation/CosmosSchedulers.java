@@ -44,6 +44,14 @@ public class CosmosSchedulers {
         true
     );
 
+    public final static Scheduler GATEWAY_RESPONSE_BOUNDED_ELASTIC = Schedulers.newBoundedElastic(
+        2 * Schedulers.DEFAULT_BOUNDED_ELASTIC_SIZE,
+        Schedulers.DEFAULT_BOUNDED_ELASTIC_QUEUESIZE,
+        "gateway-response-bounded-elastic",
+        TTL_FOR_SCHEDULER_WORKER_IN_SECONDS,
+        true
+    );
+
     // Custom bounded elastic scheduler process bulk execution tasks
     public final static Scheduler BULK_EXECUTOR_DIAGNOSTICS_PROVIDER = Schedulers.newBoundedElastic(
         2 * Schedulers.DEFAULT_BOUNDED_ELASTIC_SIZE,

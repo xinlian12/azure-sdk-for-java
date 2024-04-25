@@ -46,6 +46,7 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 
+import static com.azure.cosmos.implementation.CosmosSchedulers.GATEWAY_RESPONSE_BOUNDED_ELASTIC;
 import static com.azure.cosmos.implementation.HttpConstants.HttpHeaders.INTENDED_COLLECTION_RID_HEADER;
 
 /**
@@ -343,8 +344,7 @@ public class RxGatewayStoreModel implements RxStoreModel {
                                                                       RxDocumentServiceRequest request,
                                                                       HttpRequest httpRequest) {
 
-        return httpResponseMono.flatMap(httpResponse -> {
-            System.out.println(Thread.currentThread().getName());
+        return httpResponseMono.publishOn(GATEWAY_RESPONSE_BOUNDED_ELASTIC).flatMap(httpResponse -> {
 
             // header key/value pairs
             HttpHeaders httpResponseHeaders = httpResponse.headers();
