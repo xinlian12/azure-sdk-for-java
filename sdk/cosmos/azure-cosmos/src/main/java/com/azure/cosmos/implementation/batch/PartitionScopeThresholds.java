@@ -4,6 +4,7 @@
 package com.azure.cosmos.implementation.batch;
 
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
+import com.azure.cosmos.implementation.RxDocumentClientImpl;
 import com.azure.cosmos.implementation.apachecommons.lang.tuple.Pair;
 import com.azure.cosmos.models.CosmosBulkExecutionOptions;
 import org.slf4j.Logger;
@@ -24,7 +25,7 @@ public class PartitionScopeThresholds {
     private final AtomicInteger targetMicroBatchSize;
     private final AtomicLong totalOperationCount;
     private final AtomicReference<CurrentIntervalThresholds> currentThresholds;
-    private final String identifier = UUID.randomUUID().toString();
+    private final String identifier = RxDocumentClientImpl.randomUuid().toString();
     private final double minRetryRate;
     private final double maxRetryRate;
     private final double avgRetryRate;
