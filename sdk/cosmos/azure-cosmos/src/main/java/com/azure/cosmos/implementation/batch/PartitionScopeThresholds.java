@@ -83,22 +83,22 @@ public class PartitionScopeThresholds {
         } else {
             currentRetryCountSnapshot = currentThresholdsSnapshot.currentRetriedOperationCount.get();
         }
-
-        Pair<Boolean, Boolean> shouldReevaluateResult =
-            this.shouldReevaluateThresholds(totalSnapshot, currentTotalCountSnapshot);
-        boolean shouldReevaluate = shouldReevaluateResult.getLeft();
-        if (shouldReevaluate) {
-            boolean onlyUpscale = shouldReevaluateResult.getRight();
-            if (onlyUpscale ||
-                this.currentThresholds.compareAndSet(currentThresholdsSnapshot, new CurrentIntervalThresholds())) {
-
-                this.reevaluateThresholds(
-                    totalSnapshot,
-                    currentTotalCountSnapshot,
-                    currentRetryCountSnapshot,
-                    shouldReevaluateResult.getRight());
-            }
-        }
+//
+//        Pair<Boolean, Boolean> shouldReevaluateResult =
+//            this.shouldReevaluateThresholds(totalSnapshot, currentTotalCountSnapshot);
+//        boolean shouldReevaluate = shouldReevaluateResult.getLeft();
+//        if (shouldReevaluate) {
+//            boolean onlyUpscale = shouldReevaluateResult.getRight();
+//            if (onlyUpscale ||
+//                this.currentThresholds.compareAndSet(currentThresholdsSnapshot, new CurrentIntervalThresholds())) {
+//
+//                this.reevaluateThresholds(
+//                    totalSnapshot,
+//                    currentTotalCountSnapshot,
+//                    currentRetryCountSnapshot,
+//                    shouldReevaluateResult.getRight());
+//            }
+//        }
     }
 
     private void reevaluateThresholds(
