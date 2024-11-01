@@ -36,6 +36,7 @@ import com.azure.cosmos.implementation.clienttelemetry.ClientTelemetry;
 import com.azure.cosmos.implementation.clienttelemetry.CosmosMeterOptions;
 import com.azure.cosmos.implementation.clienttelemetry.MetricCategory;
 import com.azure.cosmos.implementation.clienttelemetry.TagName;
+import com.azure.cosmos.implementation.directconnectivity.AddressInformation;
 import com.azure.cosmos.implementation.directconnectivity.ContainerDirectConnectionMetadata;
 import com.azure.cosmos.implementation.directconnectivity.Uri;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdChannelStatistics;
@@ -1390,6 +1391,13 @@ public class ImplementationBridgeHelpers {
             String getConnectionMode(CosmosAsyncClient client);
             String getUserAgent(CosmosAsyncClient client);
             CosmosMeterOptions getMeterOptions(CosmosAsyncClient client, CosmosMetricName name);
+
+            AddressInformation[] scrambleAddresses(
+                CosmosAsyncClient client,
+                String endpoint,
+                String collectionRid,
+                String partitionKeyRangeId);
+
             boolean isEffectiveContentResponseOnWriteEnabled(
                 CosmosAsyncClient client,
                 Boolean requestOptionsContentResponseEnabled);

@@ -34,6 +34,7 @@ import com.azure.cosmos.implementation.circuitBreaker.PartitionKeyRangeWrapper;
 import com.azure.cosmos.implementation.clienttelemetry.ClientTelemetry;
 import com.azure.cosmos.implementation.cpu.CpuMemoryListener;
 import com.azure.cosmos.implementation.cpu.CpuMemoryMonitor;
+import com.azure.cosmos.implementation.directconnectivity.AddressInformation;
 import com.azure.cosmos.implementation.directconnectivity.AddressSelector;
 import com.azure.cosmos.implementation.directconnectivity.GatewayServiceConfigurationReader;
 import com.azure.cosmos.implementation.directconnectivity.GlobalAddressResolver;
@@ -101,6 +102,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.management.ManagementFactory;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.time.Duration;
@@ -754,6 +756,21 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             logger.error("unexpected failure in initializing client.", e);
             close();
             throw e;
+        }
+    }
+
+    public AddressInformation[] scrambleAddresses(
+        String endpoint,
+        String collectionRid,
+        String partitionKeyRangeId) {
+        try {
+            return this.addressResolver
+                .scrambleAddresses(
+                    new URI(endpoint),
+                    collectionRid,
+                    partitionKeyRangeId);
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
         }
     }
 

@@ -3,8 +3,13 @@
 
 package com.azure.cosmos.implementation.directconnectivity;
 
+import com.azure.core.credential.TokenCredential;
 import com.azure.cosmos.ConsistencyLevel;
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.SessionRetryOptions;
+import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
 import com.azure.cosmos.implementation.NotFoundException;
 import com.azure.cosmos.implementation.RequestRateTooLargeException;
 import com.azure.cosmos.implementation.Configs;
@@ -18,13 +23,23 @@ import com.azure.cosmos.implementation.OperationType;
 import com.azure.cosmos.implementation.PartitionKeyRange;
 import com.azure.cosmos.implementation.RequestChargeTracker;
 import com.azure.cosmos.implementation.ResourceType;
+import com.azure.cosmos.implementation.RxDocumentClientImpl;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.StoreResponseBuilder;
 import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.VectorSessionToken;
 import com.azure.cosmos.implementation.guava25.collect.ImmutableList;
+import com.azure.cosmos.models.CosmosItemResponse;
+import com.azure.cosmos.models.PartitionKey;
+import com.azure.identity.DefaultAzureCredentialBuilder;
+import com.azure.identity.ManagedIdentityCredentialBuilder;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.reactivex.subscribers.TestSubscriber;
 import org.mockito.Mockito;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 import reactor.core.publisher.Mono;
@@ -32,6 +47,7 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.azure.cosmos.implementation.Utils.ValueHolder;
@@ -39,6 +55,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static com.azure.cosmos.implementation.TestUtils.*;
 
 public class ConsistencyReaderTest {
+    private final static Logger logger = LoggerFactory.getLogger(ConsistencyReaderTest.class);
     private final Configs configs = new Configs();
     private static final int TIMEOUT = 30000;
     @DataProvider(name = "deduceReadModeArgProvider")
@@ -226,6 +243,85 @@ public class ConsistencyReaderTest {
                 .verifyNumberOfForceCachRefresh(0)
                 .verifyVesolvePrimaryUriAsyncCount(0)
                 .verifyResolveAllUriAsync(1);
+    }
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private ObjectNode getDocumentDefinition(String documentId, String pkId) {
+
+        String json = String.format(
+            "{ "
+            + "\"id\": \"%s\", "
+            + "\"_partitionKey\": \"%s\"}",
+            documentId,
+            pkId);
+        try {
+            return
+                OBJECT_MAPPER.readValue(json, ObjectNode.class);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test(groups = "unit", timeOut = 1000000)
+    public void fabianm_Manual_Repro_Test() {
+        TokenCredential credential = new ManagedIdentityCredentialBuilder()
+            .build();
+        CosmosAsyncClient client = new CosmosClientBuilder()
+            .endpoint("https://fabianm-dotnet-demo.documents.azure.com")
+            //.credential(credential)
+            // TODO @fabianm - Work needed
+            // add back the key
+            .key("")
+            .preferredRegions(List.of("WestEurope"))
+            .buildAsyncClient();
+
+        CosmosAsyncContainer c = client
+            .getDatabase("DemoDB")
+            .getContainer("DemoContainer1");
+
+        String id = UUID.randomUUID().toString();
+        ObjectNode doc = getDocumentDefinition(id, id);
+
+        CosmosItemResponse<ObjectNode> createResponse =
+            c.createItem(doc, new PartitionKey(id), null).block();
+
+        String pkRangeId = createResponse
+            .getResponseHeaders()
+            .get("x-ms-documentdb-partitionkeyrangeid");
+
+        String collectionRid = createResponse
+            .getResponseHeaders()
+            .get("x-ms-content-path");
+
+        for (int i = 0; i < 100; i++) {
+            AddressInformation[] scrambledAddresses = ImplementationBridgeHelpers
+                .CosmosAsyncClientHelper
+                .getCosmosAsyncClientAccessor()
+                .scrambleAddresses(
+                    client,
+                    "https://fabianm-dotnet-demo.documents.azure.com",
+                    collectionRid,
+                    pkRangeId);
+
+            // TODO @fabianm - Work needed
+            // Make sure to inject artifically reducing GLSN from store responses
+            // of the replica in position 1 in the scrambled addresses
+            // that would trigger quorum reader (randomly not each iteration)
+            // to do barrier requests
+            // Given we only have 2 secondaries - and one (the actual primary)
+            // lagging behind (injected=
+            // we would get 410 from it (barrier request always going to secondaries)
+            // at least in 4.48.2
+
+            CosmosItemResponse<ObjectNode> itemResponse = c.readItem(
+                id,
+                new PartitionKey(id),
+                ObjectNode.class).block();
+
+            logger.info(
+                itemResponse.getDiagnostics().getDiagnosticsContext().toJson());
+        }
     }
 
     @Test(groups = "unit")

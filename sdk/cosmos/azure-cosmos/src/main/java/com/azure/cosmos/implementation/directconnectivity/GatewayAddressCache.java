@@ -69,6 +69,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -175,6 +176,59 @@ public class GatewayAddressCache implements IAddressCache {
             this.replicaValidationScopes.add(Uri.HealthStatus.UnhealthyPending);
         }
         this.gatewayServerErrorInjector = gatewayServerErrorInjector;
+    }
+
+    private Random rnd = new Random();
+    public AddressInformation[] scrambleAddresses(PartitionKeyRangeIdentity pk)
+    {
+        AddressInformation[] realAddresses = serverPartitionAddressCache
+            .getAsync(
+                pk,
+                cachedAddresses -> Mono.just(cachedAddresses),
+                cachedAddresses -> true)
+            .block();
+
+        AddressInformation[] scrambledAddresses =
+            new AddressInformation[realAddresses.length - 1];
+
+        int secondaryToBeMadePrimary = rnd.nextInt(realAddresses.length - 2);
+        int secondariesProcessed = 0;
+        int nonScrambledSecondaryIndex = 2;
+        for (AddressInformation a: realAddresses) {
+            String addressAsString = a.getPhysicalUri().getURIAsString();
+            if (a.isPrimary()) {
+                scrambledAddresses[1] = new AddressInformation(
+                    a.isPublic(),
+                    false,
+                    addressAsString.substring(0, addressAsString.length() - 2) + "s/",
+                    a.getProtocol()
+                );
+            } else {
+                if (secondariesProcessed == secondaryToBeMadePrimary) {
+                    scrambledAddresses[0] = new AddressInformation(
+                        a.isPublic(),
+                        true,
+                        addressAsString.substring(0, addressAsString.length() - 2) + "p/",
+                        a.getProtocol()
+                    );
+                } else {
+                    scrambledAddresses[nonScrambledSecondaryIndex] = a;
+                    nonScrambledSecondaryIndex++;
+                }
+
+                secondariesProcessed++;
+                if (secondariesProcessed == realAddresses.length - 2) {
+                    break;
+                }
+            }
+        }
+
+        serverPartitionAddressCache.set(
+            pk,
+            scrambledAddresses
+        );
+
+        return scrambledAddresses;
     }
 
     public GatewayAddressCache(

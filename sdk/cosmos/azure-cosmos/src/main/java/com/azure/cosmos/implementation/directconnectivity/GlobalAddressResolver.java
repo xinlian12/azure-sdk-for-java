@@ -99,6 +99,20 @@ public class GlobalAddressResolver implements IAddressResolver {
         }
     }
 
+    public AddressInformation[] scrambleAddresses(
+        URI endpoint,
+        String collectionRid,
+        String pkRangeId) {
+
+        PartitionKeyRangeIdentity pk = new PartitionKeyRangeIdentity(
+            collectionRid,
+            pkRangeId
+        );
+
+        return this.getGatewayAddressCache(endpoint)
+            .scrambleAddresses(pk);
+    }
+
     public Flux<Void> submitOpenConnectionTasksAndInitCaches(CosmosContainerProactiveInitConfig proactiveContainerInitConfig) {
 
         // Strip the leading "/", which follows the same format for document requests

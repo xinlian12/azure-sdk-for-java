@@ -19,6 +19,7 @@ import com.azure.cosmos.implementation.Permission;
 import com.azure.cosmos.implementation.QueryFeedOperationState;
 import com.azure.cosmos.implementation.RequestOptions;
 import com.azure.cosmos.implementation.ResourceType;
+import com.azure.cosmos.implementation.RxDocumentClientImpl;
 import com.azure.cosmos.implementation.Strings;
 import com.azure.cosmos.implementation.WriteRetryPolicy;
 import com.azure.cosmos.implementation.clienttelemetry.ClientMetricsDiagnosticsHandler;
@@ -28,6 +29,7 @@ import com.azure.cosmos.implementation.clienttelemetry.ClientTelemetryMetrics;
 import com.azure.cosmos.implementation.clienttelemetry.CosmosMeterOptions;
 import com.azure.cosmos.implementation.clienttelemetry.MetricCategory;
 import com.azure.cosmos.implementation.clienttelemetry.TagName;
+import com.azure.cosmos.implementation.directconnectivity.AddressInformation;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdMetrics;
 import com.azure.cosmos.implementation.faultinjection.IFaultInjectorProvider;
 import com.azure.cosmos.implementation.throughputControl.config.ThroughputControlGroupInternal;
@@ -872,6 +874,12 @@ public final class CosmosAsyncClient implements Closeable {
                 public CosmosMeterOptions getMeterOptions(CosmosAsyncClient client, CosmosMetricName name) {
                     return  telemetryConfigAccessor
                         .getMeterOptions(client.clientTelemetryConfig, name);
+                }
+
+                @Override
+                public AddressInformation[] scrambleAddresses(CosmosAsyncClient client, String endpoint, String collectionRid, String partitionKeyRangeId) {
+                    return ((RxDocumentClientImpl)client.asyncDocumentClient)
+                        .scrambleAddresses(endpoint, collectionRid, partitionKeyRangeId);
                 }
 
                 @Override
