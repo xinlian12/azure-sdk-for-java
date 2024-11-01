@@ -8,6 +8,7 @@ import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.SessionRetryOptions;
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
 import com.azure.cosmos.implementation.NotFoundException;
@@ -30,7 +31,17 @@ import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.VectorSessionToken;
 import com.azure.cosmos.implementation.guava25.collect.ImmutableList;
 import com.azure.cosmos.models.CosmosItemResponse;
+import com.azure.cosmos.models.FeedRange;
 import com.azure.cosmos.models.PartitionKey;
+import com.azure.cosmos.test.faultinjection.CosmosFaultInjectionHelper;
+import com.azure.cosmos.test.faultinjection.FaultInjectionConditionBuilder;
+import com.azure.cosmos.test.faultinjection.FaultInjectionEndpointBuilder;
+import com.azure.cosmos.test.faultinjection.FaultInjectionOperationType;
+import com.azure.cosmos.test.faultinjection.FaultInjectionResultBuilders;
+import com.azure.cosmos.test.faultinjection.FaultInjectionRule;
+import com.azure.cosmos.test.faultinjection.FaultInjectionRuleBuilder;
+import com.azure.cosmos.test.faultinjection.FaultInjectionServerErrorResultBuilder;
+import com.azure.cosmos.test.faultinjection.FaultInjectionServerErrorType;
 import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.azure.identity.ManagedIdentityCredentialBuilder;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -44,8 +55,10 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 import reactor.core.publisher.Mono;
 
+import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -268,7 +281,7 @@ public class ConsistencyReaderTest {
         TokenCredential credential = new ManagedIdentityCredentialBuilder()
             .build();
         CosmosAsyncClient client = new CosmosClientBuilder()
-            .endpoint("https://fabianm-dotnet-demo.documents.azure.com")
+            .endpoint("https://sdk-test-lx-westus.documents.azure.com:443/")
             //.credential(credential)
             // TODO @fabianm - Work needed
             // add back the key
@@ -277,8 +290,8 @@ public class ConsistencyReaderTest {
             .buildAsyncClient();
 
         CosmosAsyncContainer c = client
-            .getDatabase("DemoDB")
-            .getContainer("DemoContainer1");
+            .getDatabase("TestDatabase")
+            .getContainer("FiveTransTestContainer");
 
         String id = UUID.randomUUID().toString();
         ObjectNode doc = getDocumentDefinition(id, id);
@@ -294,15 +307,19 @@ public class ConsistencyReaderTest {
             .getResponseHeaders()
             .get("x-ms-content-path");
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 1; i++) {
             AddressInformation[] scrambledAddresses = ImplementationBridgeHelpers
                 .CosmosAsyncClientHelper
                 .getCosmosAsyncClientAccessor()
                 .scrambleAddresses(
                     client,
-                    "https://fabianm-dotnet-demo.documents.azure.com",
+                    "https://sdk-test-lx-westus.documents.azure.com:443/",
                     collectionRid,
                     pkRangeId);
+
+            for (AddressInformation addressInformation : scrambledAddresses) {
+                System.out.println(addressInformation.getPhysicalUri().toString());
+            }
 
             // TODO @fabianm - Work needed
             // Make sure to inject artifically reducing GLSN from store responses
@@ -314,13 +331,42 @@ public class ConsistencyReaderTest {
             // we would get 410 from it (barrier request always going to secondaries)
             // at least in 4.48.2
 
+            FaultInjectionRule faultInjectionRule = new FaultInjectionRuleBuilder("reduceLSN")
+                .condition(
+                    new FaultInjectionConditionBuilder()
+                        .operationType(FaultInjectionOperationType.READ_ITEM)
+                        .endpoints(new FaultInjectionEndpointBuilder(FeedRange.forLogicalPartition(new PartitionKey(id)))
+                            .replicaCount(1)
+                            .includePrimary(false)
+                            .build())
+                        .build())
+                .result(
+                    FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.REDUCE_LSN)
+                        .build()
+                )
+                .build();
+
+        //    CosmosFaultInjectionHelper.configureFaultInjectionRules(c, Arrays.asList(faultInjectionRule)).block();
+        //    System.out.println(faultInjectionRule.getAddresses());
+
             CosmosItemResponse<ObjectNode> itemResponse = c.readItem(
                 id,
                 new PartitionKey(id),
-                ObjectNode.class).block();
+                ObjectNode.class)
+                .onErrorResume(throwable -> {
+                    logger.info("Final status code {}", ((CosmosException)throwable).getStatusCode());
+                    logger.info(
+                        ((CosmosException)throwable).getDiagnostics().getDiagnosticsContext().toJson());
+                    return Mono.empty();
+                })
+                .flatMap(response -> {
+                    logger.info("Succeeded");
+                    logger.info(response.getDiagnostics().getDiagnosticsContext().toJson());
+                    return Mono.just(response);
+                })
+                .block();
 
-            logger.info(
-                itemResponse.getDiagnostics().getDiagnosticsContext().toJson());
+
         }
     }
 

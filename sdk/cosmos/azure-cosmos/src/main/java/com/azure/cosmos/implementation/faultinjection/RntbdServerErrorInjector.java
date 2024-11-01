@@ -70,6 +70,16 @@ public class RntbdServerErrorInjector {
         return false;
     }
 
+    public boolean injectRntbdServerResponseReduceLSN(RntbdRequestRecord requestRecord) {
+        for (IServerErrorInjector injector : this.faultInjectors) {
+            if (injector.injectServerResponseReduceLSN(this.createFaultInjectionRequestArgs(requestRecord))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public boolean injectRntbdServerConnectionDelay(
         IRequestRecord requestRecord,
         Consumer<Duration> openConnectionWithDelayConsumer) {

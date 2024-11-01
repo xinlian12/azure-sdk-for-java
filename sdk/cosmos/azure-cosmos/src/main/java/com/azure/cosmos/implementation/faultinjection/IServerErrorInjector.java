@@ -56,4 +56,6 @@ public interface IServerErrorInjector {
     boolean injectServerConnectionDelay(
         FaultInjectionRequestArgs faultInjectionRequestArgs,
         Utils.ValueHolder<Duration> injectedDelay);
+
+    boolean injectServerResponseReduceLSN(FaultInjectionRequestArgs faultInjectionRequestArgs);
 }

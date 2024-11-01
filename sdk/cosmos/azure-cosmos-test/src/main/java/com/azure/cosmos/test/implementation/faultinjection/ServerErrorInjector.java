@@ -122,4 +122,22 @@ public class ServerErrorInjector implements IServerErrorInjector {
 
         return false;
     }
+
+    public boolean injectServerResponseReduceLSN(FaultInjectionRequestArgs faultInjectionRequestArgs) {
+        if (faultInjectionRequestArgs == null) {
+            return false;
+        }
+
+        FaultInjectionServerErrorRule serverResponseReduceLSNRule = this.ruleStore.findServerResponseReduceLSNRule(faultInjectionRequestArgs);
+        if (serverResponseReduceLSNRule != null) {
+            faultInjectionRequestArgs.getServiceRequest().faultInjectionRequestContext
+                .applyFaultInjectionRule(
+                    faultInjectionRequestArgs.getTransportRequestId(),
+                    serverResponseReduceLSNRule.getId());
+
+            return true;
+        }
+
+        return false;
+    }
 }

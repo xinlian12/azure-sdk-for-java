@@ -27,6 +27,7 @@ public class FaultInjectionRuleStore {
     private final Set<FaultInjectionServerErrorRule> serverResponseErrorRuleSet = ConcurrentHashMap.newKeySet();
     private final Set<FaultInjectionServerErrorRule> serverConnectionDelayRuleSet = ConcurrentHashMap.newKeySet();
     private final Set<FaultInjectionConnectionErrorRule> connectionErrorRuleSet = ConcurrentHashMap.newKeySet();
+    private final Set<FaultInjectionServerErrorRule> serverResponseReduceLSNRuleSet = ConcurrentHashMap.newKeySet();
 
     private final FaultInjectionRuleProcessor ruleProcessor;
 
@@ -69,6 +70,9 @@ public class FaultInjectionRuleStore {
                             break;
                         case CONNECTION_DELAY:
                             this.serverConnectionDelayRuleSet.add(serverErrorRule);
+                            break;
+                        case REDUCE_LSN:
+                            this.serverResponseReduceLSNRuleSet.add(serverErrorRule);
                             break;
                         default:
                             this.serverResponseErrorRuleSet.add(serverErrorRule);
@@ -114,6 +118,20 @@ public class FaultInjectionRuleStore {
             if (serverResponseDelayRule.getConnectionType() == connectionType
                 && serverResponseDelayRule.isApplicable(requestArgs)) {
                 return serverResponseDelayRule;
+            }
+        }
+
+        return null;
+    }
+
+    public FaultInjectionServerErrorRule findServerResponseReduceLSNRule(FaultInjectionRequestArgs requestArgs) {
+        FaultInjectionConnectionType connectionType =
+            requestArgs instanceof RntbdFaultInjectionRequestArgs ? DIRECT : GATEWAY;
+
+        for (FaultInjectionServerErrorRule serverResponseReduceLSNRule : this.serverResponseReduceLSNRuleSet) {
+            if (serverResponseReduceLSNRule.getConnectionType() == connectionType
+                && serverResponseReduceLSNRule.isApplicable(requestArgs)) {
+                return serverResponseReduceLSNRule;
             }
         }
 

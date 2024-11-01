@@ -28,6 +28,7 @@ import com.azure.cosmos.implementation.ServiceUnavailableException;
 import com.azure.cosmos.implementation.UnauthorizedException;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
+import com.azure.cosmos.implementation.directconnectivity.WFConstants;
 import com.azure.cosmos.implementation.faultinjection.RntbdFaultInjectionConnectionCloseEvent;
 import com.azure.cosmos.implementation.faultinjection.RntbdFaultInjectionConnectionResetEvent;
 import com.azure.cosmos.implementation.faultinjection.RntbdServerErrorInjector;
@@ -1006,6 +1007,15 @@ public final class RntbdRequestManager implements ChannelHandler, ChannelInbound
                     requestRecord, completeWithInjectedDelayConsumer)) {
 
                     return;
+                }
+
+                if (this.serverErrorInjector.injectRntbdServerResponseReduceLSN(requestRecord)) {
+                    for (int i = 0; i < storeResponse.getResponseHeaderNames().length; i++) {
+                        if (storeResponse.getResponseHeaderNames()[i].equalsIgnoreCase(WFConstants.BackendHeaders.LSN)) {
+                            storeResponse.getResponseHeaderValues()[i] =
+                                String.valueOf(Long.parseLong(storeResponse.getResponseHeaderValues()[i]) - 1);
+                        }
+                    }
                 }
             }
 
