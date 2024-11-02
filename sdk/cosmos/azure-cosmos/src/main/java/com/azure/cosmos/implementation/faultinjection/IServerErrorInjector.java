@@ -5,6 +5,8 @@ package com.azure.cosmos.implementation.faultinjection;
 
 import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.implementation.Utils;
+import com.azure.cosmos.implementation.apachecommons.lang.tuple.Pair;
+import reactor.util.function.Tuple2;
 
 import java.time.Duration;
 
@@ -57,5 +59,7 @@ public interface IServerErrorInjector {
         FaultInjectionRequestArgs faultInjectionRequestArgs,
         Utils.ValueHolder<Duration> injectedDelay);
 
-    boolean injectServerResponseReduceLSN(FaultInjectionRequestArgs faultInjectionRequestArgs);
+    boolean injectServerResponseReduceLocalLSN(FaultInjectionRequestArgs faultInjectionRequestArgs);
+
+    Pair<Boolean, Boolean> scrambleAddresses(FaultInjectionRequestArgs faultInjectionRequestArgs);
 }

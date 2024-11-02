@@ -10,7 +10,6 @@ import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.SessionRetryOptions;
-import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
 import com.azure.cosmos.implementation.NotFoundException;
 import com.azure.cosmos.implementation.RequestRateTooLargeException;
 import com.azure.cosmos.implementation.Configs;
@@ -24,7 +23,6 @@ import com.azure.cosmos.implementation.OperationType;
 import com.azure.cosmos.implementation.PartitionKeyRange;
 import com.azure.cosmos.implementation.RequestChargeTracker;
 import com.azure.cosmos.implementation.ResourceType;
-import com.azure.cosmos.implementation.RxDocumentClientImpl;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.StoreResponseBuilder;
 import com.azure.cosmos.implementation.Utils;
@@ -40,9 +38,7 @@ import com.azure.cosmos.test.faultinjection.FaultInjectionOperationType;
 import com.azure.cosmos.test.faultinjection.FaultInjectionResultBuilders;
 import com.azure.cosmos.test.faultinjection.FaultInjectionRule;
 import com.azure.cosmos.test.faultinjection.FaultInjectionRuleBuilder;
-import com.azure.cosmos.test.faultinjection.FaultInjectionServerErrorResultBuilder;
 import com.azure.cosmos.test.faultinjection.FaultInjectionServerErrorType;
-import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.azure.identity.ManagedIdentityCredentialBuilder;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -55,7 +51,6 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 import reactor.core.publisher.Mono;
 
-import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Arrays;
@@ -64,6 +59,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.azure.cosmos.implementation.Utils.ValueHolder;
+import static com.azure.cosmos.test.faultinjection.FaultInjectionOperationType.HEAD_COLLECTION;
 import static org.assertj.core.api.Assertions.assertThat;
 import static com.azure.cosmos.implementation.TestUtils.*;
 
@@ -281,7 +277,7 @@ public class ConsistencyReaderTest {
         TokenCredential credential = new ManagedIdentityCredentialBuilder()
             .build();
         CosmosAsyncClient client = new CosmosClientBuilder()
-            .endpoint("https://sdk-test-lx-westus.documents.azure.com:443/")
+            .endpoint("")
             //.credential(credential)
             // TODO @fabianm - Work needed
             // add back the key
@@ -308,18 +304,18 @@ public class ConsistencyReaderTest {
             .get("x-ms-content-path");
 
         for (int i = 0; i < 1; i++) {
-            AddressInformation[] scrambledAddresses = ImplementationBridgeHelpers
-                .CosmosAsyncClientHelper
-                .getCosmosAsyncClientAccessor()
-                .scrambleAddresses(
-                    client,
-                    "https://sdk-test-lx-westus.documents.azure.com:443/",
-                    collectionRid,
-                    pkRangeId);
-
-            for (AddressInformation addressInformation : scrambledAddresses) {
-                System.out.println(addressInformation.getPhysicalUri().toString());
-            }
+//            AddressInformation[] scrambledAddresses = ImplementationBridgeHelpers
+//                .CosmosAsyncClientHelper
+//                .getCosmosAsyncClientAccessor()
+//                .scrambleAddresses(
+//                    client,
+//                    "https://sdk-test-lx-westus.documents.azure.com:443/",
+//                    collectionRid,
+//                    pkRangeId);
+//
+//            for (AddressInformation addressInformation : scrambledAddresses) {
+//                System.out.println(addressInformation.getPhysicalUri().toString());
+//            }
 
             // TODO @fabianm - Work needed
             // Make sure to inject artifically reducing GLSN from store responses
@@ -331,7 +327,7 @@ public class ConsistencyReaderTest {
             // we would get 410 from it (barrier request always going to secondaries)
             // at least in 4.48.2
 
-            FaultInjectionRule faultInjectionRule = new FaultInjectionRuleBuilder("reduceLSN")
+            FaultInjectionRule reduceLSNRule = new FaultInjectionRuleBuilder("reduceLSN")
                 .condition(
                     new FaultInjectionConditionBuilder()
                         .operationType(FaultInjectionOperationType.READ_ITEM)
@@ -341,13 +337,41 @@ public class ConsistencyReaderTest {
                             .build())
                         .build())
                 .result(
-                    FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.REDUCE_LSN)
+                    FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.SCRAMBLE_ADDRESS_AND_REDUCE)
                         .build()
                 )
                 .build();
 
-        //    CosmosFaultInjectionHelper.configureFaultInjectionRules(c, Arrays.asList(faultInjectionRule)).block();
-        //    System.out.println(faultInjectionRule.getAddresses());
+            FaultInjectionRule barrierRequestScrambleAddresses = new FaultInjectionRuleBuilder("barrierRequestScrambleAddresses")
+                .condition(
+                    new FaultInjectionConditionBuilder()
+                        .operationType(HEAD_COLLECTION)
+                        .build())
+                .result(
+                    FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.SCRAMBLE_ADDRESS)
+                        .build()
+                )
+                .build();
+
+            // This rule will only required if we are using SCRAMBLE_ADDRESS(then it will simulate 3 secondary replicas, one return 410, the other two can not reach quorum)
+            FaultInjectionRule barrierRequestReduceLSN = new FaultInjectionRuleBuilder("barrierRequestReduceLSN")
+                .condition(
+                    new FaultInjectionConditionBuilder()
+                        .operationType(HEAD_COLLECTION)
+                        .endpoints(
+                            new FaultInjectionEndpointBuilder(FeedRange.forLogicalPartition(new PartitionKey(id)))
+                                .replicaCount(2)
+                                .includePrimary(false)
+                                .build()
+                        )
+                        .build())
+                .result(
+                    FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.REDUCE_LOCAL_LSN)
+                        .build()
+                )
+                .build();
+
+            CosmosFaultInjectionHelper.configureFaultInjectionRules(c, Arrays.asList(reduceLSNRule, barrierRequestScrambleAddresses, barrierRequestReduceLSN)).block();
 
             CosmosItemResponse<ObjectNode> itemResponse = c.readItem(
                 id,

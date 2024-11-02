@@ -54,5 +54,21 @@ public enum FaultInjectionServerErrorType {
     /** 410-1002 from server */
     PARTITION_IS_GONE,
 
-    REDUCE_LSN
+    /**
+     *  this will reduce the local lsn on store response, this can be used to trigger collection head request for bounded staleness.
+     *  This rule will only stop when there is force address refresh happened.
+     */
+    REDUCE_LOCAL_LSN,
+
+    /***
+     * This will swap role of the primary replica and the first secondary replica (p -> s, s -> p). And it will only return 3 replicas.
+     * The scramble address rule will only stop when there is force address refresh happened.
+     */
+    SCRAMBLE_ADDRESS_AND_REDUCE,
+
+    /***
+     * this will swap role of the primary replica and the first secondary replica (p -> s, s -> p).
+     * The scramble address rule will only stop when there is force address refresh happened.
+     */
+    SCRAMBLE_ADDRESS
 }

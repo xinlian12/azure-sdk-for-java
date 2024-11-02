@@ -70,9 +70,9 @@ public class RntbdServerErrorInjector {
         return false;
     }
 
-    public boolean injectRntbdServerResponseReduceLSN(RntbdRequestRecord requestRecord) {
+    public boolean injectRntbdServerResponseReduceLocalLSN(RntbdRequestRecord requestRecord) {
         for (IServerErrorInjector injector : this.faultInjectors) {
-            if (injector.injectServerResponseReduceLSN(this.createFaultInjectionRequestArgs(requestRecord))) {
+            if (injector.injectServerResponseReduceLocalLSN(this.createFaultInjectionRequestArgs(requestRecord))) {
                 return true;
             }
         }
