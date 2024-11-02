@@ -337,7 +337,7 @@ public class ConsistencyReaderTest {
                             .build())
                         .build())
                 .result(
-                    FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.SCRAMBLE_ADDRESS_AND_REDUCE)
+                    FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.REDUCE_LOCAL_LSN)
                         .build()
                 )
                 .build();
@@ -348,30 +348,30 @@ public class ConsistencyReaderTest {
                         .operationType(HEAD_COLLECTION)
                         .build())
                 .result(
-                    FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.SCRAMBLE_ADDRESS)
+                    FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.SCRAMBLE_ADDRESS_AND_REDUCE)
                         .build()
                 )
                 .build();
+//
+//            // This rule will only required if we are using SCRAMBLE_ADDRESS(then it will simulate 3 secondary replicas, one return 410, the other two can not reach quorum)
+//            FaultInjectionRule barrierRequestReduceLSN = new FaultInjectionRuleBuilder("barrierRequestReduceLSN")
+//                .condition(
+//                    new FaultInjectionConditionBuilder()
+//                        .operationType(HEAD_COLLECTION)
+//                        .endpoints(
+//                            new FaultInjectionEndpointBuilder(FeedRange.forLogicalPartition(new PartitionKey(id)))
+//                                .replicaCount(2)
+//                                .includePrimary(false)
+//                                .build()
+//                        )
+//                        .build())
+//                .result(
+//                    FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.REDUCE_LOCAL_LSN)
+//                        .build()
+//                )
+//                .build();
 
-            // This rule will only required if we are using SCRAMBLE_ADDRESS(then it will simulate 3 secondary replicas, one return 410, the other two can not reach quorum)
-            FaultInjectionRule barrierRequestReduceLSN = new FaultInjectionRuleBuilder("barrierRequestReduceLSN")
-                .condition(
-                    new FaultInjectionConditionBuilder()
-                        .operationType(HEAD_COLLECTION)
-                        .endpoints(
-                            new FaultInjectionEndpointBuilder(FeedRange.forLogicalPartition(new PartitionKey(id)))
-                                .replicaCount(2)
-                                .includePrimary(false)
-                                .build()
-                        )
-                        .build())
-                .result(
-                    FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.REDUCE_LOCAL_LSN)
-                        .build()
-                )
-                .build();
-
-            CosmosFaultInjectionHelper.configureFaultInjectionRules(c, Arrays.asList(reduceLSNRule, barrierRequestScrambleAddresses, barrierRequestReduceLSN)).block();
+            CosmosFaultInjectionHelper.configureFaultInjectionRules(c, Arrays.asList(reduceLSNRule, barrierRequestScrambleAddresses)).block();
 
             CosmosItemResponse<ObjectNode> itemResponse = c.readItem(
                 id,
