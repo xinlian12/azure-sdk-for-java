@@ -25,9 +25,14 @@ import com.azure.cosmos.implementation.RequestChargeTracker;
 import com.azure.cosmos.implementation.ResourceType;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.StoreResponseBuilder;
+import com.azure.cosmos.implementation.TestConfigurations;
 import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.VectorSessionToken;
 import com.azure.cosmos.implementation.guava25.collect.ImmutableList;
+import com.azure.cosmos.implementation.throughputControl.TestItem;
+import com.azure.cosmos.models.CosmosBatch;
+import com.azure.cosmos.models.CosmosBatchRequestOptions;
+import com.azure.cosmos.models.CosmosBatchResponse;
 import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.FeedRange;
 import com.azure.cosmos.models.PartitionKey;
@@ -389,9 +394,52 @@ public class ConsistencyReaderTest {
                     return Mono.just(response);
                 })
                 .block();
-
-
         }
+    }
+
+    @Test
+    public void batchTest() {
+        CosmosAsyncClient client = new CosmosClientBuilder()
+            .endpoint(TestConfigurations.HOST)
+            // add back the key
+            .key(TestConfigurations.MASTER_KEY)
+            .buildAsyncClient();
+
+        CosmosAsyncContainer container = client
+            .getDatabase("TestDatabase")
+            .getContainer("FiveTransTestContainer");
+
+        TestItem testItem = TestItem.createNewItem();
+        CosmosBatch batch = CosmosBatch.createCosmosBatch(new PartitionKey(testItem.getId()));
+        batch.createItemOperation(testItem);
+        batch.readItemOperation(testItem.getId());
+
+        FaultInjectionRule scrambledAddressForBatch = new FaultInjectionRuleBuilder("scrambledAddresses")
+            .condition(
+                new FaultInjectionConditionBuilder()
+                    .operationType(FaultInjectionOperationType.BATCH_ITEM)
+                    .build())
+            .result(
+                FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.SCRAMBLE_ADDRESS)
+                    .build()
+            )
+            .build();
+
+        CosmosFaultInjectionHelper.configureFaultInjectionRules(container, Arrays.asList(scrambledAddressForBatch)).block();
+
+       container.executeCosmosBatch(batch, new CosmosBatchRequestOptions())
+           .flatMap(response -> {
+               logger.info("Succeeded");
+               logger.info(response.getDiagnostics().toString());
+               return Mono.empty();
+           })
+           .onErrorResume(throwable -> {
+               logger.info("Final status code {}", ((CosmosException)throwable).getStatusCode());
+               logger.info(
+                   ((CosmosException)throwable).getDiagnostics().getDiagnosticsContext().toJson());
+               return Mono.empty();
+           })
+           .block();
     }
 
     @Test(groups = "unit")
