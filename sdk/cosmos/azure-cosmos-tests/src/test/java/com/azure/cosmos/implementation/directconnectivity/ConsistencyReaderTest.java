@@ -38,6 +38,7 @@ import com.azure.cosmos.models.FeedRange;
 import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.test.faultinjection.CosmosFaultInjectionHelper;
 import com.azure.cosmos.test.faultinjection.FaultInjectionConditionBuilder;
+import com.azure.cosmos.test.faultinjection.FaultInjectionConnectionType;
 import com.azure.cosmos.test.faultinjection.FaultInjectionEndpointBuilder;
 import com.azure.cosmos.test.faultinjection.FaultInjectionOperationType;
 import com.azure.cosmos.test.faultinjection.FaultInjectionResultBuilders;
@@ -55,9 +56,11 @@ import org.slf4j.LoggerFactory;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -440,6 +443,114 @@ public class ConsistencyReaderTest {
                return Mono.empty();
            })
            .block();
+    }
+
+    @Test
+    public void addressTests() {
+        CosmosAsyncClient client = new CosmosClientBuilder()
+            .endpoint(TestConfigurations.HOST)
+            // add back the key
+            .key(TestConfigurations.MASTER_KEY)
+            .buildAsyncClient();
+
+        CosmosAsyncContainer container = client
+            .getDatabase("TestDatabase")
+            .getContainer("FiveTransTestContainer");
+
+        TestItem testItem = TestItem.createNewItem();
+        CosmosBatch batch = CosmosBatch.createCosmosBatch(new PartitionKey(testItem.getId()));
+        batch.createItemOperation(testItem);
+        batch.readItemOperation(testItem.getId());
+        container.executeCosmosBatch(batch, new CosmosBatchRequestOptions()).block();
+
+        FaultInjectionRule addressRefreshRule = new FaultInjectionRuleBuilder("addressRefreshRule")
+            .condition(
+                new FaultInjectionConditionBuilder()
+                    .operationType(FaultInjectionOperationType.METADATA_REQUEST_ADDRESS_REFRESH)
+                    .connectionType(FaultInjectionConnectionType.GATEWAY)
+                    .build())
+            .result(
+                FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.CONNECTION_DELAY)
+                    .delay(Duration.ofSeconds(70))
+                    .build()
+            )
+            .build();
+
+        FaultInjectionRule batch410 = new FaultInjectionRuleBuilder("batch410")
+            .condition(
+                new FaultInjectionConditionBuilder()
+                    .operationType(FaultInjectionOperationType.BATCH_ITEM)
+                    .build())
+            .result(
+                FaultInjectionResultBuilders.getResultBuilder(FaultInjectionServerErrorType.SCRAMBLE_ADDRESS)
+                    .build()
+            )
+            .build();
+
+        CosmosFaultInjectionHelper.configureFaultInjectionRules(container, Arrays.asList(addressRefreshRule, batch410)).block();
+        // start the request in a different thread
+//        Mono.just(this)
+//                .flatMap(t -> container.executeCosmosBatch(batch, new CosmosBatchRequestOptions()))
+//                .flatMap(response -> {
+//                    logger.info("Succeeded");
+//                    logger.info(response.getDiagnostics().toString());
+//                    return Mono.empty();
+//                })
+//                .onErrorResume(throwable -> {
+//                    logger.info("Final status code {}", ((CosmosException)throwable).getStatusCode());
+//                    logger.info(
+//                        ((CosmosException)throwable).getDiagnostics().getDiagnosticsContext().toJson());
+//                    return Mono.empty();
+//                })
+//                .subscribeOn(Schedulers.boundedElastic())
+//                .subscribe();
+
+        container.executeCosmosBatch(batch, new CosmosBatchRequestOptions())
+            .flatMap(response -> {
+                logger.info("Succeeded");
+                logger.info(response.getDiagnostics().toString());
+                return Mono.empty();
+            })
+            .onErrorResume(throwable -> {
+                logger.info("Final status code {}", ((CosmosException)throwable).getStatusCode());
+                logger.info(
+                    ((CosmosException)throwable).getDiagnostics().getDiagnosticsContext().toJson());
+                return Mono.empty();
+            })
+            .block();
+
+
+        logger.info("Starting the second request");
+        container.executeCosmosBatch(batch, new CosmosBatchRequestOptions())
+            .flatMap(response -> {
+                logger.info("Succeeded");
+                logger.info(response.getDiagnostics().toString());
+                return Mono.empty();
+            })
+            .onErrorResume(throwable -> {
+                logger.info("Final status code {}", ((CosmosException)throwable).getStatusCode());
+                logger.info(
+                    ((CosmosException)throwable).getDiagnostics().getDiagnosticsContext().toJson());
+                return Mono.empty();
+            })
+            .block();
+//
+//        for (int i = 0; i < 10; i++) {
+//            addressRefreshRule.disable();
+//            container.executeCosmosBatch(batch, new CosmosBatchRequestOptions())
+//                .flatMap(response -> {
+//                    logger.info("Succeeded");
+//                    logger.info(response.getDiagnostics().toString());
+//                    return Mono.empty();
+//                })
+//                .onErrorResume(throwable -> {
+//                    logger.info("Final status code {}", ((CosmosException)throwable).getStatusCode());
+//                    logger.info(
+//                        ((CosmosException)throwable).getDiagnostics().getDiagnosticsContext().toJson());
+//                    return Mono.empty();
+//                })
+//                .block();
+//        }
     }
 
     @Test(groups = "unit")
