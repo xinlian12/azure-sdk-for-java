@@ -9,7 +9,7 @@ import com.azure.cosmos.implementation.GlobalEndpointManager;
 import com.azure.cosmos.implementation.perPartitionCircuitBreaker.GlobalPartitionEndpointManagerForPerPartitionCircuitBreaker;
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
 import com.azure.cosmos.implementation.GoneException;
-import com.azure.cosmos.implementation.InvalidPartitionExceptionRetryPolicy;
+import com.azure.cosmos.implementation.StaledResourceRetryPolicy;
 import com.azure.cosmos.implementation.MetadataDiagnosticsContext;
 import com.azure.cosmos.implementation.ObservableHelper;
 import com.azure.cosmos.implementation.PartitionKeyRangeGoneRetryPolicy;
@@ -307,12 +307,6 @@ class ChangeFeedFetcher<T> extends Fetcher<T> {
         // constructing retry policies for changeFeed requests
         DocumentClientRetryPolicy retryPolicyInstance =
             client.getResetSessionTokenRetryPolicy().getRequestPolicy(null);
-
-        retryPolicyInstance = new InvalidPartitionExceptionRetryPolicy(
-            client.getCollectionCache(),
-            retryPolicyInstance,
-            collectionLink,
-            requestOptionProperties);
 
         if (isSplitHandlingDisabled) {
             // True for ChangeFeedProcessor - where all retry-logic is handled

@@ -5,7 +5,6 @@ package com.azure.cosmos.models;
 
 import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.CosmosDiagnostics;
-import com.azure.cosmos.CosmosItemSerializer;
 import com.azure.cosmos.implementation.ClientEncryptionKey;
 import com.azure.cosmos.implementation.Conflict;
 import com.azure.cosmos.implementation.CosmosPagedFluxOptions;
@@ -565,15 +564,6 @@ public final class ModelBridgeInternal {
         }
 
         return options.getProperties();
-    }
-
-    @Warning(value = INTERNAL_USE_ONLY_WARNING)
-    public static Map<String, Object> getPropertiesFromQueryRequestOptions(CosmosQueryRequestOptions options) {
-        if (options == null) {
-            return null;
-        }
-
-        return options.getImpl().getProperties();
     }
 
     @Warning(value = INTERNAL_USE_ONLY_WARNING)

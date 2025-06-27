@@ -17,6 +17,7 @@ import com.azure.cosmos.util.Beta;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -575,6 +576,10 @@ public class CosmosQueryRequestOptions {
         return this;
     }
 
+    Map<String, String> getHeaders() {
+        return this.actualRequestOptions.getHeaders();
+    }
+
     /**
      * Gets the custom ids.
      *
@@ -705,6 +710,16 @@ public class CosmosQueryRequestOptions {
                 @Override
                 public String getCollectionRid(CosmosQueryRequestOptions options) {
                     return options.actualRequestOptions.getCollectionRid();
+                }
+
+                @Override
+                public Map<String, Object> getProperties(CosmosQueryRequestOptions options) {
+                    return options == null ? null : options.actualRequestOptions.getProperties();
+                }
+
+                @Override
+                public Map<String, String> getHeaders(CosmosQueryRequestOptions options) {
+                    return options == null ? null : options.getHeaders();
                 }
             });
     }

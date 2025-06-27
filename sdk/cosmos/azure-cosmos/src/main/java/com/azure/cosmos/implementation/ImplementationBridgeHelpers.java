@@ -310,6 +310,8 @@ public class ImplementationBridgeHelpers {
             void setCollectionRid(CosmosQueryRequestOptions options, String collectionRid);
 
             String getCollectionRid(CosmosQueryRequestOptions options);
+            Map<String, Object> getProperties(CosmosQueryRequestOptions options);
+            Map<String, String> getHeaders(CosmosQueryRequestOptions options);
         }
     }
 

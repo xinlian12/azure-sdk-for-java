@@ -125,7 +125,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -1177,12 +1176,13 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
         // Trying to put this logic as low as the query pipeline
         // Since for parallelQuery, each partition will have its own request, so at this point, there will be no request associate with this retry policy.
         // For default document context, it already wired up InvalidPartitionExceptionRetry, but there is no harm to wire it again here
-        InvalidPartitionExceptionRetryPolicy invalidPartitionExceptionRetryPolicy = new InvalidPartitionExceptionRetryPolicy(
+        StaledResourceRetryPolicy staledResourceRetryPolicy = new StaledResourceRetryPolicy(
             this.collectionCache,
+            this.sessionContainer,
             null,
             resourceLink,
-            ModelBridgeInternal.getPropertiesFromQueryRequestOptions(nonNullQueryOptions));
-
+            qryOptAccessor.getProperties(nonNullQueryOptions),
+            qryOptAccessor.getHeaders(nonNullQueryOptions));
 
         final ScopedDiagnosticsFactory diagnosticsFactory = new ScopedDiagnosticsFactory(innerDiagnosticsFactory, false);
         state.registerDiagnosticsFactory(
@@ -1193,7 +1193,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             ObservableHelper.fluxInlineIfPossibleAsObs(
                                 () -> createQueryInternal(
                                     diagnosticsFactory, resourceLink, sqlQuery, state.getQueryOptions(), klass, resourceTypeEnum, queryClient, correlationActivityId, isQueryCancelledOnTimeout),
-                                invalidPartitionExceptionRetryPolicy
+                                staledResourceRetryPolicy
                             ).flatMap(result -> {
                                 diagnosticsFactory.merge(state.getDiagnosticsContextSnapshot());
                                 return Mono.just(result);
@@ -4618,11 +4618,13 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             // Trying to put this logic as low as the query pipeline
             // Since for parallelQuery, each partition will have its own request, so at this point, there will be no request associate with this retry policy.
             // For default document context, it already wired up InvalidPartitionExceptionRetry, but there is no harm to wire it again here
-            InvalidPartitionExceptionRetryPolicy invalidPartitionExceptionRetryPolicy = new InvalidPartitionExceptionRetryPolicy(
+            StaledResourceRetryPolicy staledResourceRetryPolicy = new StaledResourceRetryPolicy(
                 this.collectionCache,
+                this.sessionContainer,
                 null,
                 resourceLink,
-                ModelBridgeInternal.getPropertiesFromQueryRequestOptions(effectiveOptions));
+                qryOptAccessor.getProperties(effectiveOptions),
+                qryOptAccessor.getHeaders(effectiveOptions));
 
             Flux<FeedResponse<T>> innerFlux = ObservableHelper.fluxInlineIfPossibleAsObs(
                 () -> {
@@ -4662,7 +4664,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
                             isQueryCancelledOnTimeout);
                     });
                 },
-                invalidPartitionExceptionRetryPolicy);
+                staledResourceRetryPolicy);
 
             if (orderedApplicableRegionsForSpeculation.size() < 2) {
                 return innerFlux;
@@ -6337,10 +6339,12 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
 
     @Override
     public Mono<List<FeedRange>> getFeedRanges(String collectionLink, boolean forceRefresh) {
-        InvalidPartitionExceptionRetryPolicy invalidPartitionExceptionRetryPolicy = new InvalidPartitionExceptionRetryPolicy(
+        StaledResourceRetryPolicy staledResourceRetryPolicy = new StaledResourceRetryPolicy(
             this.collectionCache,
+            this.sessionContainer,
             null,
             collectionLink,
+            new HashMap<>(),
             new HashMap<>());
 
         RxDocumentServiceRequest request = RxDocumentServiceRequest.create(
@@ -6350,11 +6354,11 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             collectionLink,
             null);
 
-        invalidPartitionExceptionRetryPolicy.onBeforeSendRequest(request);
+        staledResourceRetryPolicy.onBeforeSendRequest(request);
 
         return ObservableHelper.inlineIfPossibleAsObs(
             () -> getFeedRangesInternal(request, collectionLink, forceRefresh),
-            invalidPartitionExceptionRetryPolicy);
+            staledResourceRetryPolicy);
     }
 
     private Mono<List<FeedRange>> getFeedRangesInternal(
