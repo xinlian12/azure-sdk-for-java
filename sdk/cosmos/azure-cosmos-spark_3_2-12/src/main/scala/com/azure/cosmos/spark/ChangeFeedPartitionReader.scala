@@ -8,6 +8,7 @@ import com.azure.cosmos.implementation.spark.OperationContextAndListenerTuple
 import com.azure.cosmos.implementation.{ChangeFeedSparkRowItem, ImplementationBridgeHelpers, ObjectNodeMap, SparkBridgeImplementationInternal, Strings, Utils}
 import com.azure.cosmos.models.{CosmosChangeFeedRequestOptions, ModelBridgeInternal, PartitionKeyDefinition}
 import com.azure.cosmos.spark.ChangeFeedPartitionReader.LsnPropertyName
+import com.azure.cosmos.spark.CosmosConstants.MetricNames
 import com.azure.cosmos.spark.CosmosPredicates.requireNotNull
 import com.azure.cosmos.spark.CosmosTableSchemaInferrer.LsnAttributeName
 import com.azure.cosmos.spark.diagnostics.{DetailedFeedDiagnosticsProvider, DiagnosticsContext, DiagnosticsLoader, LoggerHelper, SparkTaskContext}
@@ -17,6 +18,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.types.StructType
 
@@ -87,7 +89,15 @@ private case class ChangeFeedPartitionReader
   private val cosmosRowConverter = CosmosRowConverter.get(cosmosSerializationConfig)
   private val cosmosChangeFeedConfig = CosmosChangeFeedConfig.parseCosmosChangeFeedConfig(config)
 
-  private def changeFeedItemFactoryMethod(objectNode: ObjectNode): ChangeFeedSparkRowItem = {
+    override def currentMetricsValues: Array[CustomTaskMetric] = {
+        Array(new CustomTaskMetric {
+            override def name(): String = MetricNames.DiscardedLSN
+
+            override def value(): Long = 45
+        })
+    }
+
+  private def changeFeedItemFactoryMethod(objectNode: ObjectNode) = {
     val pkValue = partitionKeyDefinition match {
       case Some(pkDef) => Some(PartitionKeyHelper.getPartitionKeyPath(objectNode, pkDef))
       case None => None

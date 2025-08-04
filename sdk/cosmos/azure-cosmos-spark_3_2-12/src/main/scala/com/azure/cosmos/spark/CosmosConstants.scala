@@ -37,6 +37,7 @@ private[cosmos] object CosmosConstants {
     val BytesWritten = "bytesWritten"
     val RecordsWritten = "recordsWritten"
     val TotalRequestCharge = "cosmos.totalRequestCharge"
+    val DiscardedLSN = "cosmos.discardLSN"
 
     val KnownCustomMetricNames: Set[String] = Set(TotalRequestCharge)
   }

@@ -6,6 +6,7 @@ import com.azure.cosmos.implementation.guava25.base.MoreObjects.firstNonNull
 import com.azure.cosmos.implementation.guava25.base.Strings.emptyToNull
 import com.azure.cosmos.spark.diagnostics.BasicLoggingTrait
 import org.apache.spark.TaskContext
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.util.AccumulatorV2
 
@@ -51,6 +52,30 @@ object SparkInternalsBridge extends BasicLoggingTrait {
       }
     }
   }
+
+    def getAccumulators(taskMetrics: TaskMetrics): Option[ArrayBuffer[AccumulatorV2[_, _]]] = {
+        try {
+            val method = Option(accumulatorsMethod.get) match {
+                case Some(existing) => existing
+                case None =>
+                    val newMethod = taskMetrics.getClass.getMethod("externalAccums")
+                    newMethod.setAccessible(true)
+                    accumulatorsMethod.set(newMethod)
+                    newMethod
+            }
+
+            val accums = method.invoke(taskMetrics).asInstanceOf[ArrayBuffer[AccumulatorV2[_, _]]]
+
+            Some(accums)
+        } catch {
+            case e: Exception =>
+                logInfo(s"Could not invoke getAccumulators via reflection - Error ${e.getMessage}", e)
+
+                // reflection failed - disabling it for the future
+                reflectionAccessAllowed.set(false)
+                None
+        }
+    }
 
   private def getAccumulators(taskCtx: TaskContext): Option[ArrayBuffer[AccumulatorV2[_, _]]] = {
     try {

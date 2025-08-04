@@ -7,15 +7,22 @@ import com.azure.cosmos.spark.CosmosPredicates.{assertNotNull, assertNotNullOrEm
 import com.azure.cosmos.spark.diagnostics.{DiagnosticsContext, LoggerHelper}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming._
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
 import org.apache.spark.sql.types.StructType
 
 import java.time.Duration
-import java.util.UUID
+import java.util
+import java.util.Optional
 
 // scala style rule flaky - even complaining on partial log messages
 // scalastyle:off multiple.string.literals
+
+
+// scalastyle:off underscore.import
+import scala.collection.JavaConverters._
+// scalastyle:on underscore.import
+
 private class ChangeFeedMicroBatchStream
 (
   val session: SparkSession,
@@ -25,6 +32,7 @@ private class ChangeFeedMicroBatchStream
   val checkpointLocation: String,
   diagnosticsConfig: DiagnosticsConfig
 ) extends MicroBatchStream
+  with ReportsSourceMetrics
   with SupportsAdmissionControl {
 
   @transient private lazy val log = LoggerHelper.getLogger(diagnosticsConfig, this.getClass)
@@ -242,5 +250,15 @@ private class ChangeFeedMicroBatchStream
     }
     log.logDebug(s"MicroBatch stream $streamId: stopped.")
   }
+
+    override def metrics(latestConsumedOffset: Optional[Offset]): util.Map[String, String] = {
+        ChangeFeedMicroBatchStream.metrics(latestConsumedOffset)
+    }
+}
+
+object ChangeFeedMicroBatchStream {
+    def metrics( latestConsumedOffset: Optional[Offset]) : util.Map[String, String]  = {
+        Map[String, String]("discardLSN" -> "100").asJava
+    }
 }
 // scalastyle:on multiple.string.literals
