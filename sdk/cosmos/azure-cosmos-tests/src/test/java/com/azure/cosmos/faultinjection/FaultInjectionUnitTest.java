@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 package com.azure.cosmos.faultinjection;
 
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.cosmos.implementation.TestConfigurations;
+import com.azure.cosmos.models.FeedRange;
 import com.azure.cosmos.test.faultinjection.FaultInjectionCondition;
 import com.azure.cosmos.test.faultinjection.FaultInjectionConditionBuilder;
 import com.azure.cosmos.test.faultinjection.FaultInjectionConnectionErrorType;
@@ -14,6 +19,7 @@ import com.azure.cosmos.test.faultinjection.FaultInjectionServerErrorType;
 import org.assertj.core.api.Assertions;
 import org.testng.annotations.Test;
 
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
@@ -149,6 +155,22 @@ public class FaultInjectionUnitTest {
             fail("gatewayFaultInjection rule should have failed as STALED_ADDRESSES_SERVER_GONE error is not supported for gateway connection type.");
         } catch (IllegalArgumentException e) {
             assertTrue(e.getMessage().contains("STALED_ADDRESSES exception can not be injected for rule with gateway connection type"));
+        }
+    }
+
+    @Test
+    public void partitionHashingTests() {
+        CosmosAsyncClient client = new CosmosClientBuilder()
+            .key(TestConfigurations.MASTER_KEY)
+            .endpoint(TestConfigurations.HOST)
+            .buildAsyncClient();
+
+        CosmosAsyncContainer container = client.getDatabase("TestDatabase").getContainer("TestContainerMulti");
+        List<FeedRange> feedRanges = container.getFeedRanges().block();
+        for (FeedRange feedRange : feedRanges) {
+            byte[] bytes = feedRange.toString().getBytes();
+            ByteBuffer buffer = ByteBuffer.wrap(bytes);
+            System.out.println(feedRange + ": " + buffer.getLong());
         }
     }
 }
