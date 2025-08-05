@@ -2,12 +2,8 @@
 // Licensed under the MIT License.
 package com.azure.cosmos.spark
 
-import com.azure.cosmos.SparkBridgeInternal
 import com.azure.cosmos.implementation.TestConfigurations
-import org.apache.spark.SparkEnv
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.sql.streaming.StreamingQueryListener
-import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import java.util.UUID

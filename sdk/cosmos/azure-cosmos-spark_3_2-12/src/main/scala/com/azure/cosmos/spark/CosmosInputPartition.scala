@@ -5,7 +5,10 @@ package com.azure.cosmos.spark
 import com.azure.cosmos.spark.CosmosInputPartition.{EndLsnPropertyName, FeedRangePropertyName}
 import com.azure.cosmos.spark.CosmosPredicates.assertNotNull
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import org.apache.spark.Partition
 import org.apache.spark.sql.connector.read.InputPartition
+
+import scala.util.Random
 
 private[spark] object CosmosInputPartition {
   private val FeedRangePropertyName: String = "range"
@@ -45,7 +48,7 @@ private[spark] case class CosmosInputPartition
   endLsn: Option[Long],
   continuationState: Option[String] = None,
   readManyFilterOpt: Option[List[String]] = None
-) extends InputPartition {
+) extends InputPartition with Partition {
 
   // Intentionally leaving out the change feed state when serializing input partition to json
   // the continuation state will be provided later and added by calling withContinuationState
@@ -68,5 +71,11 @@ private[spark] case class CosmosInputPartition
 
   private[spark] def clearEndLsn(): InputPartition = {
     CosmosInputPartition(this.feedRange, None, this.continuationState)
+  }
+
+  override def index: Int = {
+    val index = new Random().nextInt(10)
+    println(s"The index for the partition is: ${index}")
+    index
   }
 }
