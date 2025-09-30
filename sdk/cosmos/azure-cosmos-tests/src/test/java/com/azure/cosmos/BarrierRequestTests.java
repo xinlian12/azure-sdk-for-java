@@ -42,6 +42,8 @@ public class BarrierRequestTests  extends TestSuiteBase {
         clientBuilder.httpRequestInterceptor((request, uri) -> {
             // After the initial write, simulate a network failure on address resolution.
             // This will trigger the SDK's failover logic.
+            logger.info("inside httpRequestInterceptor, simulateAddressRefreshFailures {}", simulateAddressRefreshFailures.get());
+
             if (simulateAddressRefreshFailures.get() &&
                 request.requestContext.regionalRoutingContextToRoute.getRegion().equals(this.primaryRegion)) // Target the primary region
             {
@@ -49,6 +51,7 @@ public class BarrierRequestTests  extends TestSuiteBase {
                 failoverTriggered.set(true);
                 throw new InternalServerErrorException("Simulated network failure for address resolution.", HttpConstants.SubStatusCodes.UNKNOWN);
             }
+
 
             // Once the failover is triggered, intercept the subsequent metadata refresh call.
             if (failoverTriggered.get() && uri.getPath() == "/")
@@ -73,7 +76,8 @@ public class BarrierRequestTests  extends TestSuiteBase {
                 storeResponse.setHeaderValue(WFConstants.BackendHeaders.GLOBAL_COMMITTED_LSN, manipulatedGclsn);
 
                 // Enable address refresh failures for subsequent barrier requests in the primary region.
-                simulateAddressRefreshFailures.compareAndSet(false, true);
+                simulateAddressRefreshFailures.set(true);
+                logger.info("inside storeResponseInterceptor, setting simulateAddressRefreshFailures true");
             }
 
             // Track barrier requests (Head operations on a collection)
