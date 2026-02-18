@@ -2460,6 +2460,7 @@ Tool implementations call the existing shell scripts and Cosmos/Kusto queries â€
 | `sdk/cosmos/azure-cosmos-benchmark/scripts/setup-result-storage.sh` | Create Cosmos DB account + containers for benchmark result storage |
 | `sdk/cosmos/azure-cosmos-benchmark/scripts/compare-results.py` | Compare two result sets and generate delta report |
 | `.github/copilot-instructions.md` (append) | Add multi-tenancy benchmark analysis rules for Copilot context (Phase 1 â€” zero code) |
+| `sdk/cosmos/azure-cosmos-benchmark/IMPLEMENTATION_GUIDE.md` | Step-by-step implementation instructions: Phase 1 (framework), Phase 2 (fix-and-validate one at a time), Phase 3 (full validation) |
 | **Modified**: `Configuration.java` | Add `skipSystemPropertyInit` flag; add instance-level AAD fields (`aadLoginEndpoint`, `aadTenantId`, `aadManagedIdentityClientId`) with `getInstanceAad*()` getters and `buildTokenCredential()` method; add `setApplicationName()` setter for per-tenant `userAgentSuffix` |
 | **Modified**: `AsyncBenchmark.java` | Remove static `CREDENTIAL` field; build credential per-instance from `Configuration.buildTokenCredential()` |
 | **Modified**: `SyncBenchmark.java` | Same as `AsyncBenchmark.java` |
