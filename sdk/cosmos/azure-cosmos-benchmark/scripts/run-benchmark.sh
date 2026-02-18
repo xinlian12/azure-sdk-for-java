@@ -63,7 +63,9 @@ JVM_OPTS="-Xmx8g -Xms8g \
   -XX:HeapDumpPath=${OUTPUT_DIR}/"
 
 # Find the benchmark JAR
-BENCHMARK_JAR=$(find sdk/cosmos/azure-cosmos-benchmark/target -name "azure-cosmos-benchmark-*-jar-with-dependencies.jar" 2>/dev/null | head -1)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MODULE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BENCHMARK_JAR=$(find "$MODULE_DIR/target" -name "azure-cosmos-benchmark-*-jar-with-dependencies.jar" 2>/dev/null | head -1 || true)
 if [[ -z "$BENCHMARK_JAR" ]]; then
     echo "ERROR: Benchmark JAR not found. Build first:"
     echo "  mvn package -pl sdk/cosmos/azure-cosmos-benchmark -DskipTests"

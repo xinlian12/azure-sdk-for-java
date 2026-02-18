@@ -190,7 +190,7 @@ public class ResourceMonitor {
 
     private double getSystemCpuLoad() {
         if (osMXBean instanceof com.sun.management.OperatingSystemMXBean) {
-            return ((com.sun.management.OperatingSystemMXBean) osMXBean).getCpuLoad() * 100;
+            return ((com.sun.management.OperatingSystemMXBean) osMXBean).getSystemCpuLoad() * 100;
         }
         return -1;
     }
