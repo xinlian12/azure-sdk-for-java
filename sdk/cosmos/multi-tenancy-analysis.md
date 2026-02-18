@@ -655,3 +655,9 @@ The regular `globalPartitionEndpointManagerForCircuitBreaker` is only closed if 
 | **A19** | Document multi-tenancy best practices: recommend `connectionSharingAcrossClientsEnabled(true)`, HTTP/2 enablement, pool sizing, expected resource consumption |
 | **A20** | Consider a `CosmosClientPool` or `CosmosClientManager` API for multi-tenant scenarios |
 | **A21** | Add builder-level `maxConnectionPoolSize()` (currently buried in `ConnectionPolicy` / `GatewayConnectionConfig`) |
+
+### 7.7 HTTP Client Implementation Investigation
+
+| # | Action | Benefit | Complexity |
+|---|---|---|---|
+| **A22** | Prototype an OkHttp adapter behind the existing `HttpClient` interface (`com.azure.cosmos.implementation.http.HttpClient`) and benchmark against Reactor Netty at 100 clients | Data-driven answer on whether the HTTP client is the bottleneck for multi-tenancy (threads, direct memory, connection pooling). OkHttp eliminates direct memory (heap-only), has trivially shareable `ConnectionPool`, and native HTTP/2 coalescing. | Medium — adapter code is straightforward; the question is compatibility with ThinClient channel handlers. |

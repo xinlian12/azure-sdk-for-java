@@ -31,6 +31,7 @@
 | **Connection sharing** | `off` (default), `on` (`connectionSharingAcrossClientsEnabled`) | A3 from analysis |
 | **HTTP version** | HTTP/1.1 (default), HTTP/2 + ThinClient | A15 from analysis |
 | **Connection pool size** | 1000 (default), 100, 50 | A11 from analysis |
+| **HTTP client impl** | Reactor Netty (default), OkHttp (investigation) | Compare connection pooling, thread model, memory footprint across HTTP client implementations |
 | **Workload** | Idle (clients created, no ops), Point reads, Queries, Mixed | Isolate creation cost vs runtime cost |
 | **Client lifecycle** | Long-lived, Churn (create/close cycles) | Detect leaks (A1, A2, A3) |
 
@@ -194,6 +195,58 @@ Every 5 minutes, record:
 ```
 
 **Expected**: Should be flat. Any upward trend indicates a leak or unbounded cache.
+
+---
+
+### S7: HTTP Client Implementation Comparison (Reactor Netty vs OkHttp)
+
+**Purpose**: Investigate whether replacing the Cosmos SDK's internal Reactor Netty HTTP client with OkHttp yields improvements in connection pooling, thread usage, or memory footprint for multi-tenant scenarios.
+
+**Background**: The Cosmos SDK uses its **own internal Reactor Netty HTTP client** (`com.azure.cosmos.implementation.http.ReactorNettyClient`) — not `azure-core-http-netty`. The `HttpClient` interface has only one implementation today. OkHttp has fundamentally different connection pooling architecture:
+
+| Aspect | Reactor Netty (current) | OkHttp (investigation) |
+|---|---|---|
+| **Connection pool model** | `ConnectionProvider` with configurable max connections per host; event-loop-based I/O | `ConnectionPool` with keep-alive; thread-per-request dispatch |
+| **Thread model** | Shared event loop (`LoopResources.DEFAULT`, ~CPU-core threads) — all clients share | `Dispatcher` with configurable `ExecutorService` — can be shared or per-client |
+| **HTTP/2 support** | Via `Http2AllocationStrategy` + ALPN | Native HTTP/2 with connection coalescing |
+| **Connection reuse** | Per-`ConnectionProvider`; separate pool per client by default | Per-`OkHttpClient`; can share `ConnectionPool` across instances |
+| **Idle cleanup** | `maxIdleTime` on `ConnectionProvider` | `keepAliveDuration` on `ConnectionPool` |
+| **SSL/TLS** | Netty `SslContext` (OpenSSL or JDK) | JDK `SSLContext` (default) |
+| **Backpressure** | Reactive (Mono/Flux) — naturally non-blocking | Blocking or callback-based; needs wrapper for reactive |
+| **Direct memory** | Uses Netty `ByteBuf` (direct/pooled) — can be large | JDK byte arrays (heap) — no direct memory concerns |
+| **Multi-tenant thread count** | ~CPU cores (shared event loop) + 1 per client (`GlobalEndpointManager`) | Depends on `Dispatcher` config; default max 64 concurrent requests |
+
+**Investigation approach** (not a code-shipping change — exploration only):
+
+```
+Phase 1: Characterize (no code changes needed)
+    1. Run S1 (Idle Scaling) + S2 (Point Reads) with Reactor Netty (current baseline)
+    2. Record: threads, connections, heap, direct memory, FDs per client count
+    3. Analyze: which resources are dominated by Reactor Netty vs SDK logic?
+
+Phase 2: Prototype (experimental branch)
+    1. Implement OkHttp adapter behind the existing HttpClient interface
+    2. OkHttp-specific config:
+       - Shared ConnectionPool across all CosmosClients
+       - Shared Dispatcher with bounded thread pool
+       - HTTP/2 enabled with connection coalescing
+    3. Re-run S1 + S2 with OkHttp adapter
+    4. Compare: threads, connections, heap, direct memory, FDs
+
+Phase 3: Evaluate
+    - Is the difference significant enough to justify maintaining two HTTP backends?
+    - Does OkHttp eliminate any of the multi-tenancy pain points identified in the analysis?
+    - Are there compatibility concerns (reactive bridge, RNTBD/ThinClient, custom handlers)?
+```
+
+**Key questions to answer**:
+1. **Direct memory**: Reactor Netty uses Netty `ByteBuf` (direct/pooled). At 100 clients, does direct memory become a significant portion of total memory? OkHttp would eliminate this entirely.
+2. **Connection pool sharing**: OkHttp's `ConnectionPool` is trivially shareable across `OkHttpClient` instances (they can reference the same pool object). Is this simpler than `SharedGatewayHttpClient`'s reference-counting approach?
+3. **Thread count**: Does OkHttp's dispatcher model result in fewer threads at 100+ clients compared to Reactor Netty's event loop + per-client `GlobalEndpointManager`?
+4. **HTTP/2 connection coalescing**: OkHttp can share a single HTTP/2 connection across different hostnames if they resolve to the same IP and share a TLS certificate. Does this help for multi-account scenarios?
+5. **Compatibility**: The `ThinClientStoreModel` uses Reactor Netty-specific channel handlers (`StripWhitespaceHandler`). Would an OkHttp adapter work with ThinClient, or only with standard Gateway mode?
+
+**Expected outcome**: A data-driven recommendation on whether to pursue an OkHttp backend, keep Reactor Netty with optimizations, or both. This is **not** about replacing Reactor Netty — it's about understanding the tradeoffs.
 
 ---
 
@@ -2065,6 +2118,9 @@ Run these scenarios in order. Each produces a result set for comparison.
 | B9 | S4 | 10×100 cycles | off | 1.1 | 1000 | Churn + reads | 100 cycles |
 | B10 | S5 | 50 | off | 1.1 | **100** | High concurrency | 5 min |
 | B11 | S5 | 50 | off | **2.0** | **100** | High concurrency | 5 min |
+| B12 | S7 | 1,10,50,100 | off | 1.1 | 1000 | Idle + Point reads (OkHttp) | 5 min |
+
+**Note**: B12 (OkHttp investigation) is **optional** — run only after the OkHttp adapter prototype exists on an experimental branch.
 
 ### 10.2 Before/After Comparison
 
