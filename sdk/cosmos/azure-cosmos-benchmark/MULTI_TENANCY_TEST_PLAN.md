@@ -1,0 +1,2048 @@
+# Multi-Tenancy Baseline Test Plan
+
+> **Goal**: Establish reproducible baseline measurements of CPU, memory, connections, threads, latency, and throughput for multi-tenant `CosmosClient` usage in Gateway mode, so that every optimization from `multi-tenancy-analysis.md` can be validated with before/after data.
+
+---
+
+## Table of Contents
+
+1. [Test Dimensions & Metrics](#1-test-dimensions--metrics)
+2. [Test Scenarios](#2-test-scenarios)
+3. [Infrastructure & Environment](#3-infrastructure--environment)
+4. [Test Harness Design](#4-test-harness-design)
+5. [Observability: OpenTelemetry, Micrometer & Application Insights](#5-observability-opentelemetry-micrometer--application-insights)
+6. [Azure VM Test Environment](#6-azure-vm-test-environment)
+7. [Metric Collection Strategy](#7-metric-collection-strategy)
+8. [Triggering Tests from Branches & PRs](#8-triggering-tests-from-branches--prs)
+9. [External Result Storage](#9-external-result-storage)
+10. [Execution Runbook](#10-execution-runbook)
+11. [Result Schema & Comparison](#11-result-schema--comparison)
+
+---
+
+## 1. Test Dimensions & Metrics
+
+### 1.1 Independent Variables (What We Vary)
+
+| Variable | Values | Why |
+|---|---|---|
+| **Number of clients** | 1, 10, 50, 100, 200, 500 | Core scaling dimension |
+| **Connection sharing** | `off` (default), `on` (`connectionSharingAcrossClientsEnabled`) | A3 from analysis |
+| **HTTP version** | HTTP/1.1 (default), HTTP/2 + ThinClient | A15 from analysis |
+| **Connection pool size** | 1000 (default), 100, 50 | A11 from analysis |
+| **Workload** | Idle (clients created, no ops), Point reads, Queries, Mixed | Isolate creation cost vs runtime cost |
+| **Client lifecycle** | Long-lived, Churn (create/close cycles) | Detect leaks (A1, A2, A3) |
+
+### 1.2 Dependent Variables (What We Measure)
+
+| Category | Metric | Unit | Collection Method |
+|---|---|---|---|
+| **Memory — Heap** | Used heap after GC | bytes | `Runtime.getRuntime()` after `System.gc()` |
+| **Memory — Heap** | Heap delta per client | bytes | (heap at N clients − heap at 0) / N |
+| **Memory — Direct** | Netty direct memory | bytes | `PlatformDependent.usedDirectMemory()` |
+| **Memory — Direct** | Buffer pool stats | bytes | `ManagementFactory.getPlatformMXBeans(BufferPoolMXBean.class)` |
+| **Threads** | Live thread count | count | `Thread.activeCount()` or `ThreadMXBean` |
+| **Threads** | Thread name breakdown | map | `Thread.getAllStackTraces().keySet()` grouped by prefix |
+| **CPU** | Process CPU % | percent | `OperatingSystemMXBean.getProcessCpuLoad()` |
+| **CPU** | System CPU % | percent | `CpuMemoryMonitor` / `CpuMemoryReader` |
+| **Connections** | Active TCP connections | count | `ConnectionProvider` metrics (if enabled) OR `ss`/`netstat` |
+| **Connections** | Idle TCP connections | count | Same |
+| **Connections** | File descriptors used | count | `/proc/self/fd` (Linux) or `lsof -p` |
+| **Latency** | P50, P99, P99.9, Max | ms | Codahale `Timer` with `HdrHistogramResetOnSnapshotReservoir` |
+| **Throughput** | Operations/sec | ops/s | Codahale `Meter` |
+| **Cache sizes** | Query plan cache entries | count | `RxDocumentClientImpl.getQueryPlanCache().size()` |
+| **Client count** | Active client count | count | `RxDocumentClientImpl.activeClientsCnt` (via diagnostics) |
+| **GC** | GC pause count + time | count/ms | `GarbageCollectorMXBean` |
+
+### 1.3 Key Ratios to Compute
+
+| Ratio | Formula | Target |
+|---|---|---|
+| Marginal heap per client | `Δheap / Δclients` | Should be stable |
+| Marginal threads per client | `Δthreads / Δclients` | Should be ≤1 (ideal: 0 with shared pools) |
+| Latency degradation | `P99(N clients) / P99(1 client)` | Should be <2× at 100 clients |
+| Throughput scaling | `ops/s(N clients) / ops/s(1 client)` | Should scale near-linearly |
+| Connection efficiency | `TCP connections / concurrent requests` | HTTP/1.1: ~1.0, HTTP/2: ~0.03 |
+
+---
+
+## 2. Test Scenarios
+
+### S1: Idle Client Scaling (Resource Footprint)
+
+**Purpose**: Measure the pure resource cost of creating N clients with zero workload.
+
+```
+For N in [1, 10, 50, 100, 200, 500]:
+    1. Record baseline: heap, direct mem, threads, FDs
+    2. Create N CosmosAsyncClient instances (Gateway mode, distinct endpoints)
+    3. Wait 30s for background tasks to stabilize
+    4. Force GC, record: heap, direct mem, threads, FDs, thread-name breakdown
+    5. Wait 5 min (allow background refresh + telemetry cycles)
+    6. Record again (detect growth from background activity)
+    7. Close all clients
+    8. Force GC, wait 10s, record final state (detect leaks)
+```
+
+**Variants**:
+- S1a: `connectionSharingAcrossClientsEnabled = false` (default)
+- S1b: `connectionSharingAcrossClientsEnabled = true`
+- S1c: HTTP/2 + ThinClient enabled
+
+**Expected outputs**:
+- Chart: heap vs N (should be linear; slope = per-client cost)
+- Chart: thread count vs N
+- Table: thread-name-prefix breakdown at N=100
+
+---
+
+### S2: Point Read Throughput & Latency Scaling
+
+**Purpose**: Measure how latency/throughput degrade as client count increases, under fixed total concurrency.
+
+```
+Total concurrency = 200 (fixed)
+For N in [1, 10, 50, 100]:
+    Per-client concurrency = 200 / N
+    1. Create N clients, each with its own container (pre-loaded with 1000 docs)
+    2. Warmup: 5000 ops (not measured)
+    3. Measure: 100,000 ops (or 5 min, whichever first)
+       - Round-robin across clients
+       - Per-client: Codahale Timer (latency) + Meter (throughput)
+       - Global: aggregate Timer + Meter
+    4. Record: P50/P99/P99.9, ops/s, heap, threads, connections
+    5. Close all clients
+```
+
+**Variants**:
+- S2a: Default (HTTP/1.1, no sharing)
+- S2b: Connection sharing enabled
+- S2c: HTTP/2 + ThinClient
+- S2d: Reduced pool size (100 instead of 1000)
+
+---
+
+### S3: Query Cache Growth (Unbounded Cache Detection)
+
+**Purpose**: Confirm that `queryPlanCache` grows without bound; measure memory impact.
+
+```
+Clients = 10
+For query_count in [100, 500, 1000, 5000, 10000]:
+    1. Create 10 clients
+    2. Execute `query_count` distinct queries (parameterized: "SELECT * FROM c WHERE c.field{i} = @v")
+    3. Record: queryPlanCache.size() per client, total heap
+    4. Compute: cache memory = heap(10K queries) - heap(100 queries)
+```
+
+**Expected**: Linear growth with no plateau. Validates A7 (add LRU eviction).
+
+---
+
+### S4: Client Lifecycle Churn (Leak Detection)
+
+**Purpose**: Detect resource leaks when clients are repeatedly created and destroyed.
+
+```
+For cycle in [1..100]:
+    1. Create 10 clients
+    2. Execute 100 point reads per client
+    3. Close all 10 clients
+    4. Force GC
+    5. Record: heap, threads, direct mem, FDs
+```
+
+**Expected without fix**: Thread count and/or memory should increase over cycles (proving A1/A2 leaks).
+**Expected with fix**: Thread count and memory should return to baseline each cycle.
+
+---
+
+### S5: Connection Pool Pressure (HTTP/1.1 vs HTTP/2)
+
+**Purpose**: Measure TCP connection count and acquisition latency under high concurrency.
+
+```
+Clients = 50
+Concurrency per client = 50 (total = 2500 concurrent)
+Pool size = 100 (intentionally smaller than concurrency)
+
+1. Create 50 clients with maxConnectionPoolSize=100
+2. Blast 50K point reads at max rate
+3. Record: connection pool metrics, pending acquire count, acquire latency, request latency
+4. Compare HTTP/1.1 vs HTTP/2 (with 30 streams per connection)
+```
+
+**Expected**: HTTP/1.1 will show connection pool exhaustion (pending acquire timeouts). HTTP/2 should handle the load with far fewer connections.
+
+---
+
+### S6: Long-Running Stability (24-Hour Soak)
+
+**Purpose**: Detect slow leaks, cache growth, and degradation over time.
+
+```
+Clients = 50
+Duration = 24 hours
+Workload = mixed (70% reads, 20% queries, 10% writes) at moderate rate (1000 ops/s total)
+
+Every 5 minutes, record:
+    - Heap, direct memory, threads, FDs, GC stats
+    - Per-client: queryPlanCache.size(), session token count
+    - Latency P50/P99
+    - Throughput
+```
+
+**Expected**: Should be flat. Any upward trend indicates a leak or unbounded cache.
+
+---
+
+## 3. Infrastructure & Environment
+
+### 3.1 Cosmos DB Setup
+
+| Resource | Configuration |
+|---|---|
+| **Accounts** | Use emulator for unit tests; real accounts for perf (≥10 accounts for multi-tenant simulation) |
+| **Throughput** | 10,000 RU/s per container (autopilot or provisioned) |
+| **Consistency** | Session (default) |
+| **Regions** | Single region for baseline; multi-region for S6 |
+| **Documents** | 1000 pre-loaded docs per container, ~1 KB each |
+| **Partition key** | `/id` (single logical partition per doc) |
+
+### 3.2 Client JVM
+
+| Setting | Value |
+|---|---|
+| **JDK** | 21 (LTS) |
+| **Heap** | `-Xmx8g -Xms8g` (fixed, avoid resize noise) |
+| **GC** | `-XX:+UseG1GC` (default) |
+| **GC logging** | `-Xlog:gc*:file=gc.log:time,uptime` |
+| **Direct memory** | `-XX:MaxDirectMemorySize=2g` |
+| **Assertions** | `-ea` (enabled) |
+| **JFR** | `-XX:StartFlightRecording=...` for CPU/allocation profiling |
+| **Cosmos properties** | Set via system properties per scenario variant |
+
+### 3.3 Machine
+
+**Recommended**: Azure VM in the same region as Cosmos accounts — see [Section 6: Azure VM Test Environment](#6-azure-vm-test-environment) for detailed setup.
+
+| Requirement | Spec |
+|---|---|
+| **CPU** | ≥16 cores (`Standard_D16s_v5`) |
+| **RAM** | ≥64 GB |
+| **OS** | Ubuntu 22.04 LTS |
+| **Network** | Same Azure region, accelerated networking enabled |
+| **FD limit** | `ulimit -n 1048576` (see VM setup script in Section 6) |
+
+---
+
+## 4. Test Harness Design
+
+### 4.1 Design Philosophy: Reuse `AsyncBenchmark` Per Tenant
+
+Rather than building a standalone harness, we reuse the existing `AsyncBenchmark` machinery. Each tenant (Cosmos account) gets its own `AsyncBenchmark` instance, driven by a JSON config file describing all accounts.
+
+**Why reuse `AsyncBenchmark`**:
+- Gets Codahale metrics (Timer, Meter, reporters) for free
+- Gets warmup phase, concurrency control (`Semaphore`), result upload (`CosmosTotalResultReporter`) for free
+- Gets Micrometer → Application Insights bridge for free (via `Configuration.createAzureMonitorMeterRegistry()`)
+- Proven, production-quality workload drivers (read, write, query, mixed)
+- Reduces code to write — just orchestration, not workload logic
+
+**Challenges with multiple `AsyncBenchmark` instances** (and mitigations):
+
+| Challenge | Root Cause | Mitigation |
+|---|---|---|
+| System property mutation | `AsyncBenchmark` constructor sets JVM-global properties for circuit breaker/PPAF | Set once in orchestrator before creating any instances; skip in per-tenant init |
+| Static `ManagedIdentityCredential` | Shared across all instances | ~~Fixed~~ — `CREDENTIAL` is now per-instance, built from `Configuration.buildTokenCredential()` |
+| Each instance creates its own DB/container | Constructor calls `createDatabaseAndContainerIfNotExist` | Desired — each tenant needs its own container |
+| Each instance starts its own reporter | Codahale `ScheduledReporter` per instance | Use one global reporter + per-tenant `MetricRegistry` with prefixed names |
+| `run()` blocks until completion | Designed for single-instance use | Run each `AsyncBenchmark.run()` on its own thread via `ExecutorService` |
+
+### 4.2 Architecture
+
+```
+MultiTenancyBenchmark (orchestrator — main class)
+  │
+  ├── Reads tenants.json → List<TenantAccountInfo>
+  │
+  ├── For each tenant account:
+  │     ├── Create Configuration clone with account-specific endpoint/key
+  │     ├── new AsyncReadBenchmark(tenantConfig)  ─or─  AsyncQueryBenchmark, etc.
+  │     └── Submit benchmark.run() to ExecutorService
+  │
+  ├── ResourceMonitor (shared, samples all JVM metrics periodically)
+  │
+  ├── Shared Micrometer MeterRegistry → Application Insights
+  │     └── Each AsyncBenchmark's ClientTelemetryConfig uses this registry
+  │
+  ├── Shared Codahale MetricRegistry (aggregated view)
+  │     └── Per-tenant metrics prefixed: "tenant-0.latency", "tenant-1.latency"
+  │
+  └── ResultRecorder (CSV + Application Insights + optional Cosmos upload)
+```
+
+### 4.3 Tenant Configuration: `tenants.json`
+
+Instead of CLI parameters for individual accounts, users provide a JSON file that describes all tenant accounts and per-tenant overrides:
+
+```json
+{
+    "globalDefaults": {
+        "connectionMode": "GATEWAY",
+        "consistencyLevel": "SESSION",
+        "concurrency": 20,
+        "numberOfOperations": 100000,
+        "operation": "ReadThroughput",
+        "numberOfPreCreatedDocuments": 1000,
+        "connectionSharingAcrossClientsEnabled": false,
+        "http2Enabled": false,
+        "http2MaxConcurrentStreams": 30,
+        "maxConnectionPoolSize": 1000,
+        "warmupDurationInSeconds": 30,
+        "applicationName": "mt-bench"
+    },
+    "tenants": [
+        {
+            "id": "tenant-0",
+            "serviceEndpoint": "https://account0.documents.azure.com:443/",
+            "masterKey": "key0==",
+            "databaseId": "benchdb",
+            "containerId": "benchcol",
+            "overrides": {
+                "concurrency": 50
+            }
+        },
+        {
+            "id": "tenant-1",
+            "serviceEndpoint": "https://account1.documents.azure.com:443/",
+            "masterKey": "key1==",
+            "databaseId": "benchdb",
+            "containerId": "benchcol"
+        },
+        {
+            "id": "tenant-2-managed-identity",
+            "serviceEndpoint": "https://account2.documents.azure.com:443/",
+            "databaseId": "benchdb",
+            "containerId": "benchcol",
+            "overrides": {
+                "isManagedIdentityRequired": "true",
+                "aadManagedIdentityClientId": "client-id-for-tenant-2",
+                "aadTenantId": "tenant-id-for-tenant-2"
+            }
+        }
+    ],
+    "tenantTemplate": {
+        "enabled": false,
+        "count": 100,
+        "endpointPattern": "https://account{i}.documents.azure.com:443/",
+        "keyEnvVarPattern": "COSMOS_KEY_{i}",
+        "databaseId": "benchdb",
+        "containerIdPattern": "benchcol-{i}"
+    }
+}
+```
+
+**Features**:
+- `globalDefaults`: Maps directly to `Configuration` fields — every tenant inherits these
+- `tenants[]`: Explicit list of accounts with per-tenant `overrides` for any `Configuration` field
+- `tenantTemplate`: For scaling tests with many accounts — generates N tenants from a pattern (endpoint, key from env var, container name). Avoids listing 100+ accounts by hand.
+
+**How it maps to `Configuration`**:
+
+```java
+// Pseudocode in MultiTenancyBenchmark
+for (TenantAccountInfo tenant : tenants) {
+    Configuration tenantConfig = Configuration.fromDefaults();  // base from globalDefaults
+    tenantConfig.setServiceEndpoint(tenant.serviceEndpoint);
+    tenantConfig.setMasterKey(tenant.masterKey);
+    tenantConfig.setDatabaseId(tenant.databaseId);
+    tenantConfig.setContainerId(tenant.containerId);
+    tenantConfig.applyOverrides(tenant.overrides);              // per-tenant tweaks
+
+    // Set per-tenant applicationName so each CosmosClient has a unique userAgentSuffix.
+    // This enables server-side Kusto queries to differentiate traffic by tenant.
+    // Format: "mt-bench-<tenantId>" (e.g., "mt-bench-tenant-0")
+    String baseName = tenantConfig.getApplicationName();        // from globalDefaults or override
+    String tenantSuffix = StringUtils.isNotEmpty(baseName)
+        ? baseName + "-" + tenant.id
+        : "mt-bench-" + tenant.id;
+    tenantConfig.setApplicationName(tenantSuffix);
+
+    AsyncBenchmark<?> benchmark = createBenchmark(tenantConfig); // AsyncReadBenchmark etc.
+    executor.submit(() -> benchmark.run());
+}
+```
+
+**Server-side verification via Kusto**: The `userAgentSuffix` appears in the Cosmos DB server-side request logs as part of the `UserAgent` header. This enables per-tenant traffic analysis from the server perspective:
+
+```kql
+// Kusto query on Cosmos DB server-side logs to verify per-tenant traffic
+CDBDataPlaneRequests
+| where TimeGenerated > ago(1h)
+| where UserAgent contains "mt-bench-"
+| extend tenantId = extract("mt-bench-([\\w-]+)", 1, UserAgent)
+| summarize requestCount=count(), avgRUs=avg(RequestCharge), p99LatencyMs=percentile(DurationMs, 99)
+    by tenantId, OperationName, bin(TimeGenerated, 1m)
+| order by tenantId, TimeGenerated
+```
+
+### 4.4 Key Design Decisions (Revised)
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| **Reuse `AsyncBenchmark`?** | **Yes** — each tenant gets its own instance running on a dedicated thread | Reuses proven workload drivers, Codahale metrics, warmup, `CosmosTotalResultReporter`. Avoids reimplementing the workload loop. |
+| **Config input** | **JSON file** (`tenants.json`) with `globalDefaults` + per-tenant overrides | Cleaner than 100+ CLI params; supports both explicit accounts and template-based generation; easy to version-control test configs |
+| **`AsyncBenchmark` thread model** | Each `benchmark.run()` on its own thread in a fixed `ExecutorService` | `run()` blocks (it's a loop with `Semaphore`). Parallelism = number of tenants. |
+| **Metrics isolation** | Each tenant gets its own `MetricRegistry` (Codahale) with prefixed metric names, plus a global aggregate registry | Prevents metric name collisions; enables both per-tenant and aggregate views |
+| **Micrometer / App Insights** | Shared `MeterRegistry` across all tenants; SDK-level metrics auto-tagged by account endpoint | Application Insights handles multi-dimensional metrics natively; custom dimensions identify each tenant |
+| **Reporter** | One shared `CosmosTotalResultReporter` consuming the global aggregate `MetricRegistry` | Avoids N reporters writing to the same Cosmos container concurrently |
+| **System properties** | Set once by orchestrator before any `AsyncBenchmark` constructor; patched to skip in constructor | Prevents N instances from clobbering each other's system properties |
+| **Connection sharing** | Configurable per-run in `globalDefaults.connectionSharingAcrossClientsEnabled` | Tests A4 from analysis |
+| **Resource monitoring** | Separate `ResourceMonitor` thread, independent of `AsyncBenchmark` | `AsyncBenchmark` doesn't track JVM-level resources (heap, threads, FDs) |
+
+### 4.5 Design Comparison: Reuse `AsyncBenchmark` vs. Per-Tenant Full-Control Architecture
+
+Before diving into specific limitations, it's worth comparing the two fundamental design approaches. The current design (§4.1–4.4) reuses `AsyncBenchmark` as-is, with each tenant getting its own instance. An alternative "Full-Control" design would give each tenant its own independently-configured `CosmosAsyncClient` built directly by the orchestrator, bypassing `AsyncBenchmark`'s constructor entirely.
+
+#### 4.5.1 Side-by-Side Comparison
+
+| Aspect | **Current Design: Reuse `AsyncBenchmark`** | **Full-Control Design: Orchestrator Builds Clients** |
+|---|---|---|
+| **Per-tenant `CosmosAsyncClient`** | Yes — each `AsyncBenchmark` instance builds its own client in the constructor | Yes — orchestrator builds each client with tenant-specific `CosmosClientBuilder` settings |
+| **System properties (`COSMOS.*`)** | 🔴 **JVM-global** — `AsyncBenchmark` constructor calls `System.setProperty()` for circuit breaker, PPAF, min pool size. Last writer wins. Must be patched to skip or set-once. | ✅ **Avoided** — orchestrator sets system properties once (or uses builder-level API where available). No per-instance mutation. |
+| **`TokenCredential` (managed identity)** | ✅ **Per-instance** — `CREDENTIAL` is now built per-instance via `Configuration.buildTokenCredential()`, using instance-level AAD fields (`-aadLoginEndpoint`, `-aadTenantId`, `-aadManagedIdentityClientId`). Falls back to system property / env var if not set. | ✅ **Per-tenant** — each tenant can have its own `TokenCredential` (different managed identity client IDs, different tenants). |
+| **AAD config (`loginUri`, `tenantId`, `managedIdentityId`)** | ✅ **Per-instance** — `Configuration` now has instance-level fields (`-aadLoginEndpoint`, `-aadTenantId`, `-aadManagedIdentityClientId`) with `getInstanceAad*()` getters. Each tenant's `Configuration` can specify its own AAD identity via `tenants.json` overrides. Static methods retained for backward compatibility. | ✅ **Per-tenant** — each `TenantAccountInfo` can specify its own `aadLoginEndpoint`, `aadTenantId`, `managedIdentityClientId`. Orchestrator builds `DefaultAzureCredentialBuilder` per tenant. |
+| **`MeterRegistry` (Micrometer)** | 🟡 **Lazy singleton per `Configuration` instance** — `azureMonitorMeterRegistry()` and `graphiteMeterRegistry()` are `synchronized` and cache on first call. Each tenant's `Configuration` creates its own registry, but all read the same system properties / env vars for App Insights connection string. | ✅ **Shared or per-tenant** — orchestrator creates one shared `AzureMonitorMeterRegistry` and wraps it with per-tenant common tags (`tenantId`). Or creates separate registries per tenant if needed. |
+| **`TelemetryConfiguration.getActive()`** | 🔴 **Global singleton** — `azureMonitorMeterRegistry()` calls `TelemetryConfiguration.getActive().setRoleName(...)`. This is process-global — last writer wins. | ✅ **Set once** — orchestrator sets role name once before creating any registry. |
+| **Codahale `MetricRegistry`** | 🟡 **Per-instance** — each `AsyncBenchmark` has its own `metricsRegistry`. Good isolation. But metric names (`#Successful Operations`, `Latency`) collide in aggregated views. | ✅ **Per-tenant with prefixes** — orchestrator creates registries with prefixed names (`tenant-0.latency`, `tenant-1.latency`) + a global aggregate. |
+| **`ScheduledReporter`** | 🟡 **Per-instance** — each `AsyncBenchmark` starts its own `ConsoleReporter`/`CsvReporter`/`GraphiteReporter`. N instances = N reporters writing concurrently (noisy console, file contention). | ✅ **Single shared reporter** — orchestrator runs one reporter against the global aggregate registry. Per-tenant data is in CSV or App Insights via tags. |
+| **Connection mode config** | ✅ **Per-instance** — each `Configuration` has its own `connectionMode`, `maxConnectionPoolSize`. Applied to that tenant's `CosmosClientBuilder`. | ✅ **Per-tenant** — same, via `tenants.json` overrides. |
+| **Circuit breaker enabled/disabled** | 🔴 **Cannot differ per tenant** — controlled via `System.setProperty("COSMOS.PARTITION_LEVEL_CIRCUIT_BREAKER_CONFIG", ...)` which is JVM-global. Tenant A wants circuit breaker on, Tenant B wants it off → impossible. | 🟡 **Still JVM-global** — the Cosmos SDK reads this from system properties internally. No builder-level API exists today. But orchestrator can at least set it once consistently, and the test plan can test one value at a time across runs. |
+| **PPAF (Per-Partition Automatic Failover)** | 🔴 **Cannot differ per tenant** — `COSMOS.IS_PER_PARTITION_AUTOMATIC_FAILOVER_ENABLED` is a system property. Same JVM-global issue. | 🟡 **Same SDK limitation** — but orchestrator avoids the N-writers race. |
+| **`connectionSharingAcrossClientsEnabled`** | ✅ **Builder-level** — `CosmosClientBuilder.connectionSharingAcrossClientsEnabled(true)`. Per-tenant in both designs. | ✅ **Same** — per-tenant via `CosmosClientBuilder`. |
+| **HTTP/2 + ThinClient** | ✅ **Builder-level** (when available) — per-tenant in both designs. | ✅ **Same** — per-tenant via builder. |
+| **Preferred regions** | ✅ **Per-instance** — `Configuration.getPreferredRegionsList()` is per-instance. | ✅ **Per-tenant** — each tenant can have different preferred regions. |
+| **Consistency level** | ✅ **Per-instance** — `Configuration.getConsistencyLevel()` applied to builder. | ✅ **Per-tenant** — same. |
+| **Database / Container creation** | ✅ **Per-instance** — each `AsyncBenchmark` constructor creates its own DB/container. Desired for multi-tenant isolation. | ✅ **Per-tenant** — orchestrator creates DB/containers (can parallelize). |
+| **Workload driver (`performWorkload`)** | ✅ **Proven** — reuses `AsyncReadBenchmark`, `AsyncQueryBenchmark`, etc. Zero new workload code. | 🔴 **Must reimplement** — or extract workload logic from `AsyncBenchmark` subclasses into reusable components. Significant effort. |
+| **Concurrency control (`Semaphore`)** | ✅ **Per-instance** — each `AsyncBenchmark` has its own `Semaphore(concurrency)`. | Must be reimplemented or extracted. |
+| **Warmup / skip-warmup** | ✅ **Built-in** — `skipWarmUpOperations`, `warmupMode` logic. | Must be reimplemented. |
+| **Result upload (`CosmosTotalResultReporter`)** | ✅ **Built-in** — handles Cosmos result upload. | Must be reimplemented or extracted. |
+| **Env var fallback (`tryGetValuesFromSystem`)** | 🔴 **Process-global** — reads from env vars like `SERVICE_END_POINT`, `MASTER_KEY`. All tenants would read the same env vars. Not useful for multi-tenant. | ✅ **Irrelevant** — tenant configs come from `tenants.json`, not env vars. |
+| **Code to write** | 🟢 **Minimal** — orchestrator + resource monitor + JSON config reader. ~500–800 LOC. | 🔴 **Substantial** — must reimplement or extract workload loop, semaphore, metrics, warmup, reporter, result upload. ~2000–3000 LOC. |
+| **Risk** | 🟡 Moderate — must carefully patch `AsyncBenchmark` to avoid global-state conflicts. Fragile if `AsyncBenchmark` changes upstream. | 🟡 Moderate — more code = more bugs, but cleaner architecture. No fragile patches. |
+
+#### 4.5.2 What Can vs. Cannot Be Per-Tenant Today
+
+Based on the analysis of [AsyncBenchmark.java](sdk/cosmos/azure-cosmos-benchmark/src/main/java/com/azure/cosmos/benchmark/AsyncBenchmark.java) and [Configuration.java](sdk/cosmos/azure-cosmos-benchmark/src/main/java/com/azure/cosmos/benchmark/Configuration.java):
+
+**✅ Already per-tenant via `CosmosClientBuilder` (works in both designs)**:
+- `endpoint` / `key` / `credential`
+- `preferredRegions`
+- `consistencyLevel`
+- `connectionMode` (DIRECT vs GATEWAY)
+- `maxConnectionPoolSize` (via `GatewayConnectionConfig`)
+- `connectionSharingAcrossClientsEnabled`
+- `contentResponseOnWriteEnabled`
+- `userAgentSuffix`
+- `regionScopedSessionCapturingEnabled` (via bridge accessor)
+- `clientTelemetryConfig` (diagnostics thresholds, meter registry, diagnostics handler)
+- Proactive connection management (`openConnectionsAndInitCaches`)
+
+**🔴 JVM-global today — cannot differ per tenant in a single JVM**:
+- `COSMOS.PARTITION_LEVEL_CIRCUIT_BREAKER_CONFIG` — system property, read by SDK internals
+- `COSMOS.IS_PER_PARTITION_AUTOMATIC_FAILOVER_ENABLED` — system property
+- `COSMOS.IS_SESSION_TOKEN_FALSE_PROGRESS_MERGE_ENABLED` — system property
+- `COSMOS.E2E_TIMEOUT_ERROR_HIT_THRESHOLD_FOR_PPAF` — system property
+- `COSMOS.E2E_TIMEOUT_ERROR_HIT_TIME_WINDOW_IN_SECONDS_FOR_PPAF` — system property
+- `COSMOS.STALE_PARTITION_UNAVAILABILITY_REFRESH_INTERVAL_IN_SECONDS` — system property
+- `COSMOS.ALLOWED_PARTITION_UNAVAILABILITY_DURATION_IN_SECONDS` — system property
+- `COSMOS.MIN_CONNECTION_POOL_SIZE_PER_ENDPOINT` — system property
+- AAD login endpoint, tenant ID, managed identity ID — static methods reading system properties
+- `TelemetryConfiguration.getActive()` — Application Insights global singleton
+- Environment variable-based config (`SERVICE_END_POINT`, `MASTER_KEY`, etc.) — process-global
+
+**🟡 Currently global but fixable in Full-Control design**:
+- `MeterRegistry` — lazy singleton in `Configuration`, but can be shared with per-tenant tags in the orchestrator
+
+**✅ Recently fixed (moved from global to per-instance)**:
+- `TokenCredential` — was a static field in `AsyncBenchmark`; now built per-instance via `Configuration.buildTokenCredential()` with instance-level AAD fields (`-aadLoginEndpoint`, `-aadTenantId`, `-aadManagedIdentityClientId`)
+- AAD config (`loginUri`, `tenantId`, `managedIdentityId`) — `Configuration` now has instance-level getters (`getInstanceAadLoginEndpoint()`, etc.) that fall back to the static system-property/env-var values if not set per-instance
+
+#### 4.5.3 Recommendation
+
+**Use the Current Design (Reuse `AsyncBenchmark`) with targeted patches**:
+
+1. **It's 3–4× less code** — the workload loop, semaphore, metrics, warmup, and result upload are battle-tested.
+2. **The JVM-global system properties are test-level variables, not per-tenant variables** — in the baseline matrix (§8.1), circuit breaker and PPAF are held constant across all tenants within a run. We vary them *between runs*, not *within a run*. So set-once-per-run is sufficient.
+3. **Per-tenant config independence is achieved via `tenants.json` overrides** — each tenant gets its own `Configuration` instance with its own endpoint, key, connection pool size, concurrency, consistency level, etc. The only things that can't differ per-tenant are SDK-internal system properties, which is an SDK limitation, not a harness limitation.
+4. **If a future test requires per-tenant circuit breaker or PPAF differences**, that's a signal to file an SDK feature request for builder-level APIs for these settings, rather than working around it in the benchmark harness.
+
+The Full-Control design is the right long-term architecture if the benchmark evolves into a production multi-tenant simulator, but for baseline measurement it's over-engineering.
+
+### 4.6 Handling `AsyncBenchmark` Limitations (Patches for Current Design)
+
+#### Problem 1: System Property Conflicts
+
+`AsyncBenchmark` constructor sets JVM-global system properties (circuit breaker, PPAF). With N instances, the last one wins.
+
+**Solution**: Extract system property setup into `MultiTenancyBenchmark` orchestrator. Set once before creating any `AsyncBenchmark`. Add a `Configuration` flag (e.g., `skipSystemPropertyInit`) that tenant configs set to `true`.
+
+```java
+// In MultiTenancyBenchmark (orchestrator), before creating any AsyncBenchmark:
+if (globalDefaults.isPartitionLevelCircuitBreakerEnabled()) {
+    System.setProperty("COSMOS.PARTITION_LEVEL_CIRCUIT_BREAKER_CONFIG", "...");
+    // ... other circuit breaker properties
+}
+if (globalDefaults.isPerPartitionAutomaticFailoverRequired()) {
+    System.setProperty("COSMOS.IS_PER_PARTITION_AUTOMATIC_FAILOVER_ENABLED", "true");
+    // ... other PPAF properties
+}
+
+// Then for each tenant:
+tenantConfig.setSkipSystemPropertyInit(true); // new flag
+AsyncBenchmark<?> benchmark = createBenchmark(tenantConfig);
+```
+
+#### Problem 2: ~~Static `TokenCredential` Singleton~~ (Fixed)
+
+The `CREDENTIAL` field was `private static final` and initialized at class-load time with a single managed identity.
+
+**Solution (implemented)**: Removed the static `CREDENTIAL` field from all benchmark classes (`AsyncBenchmark`, `SyncBenchmark`, `AsyncEncryptionBenchmark`, `AsyncCtlWorkload`). Credential is now built per-instance via `Configuration.buildTokenCredential()`. Added instance-level AAD fields to `Configuration` (`-aadLoginEndpoint`, `-aadTenantId`, `-aadManagedIdentityClientId`) with `getInstanceAad*()` getters that fall back to the existing static/system-property values when not set. Each tenant in `tenants.json` can now specify its own AAD identity via overrides.
+
+#### Problem 3: Per-Instance Database/Container Creation
+
+Each `AsyncBenchmark` creates its database/container and pre-populates docs in the constructor. This is **desired** for multi-tenancy — each tenant should have its own container.
+
+**Caution**: With 100+ tenants, constructors run sequentially (each does sync HTTP calls to create DB/container + populate docs). Budget ~5–10 seconds per tenant = ~8–16 minutes for 100 tenants. Consider parallelizing construction.
+
+#### Problem 4: `run()` Blocks
+
+`AsyncBenchmark.run()` is a blocking loop. With N tenants, we need N threads.
+
+**Solution**: 
+```java
+ExecutorService tenantExecutor = Executors.newFixedThreadPool(numTenants);
+List<Future<?>> futures = tenants.stream()
+    .map(benchmark -> tenantExecutor.submit(() -> benchmark.run()))
+    .collect(Collectors.toList());
+
+// Wait for all tenants to finish
+for (Future<?> f : futures) { f.get(); }
+```
+
+#### Problem 5: Lifecycle Coordination
+
+All tenants should start workload approximately simultaneously (after all are constructed and warmed up).
+
+**Solution**: Use a `CountDownLatch` — each tenant's `run()` waits on the latch before starting the workload loop. The orchestrator counts down after all tenants are constructed and warmed up.
+
+#### Problem 6: Reporter Noise
+
+Each `AsyncBenchmark` starts its own `ScheduledReporter`. With 100 tenants, that's 100 console reporters printing every 10 seconds.
+
+**Solution**: Add a `Configuration` flag `suppressReporter` for tenant configs. The orchestrator runs a single shared reporter against the global aggregate `MetricRegistry`.
+
+### 4.7 ResourceMonitor — What to Collect
+
+```java
+public class ResourceMonitor {
+    // Collected every monitorIntervalSec and on-demand (pre/post lifecycle events)
+
+    // ── Heap ──
+    long usedHeapBytes;        // Runtime.totalMemory() - Runtime.freeMemory()
+    long maxHeapBytes;         // Runtime.maxMemory()
+    // For accurate post-GC measurement, call System.gc() before snapshot (only at lifecycle events)
+
+    // ── Direct Memory ──
+    long nettyDirectMemBytes;  // io.netty.util.internal.PlatformDependent.usedDirectMemory()
+    long jdkDirectPoolBytes;   // BufferPoolMXBean "direct" — memoryUsed
+    long jdkMappedPoolBytes;   // BufferPoolMXBean "mapped" — memoryUsed
+
+    // ── Threads ──
+    int liveThreadCount;                   // ThreadMXBean.getThreadCount()
+    int daemonThreadCount;                 // ThreadMXBean.getDaemonThreadCount()
+    Map<String, Integer> threadsByPrefix;  // Thread.getAllStackTraces().keySet() grouped by name prefix
+    // Key prefixes to track: "cosmos-global-endpoint-mgr", "reactor-http-nio", "parallel",
+    //                         "cosmos-parallel", "boundedElastic", "pool-", "ScheduledExecutor"
+
+    // ── CPU ──
+    double processCpuLoad;     // OperatingSystemMXBean.getProcessCpuLoad()
+    double systemCpuLoad;      // OperatingSystemMXBean.getCpuLoad()
+
+    // ── GC ──
+    long gcCount;              // Σ GarbageCollectorMXBean.getCollectionCount()
+    long gcTimeMs;             // Σ GarbageCollectorMXBean.getCollectionTime()
+
+    // ── File Descriptors (Linux) ──
+    long openFileDescriptors;  // UnixOperatingSystemMXBean.getOpenFileDescriptorCount()
+    long maxFileDescriptors;   // UnixOperatingSystemMXBean.getMaxFileDescriptorCount()
+
+    // ── Cosmos-Specific ──
+    int activeCosmosClients;            // RxDocumentClientImpl.activeClientsCnt (via diagnostics)
+    Map<String, Integer> cacheSizes;    // queryPlanCache, collectionCache, pkRangeCache per client
+}
+```
+
+### 4.8 Test Configuration (CLI)
+
+The orchestrator `MultiTenancyBenchmark` has its own minimal CLI. Workload-level config is in `tenants.json`.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--tenantsFile` | String | **required** | Path to `tenants.json` |
+| `--scenario` | enum | `SCALING` | `SCALING`, `CHURN`, `CACHE_GROWTH`, `POOL_PRESSURE`, `SOAK` |
+| `--monitorIntervalSec` | int | 10 | Resource monitor sampling interval |
+| `--outputDir` | String | `./results` | Directory for CSVs and summary |
+| `--churnCycles` | int | 100 | For `CHURN` scenario: number of create/destroy cycles |
+| `--distinctQueries` | int | 100 | For `CACHE_GROWTH` scenario |
+| `--appInsightsConnectionString` | String | null | Override for App Insights (or use env `APPLICATIONINSIGHTS_CONNECTION_STRING`) |
+| `--skipWarmup` | boolean | false | Skip warmup phase (for idle scaling tests) |
+| `--threadDumpIntervalSec` | int | 0 (disabled) | If >0, capture a thread dump every N seconds to `<outputDir>/thread-dumps/` |
+| `--threadDumpOnEvent` | String | null | Comma-separated lifecycle events to trigger thread dump: `PRE_CREATE`, `POST_CREATE`, `POST_WORKLOAD`, `POST_CLOSE` |
+| `--heapDumpOnEvent` | String | null | Comma-separated lifecycle events to trigger heap dump (via `jmap`): `POST_CREATE`, `POST_WORKLOAD`, `POST_CLOSE` |
+| `--jfrDurationSec` | int | 300 | Duration of JFR recording (0 = disabled) |
+| `--branch` | String | auto-detect | Git branch name (auto-detected from repo; override for detached HEAD) |
+| `--commitId` | String | auto-detect | Git commit SHA (auto-detected; override for non-git builds) |
+| `--prNumber` | String | null | GitHub PR number (for before/after tracking across PRs) |
+| `--resultSink` | enum | `CSV` | Where to store results: `CSV`, `COSMOS`, `KUSTO`, `ALL` |
+| `--resultCosmosEndpoint` | String | null | Cosmos DB endpoint for result storage (if `--resultSink` includes `COSMOS`) |
+| `--resultCosmosDatabase` | String | `benchresults` | Database name for result storage |
+| `--resultCosmosContainer` | String | `runs` | Container name for result storage |
+| `--resultKustoCluster` | String | null | Kusto cluster URI (if `--resultSink` includes `KUSTO`) |
+| `--resultKustoDatabase` | String | `BenchmarkResults` | Kusto database name |
+
+---
+
+## 5. Observability: OpenTelemetry, Micrometer & Application Insights
+
+### 5.1 Existing Telemetry Stack in the Benchmark
+
+The benchmark module already has a two-layer metrics stack:
+
+| Layer | Library | What It Captures | Export Target |
+|---|---|---|---|
+| **Benchmark-level** | Codahale/Dropwizard Metrics 4.1 | Throughput (`Meter`), latency (`Timer` with HdrHistogram), success/failure counts | Graphite, CSV, Console, `CosmosTotalResultReporter` (→ Cosmos DB) |
+| **SDK-level** | Micrometer 1.15 | Cosmos operation latency, request charge, request count, direct/gateway-level metrics | Azure Monitor (App Insights), Graphite |
+
+These are set up in `AsyncBenchmark` constructor and `Configuration`:
+- `Configuration.createAzureMonitorMeterRegistry()` — creates an `AzureMonitorMeterRegistry` if `APPLICATIONINSIGHTS_CONNECTION_STRING` or `AZURE_INSTRUMENTATION_KEY` is set
+- The registry is attached to the `CosmosAsyncClient` via `CosmosClientTelemetryConfig.metricsOptions(new CosmosMicrometerMetricsOptions(registry))`
+
+### 5.2 What the SDK Emits via Micrometer (and thus to App Insights)
+
+The Cosmos SDK emits these metrics when a Micrometer `MeterRegistry` is attached:
+
+| Metric Name | Type | Tags | Description |
+|---|---|---|---|
+| `cosmos.client.op.latency` | Timer | `operation`, `statusCode`, `region`, `endpoint` | End-to-end operation latency |
+| `cosmos.client.op.calls` | Counter | same | Operation count |
+| `cosmos.client.op.RUs` | DistributionSummary | same | Request Units consumed |
+| `cosmos.client.req.gw.latency` | Timer | `endpoint`, `statusCode` | Gateway request latency |
+| `cosmos.client.req.gw.requests` | Counter | same | Gateway request count |
+| `cosmos.client.system.avgCpuLoad` | Gauge | — | Process CPU |
+| `cosmos.client.req.rntbd.*` | various | — | RNTBD metrics (not relevant for Gateway) |
+
+**Key insight for multi-tenancy**: The `endpoint` tag naturally distinguishes tenants. When all tenants share one `MeterRegistry` → App Insights, you can slice metrics by `endpoint` to compare per-tenant performance.
+
+### 5.3 Enhancing Telemetry for Multi-Tenancy Tests
+
+#### 5.3.1 Add Custom Dimensions
+
+Add a custom `tenantId` tag to all SDK metrics so App Insights can filter/group by tenant:
+
+```java
+// When building each tenant's CosmosAsyncClient:
+MeterRegistry sharedRegistry = ...; // shared AzureMonitorMeterRegistry
+MeterRegistry tenantRegistry = new MeterRegistry(sharedRegistry) {
+    // Add common tags for this tenant
+};
+tenantRegistry.config().commonTags("tenantId", tenant.id);
+
+// Attach to client
+clientTelemetryConfig.metricsOptions(
+    new CosmosMicrometerMetricsOptions(tenantRegistry));
+```
+
+#### 5.3.2 Resource Monitor Metrics → Micrometer
+
+Export `ResourceMonitor` data points as Micrometer gauges so they flow to App Insights alongside SDK metrics:
+
+```java
+Gauge.builder("multitenancy.heap.used", monitor, ResourceMonitor::getUsedHeapBytes)
+    .register(sharedRegistry);
+Gauge.builder("multitenancy.threads.live", monitor, ResourceMonitor::getLiveThreadCount)
+    .register(sharedRegistry);
+Gauge.builder("multitenancy.fd.open", monitor, ResourceMonitor::getOpenFileDescriptors)
+    .register(sharedRegistry);
+Gauge.builder("multitenancy.clients.active", monitor, ResourceMonitor::getActiveCosmosClients)
+    .register(sharedRegistry);
+```
+
+#### 5.3.3 Connection Pool Metrics via Reactor Netty
+
+Reactor Netty supports connection pool metrics via Micrometer. Currently **not enabled** in the Cosmos SDK. To capture them:
+
+```java
+// Option A: Enable in Reactor Netty globally (affects all pools in JVM)
+Metrics.observeHttpClient(true); // reactor.netty.Metrics
+
+// Option B: Per-ConnectionProvider (requires SDK code change)
+ConnectionProvider.builder("cosmos-pool")
+    .metrics(true, () -> new MicrometerChannelMetricsRecorder("cosmos.pool", Protocol.HTTP11))
+    .build();
+```
+
+This emits: `reactor.netty.connection.provider.active.connections`, `reactor.netty.connection.provider.idle.connections`, `reactor.netty.connection.provider.pending.acquire`.
+
+### 5.4 Application Insights for Results Comparison
+
+#### 5.4.1 Why App Insights
+
+| Capability | Benefit for Multi-Tenancy Tests |
+|---|---|
+| **Multi-dimensional queries** | Slice latency by `tenantId`, `operation`, `statusCode`, `region` |
+| **Time-series charts** | Visualize heap/threads/connections over time — detect trends and leaks |
+| **Before/after comparison** | Compare two test runs by time range or custom `testRunId` dimension |
+| **Alerting** | Set alerts on metric thresholds (e.g., thread count > 500) |
+| **Log Analytics (KQL)** | Write complex queries: "P99 latency per tenant where clients > 50" |
+
+#### 5.4.2 Setup
+
+1. **Create an App Insights resource** in the same Azure region as the test VM
+2. **Set the connection string** via environment variable:
+   ```bash
+   export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=xxx;..."
+   export APPLICATIONINSIGHTS_ROLE_NAME="multi-tenancy-benchmark"
+   export APPLICATIONINSIGHTS_ROLE_INSTANCE="vm-eastus-1"
+   ```
+3. The existing `Configuration.createAzureMonitorMeterRegistry()` will pick it up automatically
+4. Add a custom `testRunId` dimension to all metrics for run isolation:
+   ```java
+   registry.config().commonTags(
+       "testRunId", runId,          // e.g., "B4-20260218T143022Z"
+       "scenario", scenario.name(), // e.g., "S2a"
+       "branch", gitBranch          // e.g., "multi-tenancy-analysis"
+   );
+   ```
+
+#### 5.4.3 Sample KQL Queries for Comparison
+
+**Per-tenant P99 latency comparison**:
+```kql
+customMetrics
+| where name == "cosmos.client.op.latency" and timestamp > ago(1h)
+| extend tenantId = tostring(customDimensions["tenantId"])
+| summarize p99=percentile(value, 99) by tenantId, bin(timestamp, 1m)
+| render timechart
+```
+
+**Before/after heap comparison**:
+```kql
+customMetrics
+| where name == "multitenancy.heap.used"
+| extend testRunId = tostring(customDimensions["testRunId"])
+| where testRunId in ("B4-before", "B4-after")
+| summarize avg(value) by testRunId, bin(timestamp, 30s)
+| render timechart
+```
+
+**Thread leak detection over churn cycles**:
+```kql
+customMetrics
+| where name == "multitenancy.threads.live" and customDimensions["scenario"] == "CHURN"
+| summarize maxThreads=max(value) by bin(timestamp, 10s)
+| render timechart
+```
+
+#### 5.4.4 Server-Side Verification via Cosmos DB Kusto
+
+Because each tenant's `CosmosAsyncClient` is built with a unique `userAgentSuffix` (format: `mt-bench-<tenantId>`), you can verify traffic from the server's perspective using Cosmos DB internal Kusto logs:
+
+**Per-tenant request volume and RU consumption**:
+```kql
+CDBDataPlaneRequests
+| where TimeGenerated > ago(1h)
+| where UserAgent contains "mt-bench-"
+| extend tenantId = extract("mt-bench-([\\w-]+)", 1, UserAgent)
+| summarize
+    totalRequests = count(),
+    totalRUs = sum(RequestCharge),
+    avgLatencyMs = avg(DurationMs),
+    p99LatencyMs = percentile(DurationMs, 99)
+    by tenantId, OperationName
+| order by totalRequests desc
+```
+
+**Connection distribution per tenant (verify connection sharing)**:
+```kql
+CDBDataPlaneRequests
+| where TimeGenerated > ago(1h)
+| where UserAgent contains "mt-bench-"
+| extend tenantId = extract("mt-bench-([\\w-]+)", 1, UserAgent)
+| summarize distinctConnections = dcount(ClientIpAddress) by tenantId
+| order by distinctConnections desc
+```
+
+**Throttling (429) by tenant — detect hotspots**:
+```kql
+CDBDataPlaneRequests
+| where TimeGenerated > ago(1h)
+| where UserAgent contains "mt-bench-"
+| where StatusCode == 429
+| extend tenantId = extract("mt-bench-([\\w-]+)", 1, UserAgent)
+| summarize throttledRequests = count() by tenantId, bin(TimeGenerated, 1m)
+| render timechart
+```
+
+---
+
+## 6. Azure VM Test Environment
+
+### 6.1 Why Azure VM
+
+| Reason | Detail |
+|---|---|
+| **Network proximity** | Same-region as Cosmos DB accounts → <1ms network latency, no cross-region noise |
+| **Consistent environment** | Reproducible CPU/memory/network across runs (vs developer laptop variance) |
+| **Linux access** | `/proc/self/fd`, `ss`, `perf`, `async-profiler` — essential for FD/connection/CPU profiling |
+| **High FD limits** | Default Azure VMs have `ulimit -n 65536`+ (vs macOS 256 default) |
+| **Scale** | Can provision 16–64 core VMs for high-concurrency tests without thermal throttling |
+| **Automation** | Script VM creation, test execution, result collection, VM teardown |
+
+### 6.2 Recommended VM Configuration
+
+| Setting | Value | Why |
+|---|---|---|
+| **VM Size** | `Standard_D16s_v5` (16 vCPUs, 64 GB RAM) | Enough headroom for 200+ clients without CPU bottleneck |
+| **OS** | Ubuntu 22.04 LTS | Stable, well-supported, `/proc` filesystem for monitoring |
+| **Region** | Same as Cosmos DB accounts | Minimize network latency |
+| **Disk** | Premium SSD (P30, 1 TB) | Fast I/O for GC logs, CSV output, JFR recordings |
+| **Accelerated Networking** | **Enabled** | Lower network latency, higher throughput |
+| **Proximity Placement Group** | Optional | If multiple VMs needed for distributed tests |
+| **Spot instance** | OK for non-critical runs | Cost savings for long soak tests |
+
+### 6.3 VM Setup Script
+
+```bash
+#!/bin/bash
+# setup-benchmark-vm.sh — Run once after VM creation
+
+# ── JDK ──
+sudo apt-get update && sudo apt-get install -y openjdk-21-jdk maven git
+
+# ── File descriptor limits ──
+echo "* soft nofile 1048576" | sudo tee -a /etc/security/limits.conf
+echo "* hard nofile 1048576" | sudo tee -a /etc/security/limits.conf
+echo "session required pam_limits.so" | sudo tee -a /etc/pam.d/common-session
+# Also set for systemd services:
+sudo mkdir -p /etc/systemd/system/user@.service.d
+echo -e "[Service]\nLimitNOFILE=1048576" | sudo tee /etc/systemd/system/user@.service.d/limits.conf
+
+# ── Networking tools ──
+sudo apt-get install -y net-tools iproute2 sysstat
+
+# ── Async-profiler (CPU/allocation profiling) ──
+wget -O /tmp/async-profiler.tar.gz \
+  https://github.com/async-profiler/async-profiler/releases/download/v3.0/async-profiler-3.0-linux-x64.tar.gz
+sudo tar -xzf /tmp/async-profiler.tar.gz -C /opt/
+echo 'export PATH=$PATH:/opt/async-profiler-3.0-linux-x64/bin' >> ~/.bashrc
+
+# ── Kernel tuning for high connection count ──
+echo "net.core.somaxconn = 65535" | sudo tee -a /etc/sysctl.conf
+echo "net.ipv4.tcp_max_syn_backlog = 65535" | sudo tee -a /etc/sysctl.conf
+echo "net.ipv4.ip_local_port_range = 1024 65535" | sudo tee -a /etc/sysctl.conf
+echo "net.ipv4.tcp_tw_reuse = 1" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+
+# ── Clone SDK ──
+git clone https://github.com/Azure/azure-sdk-for-java.git ~/azure-sdk-for-java
+cd ~/azure-sdk-for-java
+git checkout multi-tenancy-analysis
+
+# ── Build benchmark module ──
+mvn install -pl sdk/cosmos/azure-cosmos -am -DskipTests
+mvn package -pl sdk/cosmos/azure-cosmos-benchmark -DskipTests
+
+echo "Setup complete. Set APPLICATIONINSIGHTS_CONNECTION_STRING and create tenants.json."
+```
+
+### 6.4 Running Tests on Azure VM
+
+```bash
+#!/bin/bash
+# run-benchmark.sh — Run a benchmark scenario with auto-detected git metadata
+#
+# Usage:
+#   ./run-benchmark.sh <scenario> <tenants-file> [output-dir] [--branch <branch>] [--pr <number>] [--result-sink <CSV|COSMOS|KUSTO|ALL>]
+
+set -euo pipefail
+
+SCENARIO=${1:-SCALING}
+TENANTS_FILE=${2:-tenants.json}
+OUTPUT_DIR=${3:-./results/$(date +%Y%m%dT%H%M%S)-${SCENARIO}}
+BRANCH=""
+PR_NUMBER=""
+RESULT_SINK="CSV"
+EXTRA_ARGS=""
+
+shift 3 2>/dev/null || true
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --branch)      BRANCH="$2"; shift ;;
+        --pr)          PR_NUMBER="$2"; shift ;;
+        --result-sink) RESULT_SINK="$2"; shift ;;
+        *)             EXTRA_ARGS="$EXTRA_ARGS $1" ;;
+    esac
+    shift
+done
+
+mkdir -p "$OUTPUT_DIR"
+
+# Auto-detect git metadata if not provided
+if [[ -z "$BRANCH" ]]; then
+    BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+fi
+COMMIT_ID=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+COMMIT_MSG=$(git log -1 --pretty=%s 2>/dev/null || echo "")
+
+echo "=== Benchmark Run ==="
+echo "  Scenario:  $SCENARIO"
+echo "  Branch:    $BRANCH"
+echo "  Commit:    $COMMIT_ID"
+echo "  PR:        ${PR_NUMBER:-none}"
+echo "  Sink:      $RESULT_SINK"
+echo "  Output:    $OUTPUT_DIR"
+
+# Save git metadata for result correlation
+cat > "${OUTPUT_DIR}/git-info.json" <<EOF
+{
+    "branch": "$BRANCH",
+    "commitId": "$COMMIT_ID",
+    "commitMessage": "$(echo "$COMMIT_MSG" | sed 's/"/\\"/g')",
+    "prNumber": "${PR_NUMBER:-null}",
+    "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+
+# JVM flags
+JVM_OPTS="-Xmx8g -Xms8g \
+  -XX:+UseG1GC \
+  -XX:MaxDirectMemorySize=2g \
+  -Xlog:gc*:file=${OUTPUT_DIR}/gc.log:time,uptime,level \
+  -XX:+HeapDumpOnOutOfMemoryError \
+  -XX:HeapDumpPath=${OUTPUT_DIR}/ \
+  -XX:StartFlightRecording=duration=300s,filename=${OUTPUT_DIR}/flight.jfr,settings=profile"
+
+# App Insights (set in env or here)
+export APPLICATIONINSIGHTS_ROLE_NAME="multi-tenancy-benchmark"
+export APPLICATIONINSIGHTS_ROLE_INSTANCE="$(hostname)"
+
+# Run
+java $JVM_OPTS \
+  -jar sdk/cosmos/azure-cosmos-benchmark/target/azure-cosmos-benchmark-*-jar-with-dependencies.jar \
+  --scenario "$SCENARIO" \
+  --tenantsFile "$TENANTS_FILE" \
+  --outputDir "$OUTPUT_DIR" \
+  --branch "$BRANCH" \
+  --commitId "$COMMIT_ID" \
+  ${PR_NUMBER:+--prNumber "$PR_NUMBER"} \
+  --resultSink "$RESULT_SINK" \
+  --monitorIntervalSec 10 \
+  $EXTRA_ARGS \
+  2>&1 | tee "${OUTPUT_DIR}/benchmark.log"
+
+# Collect system metrics snapshot
+ss -s > "${OUTPUT_DIR}/ss-summary.txt"
+cat /proc/self/status > "${OUTPUT_DIR}/proc-status.txt" 2>/dev/null || true
+
+echo "Results in: $OUTPUT_DIR"
+```
+
+### 6.5 Azure VM Provisioning Script
+
+The provisioning script supports two modes: **use an existing VM** or **create a new one**.
+
+```bash
+#!/bin/bash
+# provision-benchmark-vm.sh — Create a new VM or connect to an existing one
+#
+# Usage:
+#   ./provision-benchmark-vm.sh --new --location eastus [--rg rg-name] [--vm-name name] [--size size]
+#   ./provision-benchmark-vm.sh --existing --ip <ip-or-hostname> --user <ssh-user> [--key <ssh-key-path>]
+#   ./provision-benchmark-vm.sh --existing --rg <rg-name> --vm-name <vm-name>
+
+set -euo pipefail
+
+MODE=""
+LOCATION="eastus"
+RG="rg-cosmos-benchmark"
+VM_NAME="vm-benchmark-01"
+VM_SIZE="Standard_D16s_v5"
+VM_IP=""
+SSH_USER="benchuser"
+SSH_KEY=""
+DISK_SIZE=256
+SETUP_AFTER_CREATE=true
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --new)          MODE="new" ;;
+        --existing)     MODE="existing" ;;
+        --location)     LOCATION="$2"; shift ;;
+        --rg)           RG="$2"; shift ;;
+        --vm-name)      VM_NAME="$2"; shift ;;
+        --size)         VM_SIZE="$2"; shift ;;
+        --ip)           VM_IP="$2"; shift ;;
+        --user)         SSH_USER="$2"; shift ;;
+        --key)          SSH_KEY="$2"; shift ;;
+        --disk-size)    DISK_SIZE="$2"; shift ;;
+        --skip-setup)   SETUP_AFTER_CREATE=false ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+if [[ "$MODE" == "new" ]]; then
+    echo "=== Creating new VM: $VM_NAME in $RG ($LOCATION) ==="
+    az group create --name "$RG" --location "$LOCATION" 2>/dev/null || true
+
+    az vm create \
+      --resource-group "$RG" \
+      --name "$VM_NAME" \
+      --image Ubuntu2204 \
+      --size "$VM_SIZE" \
+      --accelerated-networking true \
+      --admin-username "$SSH_USER" \
+      --generate-ssh-keys \
+      --os-disk-size-gb "$DISK_SIZE" \
+      --storage-sku Premium_LRS
+
+    az vm open-port --resource-group "$RG" --name "$VM_NAME" --port 22
+    VM_IP=$(az vm show -g "$RG" -n "$VM_NAME" -d --query publicIps -o tsv)
+    echo "VM created. IP: $VM_IP"
+
+    if [[ "$SETUP_AFTER_CREATE" == "true" ]]; then
+        echo "=== Running setup script on new VM ==="
+        ssh -o StrictHostKeyChecking=no "${SSH_USER}@${VM_IP}" 'bash -s' < scripts/setup-benchmark-vm.sh
+    fi
+
+elif [[ "$MODE" == "existing" ]]; then
+    if [[ -z "$VM_IP" ]]; then
+        # Resolve IP from Azure resource
+        VM_IP=$(az vm show -g "$RG" -n "$VM_NAME" -d --query publicIps -o tsv)
+    fi
+    echo "=== Using existing VM at ${SSH_USER}@${VM_IP} ==="
+    echo "Verifying connectivity..."
+    ssh ${SSH_KEY:+-i "$SSH_KEY"} -o ConnectTimeout=10 "${SSH_USER}@${VM_IP}" 'echo "VM reachable. JDK: $(java -version 2>&1 | head -1)"'
+else
+    echo "Usage: $0 --new --location <region> | --existing --ip <ip> --user <user>"
+    exit 1
+fi
+
+# Output connection info for other scripts
+echo "$VM_IP" > .vm-ip
+echo "$SSH_USER" > .vm-user
+echo "=== Ready: ssh ${SSH_USER}@${VM_IP} ==="
+
+# After tests — tear down to save costs (only for new VMs)
+# az group delete --name "$RG" --yes --no-wait
+```
+
+**Usage examples**:
+
+```bash
+# Create a new VM
+./scripts/provision-benchmark-vm.sh --new --location eastus --size Standard_D16s_v5
+
+# Use an existing VM by IP
+./scripts/provision-benchmark-vm.sh --existing --ip 20.84.100.42 --user benchuser
+
+# Use an existing Azure VM by resource name
+./scripts/provision-benchmark-vm.sh --existing --rg rg-cosmos-benchmark --vm-name vm-benchmark-01
+
+# Create a new VM but skip auto-setup (run setup-benchmark-vm.sh manually later)
+./scripts/provision-benchmark-vm.sh --new --location eastus --skip-setup
+```
+
+### 6.6 Managed Identity for Cosmos Access (Optional)
+
+Instead of putting master keys in `tenants.json`, use Azure Managed Identity:
+
+1. **Assign system-assigned identity** to the VM:
+   ```bash
+   az vm identity assign --resource-group rg-cosmos-benchmark --name vm-benchmark-01
+   ```
+
+2. **Grant Cosmos DB RBAC** to the VM identity for each account:
+   ```bash
+   VM_PRINCIPAL=$(az vm show -g rg-cosmos-benchmark -n vm-benchmark-01 --query identity.principalId -o tsv)
+   az cosmosdb sql role assignment create \
+     --account-name account0 \
+     --resource-group rg-cosmos \
+     --role-definition-id "00000000-0000-0000-0000-000000000002" \
+     --scope "/" \
+     --principal-id "$VM_PRINCIPAL"
+   ```
+
+3. **In `tenants.json`**, omit `masterKey` and set `"useManagedIdentity": true`
+
+4. `AsyncBenchmark` already supports managed identity via `Configuration.isUseManagedIdentity()`
+
+### 6.7 Thread Dump & Heap Dump Capture
+
+Dumps are essential for diagnosing thread leaks, deadlocks, and memory issues. The benchmark harness supports both **automated** (event-driven / periodic) and **on-demand** capture.
+
+#### 6.7.1 Automated Capture via CLI Options
+
+| CLI Option | Trigger | Output |
+|---|---|---|
+| `--threadDumpIntervalSec 30` | Every 30 seconds during workload | `<outputDir>/thread-dumps/threads-<timestamp>.txt` |
+| `--threadDumpOnEvent POST_CREATE,POST_CLOSE` | At specific lifecycle events | Same directory, named by event |
+| `--heapDumpOnEvent POST_WORKLOAD,POST_CLOSE` | At specific lifecycle events | `<outputDir>/heap-dumps/heap-<event>-<timestamp>.hprof` |
+
+**Lifecycle events**:
+- `PRE_CREATE` — before any `CosmosAsyncClient` is created
+- `POST_CREATE` — after all N clients created + settle time
+- `POST_WORKLOAD` — after workload completes (before client close)
+- `POST_CLOSE` — after all clients closed + settle time
+
+#### 6.7.2 Implementation in `ResourceMonitor`
+
+```java
+public class ResourceMonitor {
+    // ... existing fields ...
+
+    /**
+     * Captures a thread dump to the output directory.
+     * Uses ThreadMXBean for in-process capture (no external tools needed).
+     */
+    public void captureThreadDump(String label) {
+        Path dumpFile = outputDir.resolve("thread-dumps")
+            .resolve(String.format("threads-%s-%s.txt", label, Instant.now().toString().replace(':', '-')));
+        Files.createDirectories(dumpFile.getParent());
+
+        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+        ThreadInfo[] threadInfos = threadMXBean.dumpAllThreads(true, true);
+
+        try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(dumpFile))) {
+            writer.printf("Thread Dump [%s] at %s%n", label, Instant.now());
+            writer.printf("Total threads: %d (daemon: %d)%n%n",
+                threadMXBean.getThreadCount(), threadMXBean.getDaemonThreadCount());
+
+            for (ThreadInfo info : threadInfos) {
+                writer.println(info.toString());
+            }
+
+            // Also write thread-name-prefix summary
+            Map<String, Long> byPrefix = Arrays.stream(threadInfos)
+                .collect(Collectors.groupingBy(
+                    ti -> ti.getThreadName().replaceAll("-?\\d+$", ""),
+                    Collectors.counting()));
+            writer.println("=== Thread Name Prefix Summary ===");
+            byPrefix.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .forEach(e -> writer.printf("  %-50s %d%n", e.getKey(), e.getValue()));
+        }
+
+        logger.info("Thread dump captured: {}", dumpFile);
+    }
+
+    /**
+     * Captures a heap dump via jmap (requires JDK, not just JRE).
+     * Falls back to HotSpotDiagnosticMXBean if jmap is not available.
+     */
+    public void captureHeapDump(String label) {
+        Path dumpFile = outputDir.resolve("heap-dumps")
+            .resolve(String.format("heap-%s-%s.hprof", label, Instant.now().toString().replace(':', '-')));
+        Files.createDirectories(dumpFile.getParent());
+
+        try {
+            // Use HotSpotDiagnosticMXBean (works without jmap)
+            com.sun.management.HotSpotDiagnosticMXBean diagnosticMXBean =
+                ManagementFactory.getPlatformMXBean(com.sun.management.HotSpotDiagnosticMXBean.class);
+            diagnosticMXBean.dumpHeap(dumpFile.toString(), true /* live objects only */);
+            logger.info("Heap dump captured: {} (size: {} MB)",
+                dumpFile, Files.size(dumpFile) / (1024 * 1024));
+        } catch (Exception e) {
+            logger.error("Failed to capture heap dump: {}", e.getMessage());
+        }
+    }
+}
+```
+
+#### 6.7.3 On-Demand Capture via Scripts
+
+For ad-hoc debugging during a running benchmark (e.g., SSH into VM mid-test):
+
+```bash
+#!/bin/bash
+# capture-diagnostics.sh — Capture thread/heap dumps of a running benchmark
+#
+# Usage:
+#   ./capture-diagnostics.sh [--threads] [--heap] [--jfr <duration>] [--output-dir <dir>]
+
+set -euo pipefail
+
+CAPTURE_THREADS=false
+CAPTURE_HEAP=false
+JFR_DURATION=""
+OUTPUT_DIR="./diagnostics/$(date +%Y%m%dT%H%M%S)"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --threads)     CAPTURE_THREADS=true ;;
+        --heap)        CAPTURE_HEAP=true ;;
+        --jfr)         JFR_DURATION="$2"; shift ;;
+        --output-dir)  OUTPUT_DIR="$2"; shift ;;
+        --all)         CAPTURE_THREADS=true; CAPTURE_HEAP=true; JFR_DURATION="60" ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+mkdir -p "$OUTPUT_DIR"
+
+# Find the benchmark JVM PID
+BENCH_PID=$(jps -l | grep -E 'azure-cosmos-benchmark|MultiTenancyBenchmark' | awk '{print $1}')
+if [[ -z "$BENCH_PID" ]]; then
+    echo "ERROR: No running benchmark JVM found."
+    echo "Running Java processes:"
+    jps -l
+    exit 1
+fi
+echo "Found benchmark PID: $BENCH_PID"
+
+# Thread dump
+if [[ "$CAPTURE_THREADS" == "true" ]]; then
+    THREAD_FILE="$OUTPUT_DIR/thread-dump-$(date +%H%M%S).txt"
+    echo "Capturing thread dump..."
+    jstack "$BENCH_PID" > "$THREAD_FILE" 2>&1
+    echo "  Thread dump: $THREAD_FILE ($(wc -l < "$THREAD_FILE") lines)"
+
+    # Also capture thread count summary
+    echo "" >> "$THREAD_FILE"
+    echo "=== Thread Name Prefix Summary ===" >> "$THREAD_FILE"
+    grep '"' "$THREAD_FILE" | sed 's/"\([^"]*\)".*/\1/' | sed 's/-[0-9]*$//' | sort | uniq -c | sort -rn >> "$THREAD_FILE"
+fi
+
+# Heap dump
+if [[ "$CAPTURE_HEAP" == "true" ]]; then
+    HEAP_FILE="$OUTPUT_DIR/heap-dump-$(date +%H%M%S).hprof"
+    echo "Capturing heap dump (this may take a minute)..."
+    jmap -dump:live,format=b,file="$HEAP_FILE" "$BENCH_PID"
+    HEAP_SIZE_MB=$(du -m "$HEAP_FILE" | awk '{print $1}')
+    echo "  Heap dump: $HEAP_FILE (${HEAP_SIZE_MB} MB)"
+fi
+
+# JFR recording
+if [[ -n "$JFR_DURATION" ]]; then
+    JFR_FILE="$OUTPUT_DIR/recording-$(date +%H%M%S).jfr"
+    echo "Starting JFR recording for ${JFR_DURATION}s..."
+    jcmd "$BENCH_PID" JFR.start duration="${JFR_DURATION}s" filename="$JFR_FILE" settings=profile
+    echo "  JFR will be saved to: $JFR_FILE (after ${JFR_DURATION}s)"
+fi
+
+# Quick process stats
+echo ""
+echo "=== Process Stats ==="
+echo "Threads: $(ls /proc/$BENCH_PID/task 2>/dev/null | wc -l)"
+echo "FDs:     $(ls /proc/$BENCH_PID/fd 2>/dev/null | wc -l)"
+echo "RSS:     $(awk '/VmRSS/{print $2" "$3}' /proc/$BENCH_PID/status 2>/dev/null)"
+echo "Heap:    $(jcmd $BENCH_PID GC.heap_info 2>/dev/null | head -5)"
+
+echo ""
+echo "Diagnostics saved to: $OUTPUT_DIR"
+```
+
+#### 6.7.4 Output Structure
+
+With diagnostics enabled, the results directory looks like:
+
+```
+results/20260218T143022-SCALING/
+  ├── benchmark.log
+  ├── gc.log
+  ├── flight.jfr
+  ├── resource_snapshots.csv
+  ├── thread-dumps/
+  │     ├── threads-PRE_CREATE-2026-02-18T14-30-22Z.txt
+  │     ├── threads-POST_CREATE-2026-02-18T14-31-05Z.txt
+  │     ├── threads-periodic-2026-02-18T14-31-35Z.txt
+  │     ├── threads-periodic-2026-02-18T14-32-05Z.txt
+  │     ├── threads-POST_WORKLOAD-2026-02-18T14-35-22Z.txt
+  │     └── threads-POST_CLOSE-2026-02-18T14-35-35Z.txt
+  ├── heap-dumps/
+  │     ├── heap-POST_WORKLOAD-2026-02-18T14-35-22Z.hprof
+  │     └── heap-POST_CLOSE-2026-02-18T14-35-35Z.hprof
+  └── ...
+```
+
+---
+
+## 7. Metric Collection Strategy
+
+### 7.1 Snapshot Schedule
+
+| Event | When | What |
+|---|---|---|
+| **Pre-creation baseline** | Before any client is created | Full `ResourceMonitor` snapshot |
+| **Post-creation** | After all N clients created + 30s settle | Full snapshot (after `System.gc()`) |
+| **Periodic (during workload)** | Every `monitorIntervalSec` | Full snapshot (no forced GC) |
+| **Post-workload** | After workload completes | Full snapshot (after `System.gc()`) |
+| **Post-close** | After all clients closed + 10s | Full snapshot (after `System.gc()`) — detect leaks |
+
+### 7.2 Output Format
+
+**CSV files** (one per metric category):
+
+```
+results/
+  ├── resource_snapshots.csv       # timestamp, heap, direct_mem, threads, cpu, gc, fds
+  ├── thread_breakdown.csv         # timestamp, thread_prefix, count
+  ├── latency_global.csv           # timestamp, p50, p99, p999, max, count, rate
+  ├── latency_per_client.csv       # timestamp, client_id, p50, p99, p999, max, count, rate
+  ├── cache_sizes.csv              # timestamp, client_id, query_plan_size, collection_cache_size, pk_range_cache_size
+  ├── connection_pool.csv          # timestamp, client_id, active_conns, idle_conns, pending_acquire
+  └── test_config.json             # full config dump for reproducibility
+```
+
+### 7.3 Per-Test Summary Report
+
+At the end of each test run, generate a summary:
+
+```
+═══════════════════════════════════════════════════════════════
+ Multi-Tenancy Baseline Report
+ Scenario:     S2a (Point Reads, HTTP/1.1, no sharing)
+ Clients:      100
+ Duration:     300s
+ Total Ops:    523,412
+═══════════════════════════════════════════════════════════════
+ THROUGHPUT:   1,744.7 ops/s (global)
+ LATENCY:      P50=2.1ms  P99=12.4ms  P99.9=45.2ms  Max=312ms
+─────────────────────────────────────────────────────────────
+ HEAP:         Baseline=128MB  Peak=1,247MB  Per-client=11.2MB
+ DIRECT MEM:   Peak=342MB
+ THREADS:      Baseline=18  Peak=218  Per-client=2.0
+ TCP CONNS:    Peak=4,312  Per-client=43.1
+ FILE DESCS:   Peak=4,428
+ GC PAUSES:    Count=847  Total=2,341ms  Max=45ms
+─────────────────────────────────────────────────────────────
+ CACHE (avg per client):
+   QueryPlan:  142 entries  (~140 KB est.)
+   PKRange:    250 entries  (~225 KB est.)
+   Session:    250 tokens   (~85 KB est.)
+─────────────────────────────────────────────────────────────
+ LEAK CHECK:   Heap after close: 134MB (delta from baseline: +6MB)
+               Threads after close: 19 (delta: +1)
+═══════════════════════════════════════════════════════════════
+```
+
+---
+
+## 8. Triggering Tests from Branches & PRs
+
+### 8.1 Motivation
+
+As we iterate on multi-tenancy optimizations, each fix lands on a branch or PR. We need to:
+
+1. **Run the same benchmark against different code versions** — compare branch A (before fix) vs branch B (after fix)
+2. **Tag results with branch/commit/PR** — so we can query "show me all B9 runs for PR #12345"
+3. **Automate the build-and-run cycle** — one command: checkout → build → benchmark → upload results
+
+### 8.2 `trigger-benchmark.sh` — One-Command Branch Testing
+
+```bash
+#!/bin/bash
+# trigger-benchmark.sh — Checkout a branch/PR, build, and run benchmark
+#
+# Usage:
+#   ./trigger-benchmark.sh --branch <branch-name> --scenario <scenario> --tenants <file> [options]
+#   ./trigger-benchmark.sh --pr <pr-number> --scenario <scenario> --tenants <file> [options]
+#   ./trigger-benchmark.sh --compare <branch-a> <branch-b> --scenario <scenario> --tenants <file>
+
+set -euo pipefail
+
+SDK_DIR="${SDK_DIR:-$HOME/azure-sdk-for-java}"
+BRANCH=""
+PR_NUMBER=""
+COMPARE_A=""
+COMPARE_B=""
+SCENARIO="SCALING"
+TENANTS_FILE="tenants.json"
+RESULT_SINK="CSV"
+SKIP_BUILD=false
+EXTRA_ARGS=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --branch)       BRANCH="$2"; shift ;;
+        --pr)           PR_NUMBER="$2"; shift ;;
+        --compare)      COMPARE_A="$2"; COMPARE_B="$3"; shift 2 ;;
+        --scenario)     SCENARIO="$2"; shift ;;
+        --tenants)      TENANTS_FILE="$2"; shift ;;
+        --result-sink)  RESULT_SINK="$2"; shift ;;
+        --sdk-dir)      SDK_DIR="$2"; shift ;;
+        --skip-build)   SKIP_BUILD=true ;;
+        *)              EXTRA_ARGS="$EXTRA_ARGS $1" ;;
+    esac
+    shift
+done
+
+build_and_run() {
+    local ref="$1"
+    local label="$2"
+
+    echo ""
+    echo "════════════════════════════════════════════════════════"
+    echo "  Building and running: $label ($ref)"
+    echo "════════════════════════════════════════════════════════"
+
+    cd "$SDK_DIR"
+
+    # Checkout
+    if [[ "$ref" =~ ^[0-9]+$ ]]; then
+        # It's a PR number — fetch the PR head
+        echo "Fetching PR #${ref}..."
+        git fetch origin pull/${ref}/head:pr-${ref}
+        git checkout pr-${ref}
+    else
+        echo "Checking out branch: $ref"
+        git fetch origin "$ref"
+        git checkout "$ref"
+        git pull origin "$ref" 2>/dev/null || true
+    fi
+
+    COMMIT_ID=$(git rev-parse --short HEAD)
+    BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+    echo "  Commit: $COMMIT_ID"
+
+    # Build (skip if requested — e.g., re-running with same binary)
+    if [[ "$SKIP_BUILD" == "false" ]]; then
+        echo "Building azure-cosmos + benchmark module..."
+        mvn install -pl sdk/cosmos/azure-cosmos -am -DskipTests -q
+        mvn package -pl sdk/cosmos/azure-cosmos-benchmark -DskipTests -q
+        echo "Build complete."
+    fi
+
+    # Run
+    local OUTPUT_DIR="./results/$(date +%Y%m%dT%H%M%S)-${label}-${SCENARIO}"
+    ./scripts/run-benchmark.sh "$SCENARIO" "$TENANTS_FILE" "$OUTPUT_DIR" \
+        --branch "$BRANCH_NAME" \
+        ${PR_NUMBER:+--pr "$PR_NUMBER"} \
+        --result-sink "$RESULT_SINK" \
+        $EXTRA_ARGS
+
+    echo "  Results: $OUTPUT_DIR"
+    echo "$OUTPUT_DIR" >> .last-benchmark-runs
+}
+
+if [[ -n "$COMPARE_A" && -n "$COMPARE_B" ]]; then
+    # Compare mode: run both branches sequentially
+    build_and_run "$COMPARE_A" "before"
+    build_and_run "$COMPARE_B" "after"
+
+    echo ""
+    echo "════════════════════════════════════════════════════════"
+    echo "  Both runs complete. Compare results:"
+    echo "  $(tail -2 .last-benchmark-runs)"
+    echo "════════════════════════════════════════════════════════"
+
+elif [[ -n "$PR_NUMBER" ]]; then
+    build_and_run "$PR_NUMBER" "pr-${PR_NUMBER}"
+
+elif [[ -n "$BRANCH" ]]; then
+    build_and_run "$BRANCH" "$BRANCH"
+
+else
+    echo "Usage: $0 --branch <name> | --pr <number> | --compare <branch-a> <branch-b>"
+    exit 1
+fi
+```
+
+### 8.3 Usage Examples
+
+```bash
+# Run benchmark on a specific branch
+./scripts/trigger-benchmark.sh --branch multi-tenancy-fix-telemetry-close \
+    --scenario CHURN --tenants tenants.json --result-sink COSMOS
+
+# Run benchmark on a PR
+./scripts/trigger-benchmark.sh --pr 12345 \
+    --scenario SCALING --tenants tenants.json --result-sink ALL
+
+# Compare two branches (before/after a fix)
+./scripts/trigger-benchmark.sh \
+    --compare main multi-tenancy-fix-telemetry-close \
+    --scenario CHURN --tenants tenants.json --result-sink COSMOS
+
+# Re-run without rebuilding (same binary, different scenario)
+./scripts/trigger-benchmark.sh --branch main --scenario SOAK --tenants tenants.json --skip-build
+```
+
+### 8.4 Git Metadata in Results
+
+Every benchmark run automatically captures git metadata in `<outputDir>/git-info.json` and passes `--branch`, `--commitId`, `--prNumber` to the orchestrator. These flow into:
+
+| Destination | How | Used For |
+|---|---|---|
+| **CSV results** | `test_config.json` includes `branch`, `commitId`, `prNumber` | Local comparison |
+| **Cosmos DB** | Fields in the result document (§9.1) | Query: "all B9 runs on branch X" |
+| **Kusto** | Columns in the `BenchmarkRuns` table | Dashboard: "P99 latency by branch over time" |
+| **App Insights** | Common tags on all metrics | KQL: `customDimensions["branch"]` |
+
+### 8.5 Before/After Comparison Workflow
+
+The typical workflow for validating a fix:
+
+```
+1. ./scripts/trigger-benchmark.sh --compare main <fix-branch> \
+       --scenario CHURN --tenants tenants.json --result-sink COSMOS
+
+2. Results are uploaded to Cosmos DB with branch/commit tags
+
+3. Query results:
+   SELECT c.testRunId, c.branch, c.leakCheck.threadsAfterClose, c.latency.p99Ms
+   FROM c
+   WHERE c.scenario = 'S4' AND c.branch IN ('main', 'fix-telemetry-close')
+   ORDER BY c.timestamp DESC
+
+4. Or in Kusto:
+   BenchmarkRuns
+   | where scenario == "S4"
+   | where branch in ("main", "fix-telemetry-close")
+   | project branch, commitId, threadsAfterClose, p99LatencyMs, timestamp
+   | order by timestamp desc
+```
+
+---
+
+## 9. External Result Storage
+
+### 9.1 Why External Storage
+
+Local CSV files are fine for individual runs, but multi-run comparison across branches/PRs requires:
+
+| Need | Local CSV | Cosmos DB | Kusto (ADX) |
+|---|---|---|---|
+| **Single-run analysis** | ✅ Easy | ✅ Works | ✅ Works |
+| **Cross-run comparison** | 🔴 Manual diff | ✅ SQL queries | ✅ KQL queries |
+| **Time-series trending** | 🔴 Not built-in | 🟡 Possible with App Insights | ✅ Native time-series |
+| **Dashboarding** | 🔴 None | 🟡 Power BI connector | ✅ ADX Dashboards native |
+| **Alerting on regressions** | 🔴 None | 🟡 Via Azure Functions | ✅ KQL alerts |
+| **Ingestion from JVM** | 🟡 File I/O | ✅ Cosmos SDK (already in repo) | 🟡 Kusto Java SDK |
+| **Query language** | N/A | SQL (familiar) | KQL (powerful for analytics) |
+| **Cost** | Free | ~$25/mo (400 RU/s) | ~$150/mo (Dev/Test SKU) |
+| **Retention** | Disk space | Unlimited (TTL optional) | Configurable |
+
+### 9.2 Option A: Cosmos DB Result Storage (Recommended for Phase 1)
+
+**Why start here**:
+- The benchmark already has `CosmosTotalResultReporter` — proven write path
+- The Cosmos SDK is already a dependency — zero new JARs
+- SQL API queries are familiar and sufficient for before/after comparisons
+- Low cost: a single 400 RU/s container costs ~$25/month
+- Results are durable, queryable, and globally accessible
+
+#### 9.2.1 Result Container Schema
+
+One Cosmos container stores all benchmark runs. Partition key: `/scenario`.
+
+```json
+{
+    "id": "B9-CHURN-fix-telemetry-close-abc1234-20260218T143022Z",
+    "scenario": "S4",
+    "testRunId": "B9",
+    "timestamp": "2026-02-18T14:30:22Z",
+
+    "git": {
+        "branch": "fix-telemetry-close",
+        "commitId": "abc1234",
+        "commitMessage": "Fix ClientTelemetry thread leak on close",
+        "prNumber": 12345
+    },
+
+    "environment": {
+        "vmName": "vm-benchmark-01",
+        "vmSize": "Standard_D16s_v5",
+        "region": "eastus",
+        "jdkVersion": "21.0.2",
+        "osVersion": "Ubuntu 22.04"
+    },
+
+    "config": {
+        "numClients": 10,
+        "churnCycles": 100,
+        "connectionSharing": false,
+        "httpVersion": "1.1",
+        "poolSize": 1000,
+        "concurrency": 200,
+        "workload": "CHURN"
+    },
+
+    "throughput": { "opsPerSec": 1744.7, "totalOps": 523412 },
+    "latency": { "p50Ms": 2.1, "p99Ms": 12.4, "p999Ms": 45.2, "maxMs": 312.0 },
+    "resources": {
+        "heapBaselineMB": 128, "heapPeakMB": 1247, "heapPerClientMB": 11.2,
+        "directMemPeakMB": 342,
+        "threadsBaseline": 18, "threadsPeak": 218, "threadsPerClient": 2.0,
+        "tcpConnectionsPeak": 4312, "fileDescriptorsPeak": 4428,
+        "gcCount": 847, "gcTotalMs": 2341
+    },
+    "caches": { "avgQueryPlanEntries": 142, "avgPkRangeEntries": 250, "avgSessionTokens": 250 },
+    "leakCheck": {
+        "heapAfterCloseMB": 134, "threadsAfterClose": 19,
+        "heapDeltaFromBaselineMB": 6, "threadDeltaFromBaseline": 1
+    },
+
+    "passFail": {
+        "threadLeakPassed": true,
+        "memoryLeakPassed": true,
+        "latencyDegradationPassed": true,
+        "overallPassed": true
+    },
+
+    "ttl": -1
+}
+```
+
+#### 9.2.2 Time-Series Snapshots Container (Optional)
+
+For the periodic `ResourceMonitor` snapshots (every 10 seconds), store in a separate container with partition key `/testRunId` and TTL of 30 days (these are high-volume, low-value after analysis):
+
+```json
+{
+    "id": "B9-abc1234-20260218T143032Z-snapshot",
+    "testRunId": "B9-abc1234-20260218T143022Z",
+    "timestamp": "2026-02-18T14:30:32Z",
+    "heapUsedBytes": 1308622848,
+    "directMemBytes": 358612992,
+    "liveThreads": 218,
+    "processCpuPct": 42.3,
+    "gcCount": 12,
+    "gcTimeMs": 45,
+    "openFDs": 4428,
+    "ttl": 2592000
+}
+```
+
+#### 9.2.3 Setup Script
+
+```bash
+#!/bin/bash
+# setup-result-storage.sh — Create Cosmos DB containers for benchmark results
+
+RESOURCE_GROUP="rg-cosmos-benchmark"
+ACCOUNT_NAME="cosmos-bench-results"
+LOCATION="eastus"
+
+# Create account (serverless for low-volume; provisioned for dashboarding)
+az cosmosdb create \
+  --name "$ACCOUNT_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --default-consistency-level Session \
+  --locations regionName="$LOCATION" failoverPriority=0
+
+# Create database
+az cosmosdb sql database create \
+  --account-name "$ACCOUNT_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --name benchresults
+
+# Create runs container (partitioned by scenario)
+az cosmosdb sql container create \
+  --account-name "$ACCOUNT_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --database-name benchresults \
+  --name runs \
+  --partition-key-path /scenario \
+  --throughput 400
+
+# Create snapshots container (partitioned by testRunId, TTL enabled)
+az cosmosdb sql container create \
+  --account-name "$ACCOUNT_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --database-name benchresults \
+  --name snapshots \
+  --partition-key-path /testRunId \
+  --throughput 400 \
+  --default-ttl 2592000
+
+echo "Result storage ready. Set these in your environment:"
+echo "  export RESULT_COSMOS_ENDPOINT=$(az cosmosdb show -n $ACCOUNT_NAME -g $RESOURCE_GROUP --query documentEndpoint -o tsv)"
+echo "  export RESULT_COSMOS_KEY=$(az cosmosdb keys list -n $ACCOUNT_NAME -g $RESOURCE_GROUP --query primaryMasterKey -o tsv)"
+```
+
+#### 9.2.4 Comparison Queries (SQL API)
+
+**Compare thread leak across branches**:
+```sql
+SELECT c.git.branch, c.git.commitId, c.git.prNumber,
+       c.leakCheck.threadsAfterClose, c.leakCheck.threadDeltaFromBaseline,
+       c.resources.threadsPeak, c.timestamp
+FROM c
+WHERE c.scenario = 'S4'
+  AND c.git.branch IN ('main', 'fix-telemetry-close')
+ORDER BY c.timestamp DESC
+```
+
+**P99 latency trend across commits on a branch**:
+```sql
+SELECT c.git.commitId, c.latency.p99Ms, c.config.numClients, c.timestamp
+FROM c
+WHERE c.scenario = 'S2a'
+  AND c.git.branch = 'multi-tenancy-analysis'
+ORDER BY c.timestamp ASC
+```
+
+**All runs for a specific PR**:
+```sql
+SELECT c.testRunId, c.scenario, c.passFail.overallPassed,
+       c.latency.p99Ms, c.resources.threadsPeak, c.timestamp
+FROM c
+WHERE c.git.prNumber = 12345
+ORDER BY c.scenario, c.timestamp DESC
+```
+
+### 9.3 Option B: Kusto (Azure Data Explorer) Result Storage (For Dashboarding & Trending)
+
+**When to use Kusto instead of / in addition to Cosmos**:
+- You want **time-series dashboards** that update automatically with each run
+- You need **anomaly detection** on metrics (Kusto has built-in `series_decompose_anomalies`)
+- You want to **join benchmark results with server-side CDBDataPlaneRequests** logs (both in Kusto)
+- You have many runs (1000+) and need **sub-second analytical queries** over them
+
+#### 9.3.1 Kusto Table Schema
+
+```kql
+// Create the benchmark runs table
+.create table BenchmarkRuns (
+    testRunId: string,
+    scenario: string,
+    timestamp: datetime,
+    branch: string,
+    commitId: string,
+    prNumber: int,
+    commitMessage: string,
+    vmName: string,
+    vmSize: string,
+    region: string,
+    numClients: int,
+    connectionSharing: bool,
+    httpVersion: string,
+    poolSize: int,
+    concurrency: int,
+    workload: string,
+    opsPerSec: real,
+    totalOps: long,
+    p50Ms: real,
+    p99Ms: real,
+    p999Ms: real,
+    maxMs: real,
+    heapBaselineMB: real,
+    heapPeakMB: real,
+    heapPerClientMB: real,
+    directMemPeakMB: real,
+    threadsBaseline: int,
+    threadsPeak: int,
+    threadsPerClient: real,
+    tcpConnectionsPeak: int,
+    fileDescriptorsPeak: int,
+    gcCount: long,
+    gcTotalMs: long,
+    threadsAfterClose: int,
+    heapAfterCloseMB: real,
+    threadDeltaFromBaseline: int,
+    overallPassed: bool
+)
+
+// Create the time-series snapshots table
+.create table BenchmarkSnapshots (
+    testRunId: string,
+    timestamp: datetime,
+    heapUsedBytes: long,
+    directMemBytes: long,
+    liveThreads: int,
+    processCpuPct: real,
+    gcCount: long,
+    gcTimeMs: long,
+    openFDs: int
+)
+
+// Retention policy: keep runs forever, snapshots for 90 days
+.alter table BenchmarkSnapshots policy retention softdelete = 90d
+```
+
+#### 9.3.2 Ingestion from Java
+
+Use the [Kusto Java SDK](https://github.com/Azure/azure-kusto-java) for direct ingestion:
+
+```java
+public class KustoResultSink implements ResultSink {
+    private final IngestClient ingestClient;
+    private final String database;
+
+    public KustoResultSink(String clusterUri, String database) {
+        ConnectionStringBuilder csb = ConnectionStringBuilder
+            .createWithAzCliCredentials(clusterUri);
+        this.ingestClient = IngestClientFactory.createClient(csb);
+        this.database = database;
+    }
+
+    public void uploadRun(BenchmarkResult result) {
+        // Convert to CSV row and ingest
+        String csv = resultToCsvRow(result);
+        StreamSourceInfo source = new StreamSourceInfo(
+            new ByteArrayInputStream(csv.getBytes()));
+        IngestionProperties props = new IngestionProperties(
+            database, "BenchmarkRuns");
+        props.setDataFormat(IngestionProperties.DataFormat.CSV);
+        ingestClient.ingestFromStream(source, props);
+    }
+
+    public void uploadSnapshots(String testRunId, List<ResourceSnapshot> snapshots) {
+        // Batch upload periodic snapshots
+        String csv = snapshotsToCsv(testRunId, snapshots);
+        StreamSourceInfo source = new StreamSourceInfo(
+            new ByteArrayInputStream(csv.getBytes()));
+        IngestionProperties props = new IngestionProperties(
+            database, "BenchmarkSnapshots");
+        props.setDataFormat(IngestionProperties.DataFormat.CSV);
+        ingestClient.ingestFromStream(source, props);
+    }
+}
+```
+
+#### 9.3.3 Kusto Dashboard Queries
+
+**P99 latency trend by branch (time-series chart)**:
+```kql
+BenchmarkRuns
+| where scenario == "S2a" and numClients == 100
+| project timestamp, branch, p99Ms
+| render timechart with (title="P99 Latency at 100 Clients by Branch")
+```
+
+**Thread leak detection — delta from baseline over time**:
+```kql
+BenchmarkRuns
+| where scenario == "S4"
+| project timestamp, branch, commitId, threadDeltaFromBaseline, overallPassed
+| order by timestamp asc
+| render timechart with (title="Thread Delta After Churn by Branch")
+```
+
+**Anomaly detection — flag runs where P99 regressed significantly**:
+```kql
+let baseline = toscalar(
+    BenchmarkRuns
+    | where scenario == "S2a" and branch == "main" and numClients == 100
+    | summarize percentile(p99Ms, 50)
+);
+BenchmarkRuns
+| where scenario == "S2a" and numClients == 100
+| where p99Ms > baseline * 2
+| project timestamp, branch, commitId, prNumber, p99Ms, baseline_p99Ms = baseline
+| order by timestamp desc
+```
+
+**Join with server-side Cosmos metrics (if both in same Kusto cluster)**:
+```kql
+BenchmarkRuns
+| where scenario == "S2a" and timestamp > ago(7d)
+| join kind=inner (
+    CDBDataPlaneRequests
+    | where UserAgent contains "mt-bench-"
+    | summarize serverP99 = percentile(DurationMs, 99) by bin(TimeGenerated, 5m)
+) on $left.timestamp == $right.TimeGenerated
+| project timestamp, branch, clientP99 = p99Ms, serverP99
+| render timechart with (title="Client vs Server P99")
+```
+
+### 9.4 Recommendation: Start with Cosmos DB, Add Kusto for Dashboarding
+
+| Phase | Storage | When |
+|---|---|---|
+| **Phase 1** (now) | **CSV + Cosmos DB** | Initial baseline collection. Cosmos gives queryable cross-run comparison with zero new dependencies. |
+| **Phase 2** (after baseline matrix complete) | **Add Kusto** | When you have 50+ runs and want trending dashboards, anomaly detection, and server-side correlation. |
+| **Ongoing** | **Both** (via `--resultSink ALL`) | Cosmos for low-latency lookups ("show me PR #12345 results"). Kusto for analytical queries ("P99 trend over 6 months"). |
+
+### 9.5 `ResultSink` Architecture
+
+```java
+public interface ResultSink {
+    /** Upload a complete benchmark run summary. */
+    void uploadRun(BenchmarkResult result);
+
+    /** Upload periodic resource snapshots (optional — high volume). */
+    void uploadSnapshots(String testRunId, List<ResourceSnapshot> snapshots);
+
+    /** Flush and close connections. */
+    void close();
+}
+
+// Implementations:
+//   CsvResultSink       — writes to local CSV files (always enabled)
+//   CosmosResultSink    — writes to Cosmos DB runs + snapshots containers
+//   KustoResultSink     — ingests to Kusto BenchmarkRuns + BenchmarkSnapshots tables
+//   CompositeResultSink — wraps multiple sinks (for --resultSink ALL)
+```
+
+The orchestrator creates the appropriate sink(s) based on `--resultSink`:
+
+```java
+ResultSink sink;
+switch (config.getResultSink()) {
+    case CSV:    sink = new CsvResultSink(outputDir); break;
+    case COSMOS: sink = new CompositeResultSink(
+                     new CsvResultSink(outputDir),
+                     new CosmosResultSink(cosmosEndpoint, cosmosKey, database, container)); break;
+    case KUSTO:  sink = new CompositeResultSink(
+                     new CsvResultSink(outputDir),
+                     new KustoResultSink(kustoCluster, kustoDatabase)); break;
+    case ALL:    sink = new CompositeResultSink(
+                     new CsvResultSink(outputDir),
+                     new CosmosResultSink(...),
+                     new KustoResultSink(...)); break;
+}
+```
+
+---
+
+## 10. Execution Runbook
+
+### 10.1 Baseline Matrix
+
+Run these scenarios in order. Each produces a result set for comparison.
+
+| Run ID | Scenario | Clients | Sharing | HTTP | Pool | Workload | Duration |
+|---|---|---|---|---|---|---|---|
+| B1 | S1a | 1,10,50,100,200 | off | 1.1 | 1000 | Idle | 5 min settle |
+| B2 | S1b | 1,10,50,100,200 | **on** | 1.1 | 1000 | Idle | 5 min settle |
+| B3 | S1c | 1,10,50,100,200 | off | **2.0** | 1000 | Idle | 5 min settle |
+| B4 | S2a | 1,10,50,100 | off | 1.1 | 1000 | Point reads | 5 min |
+| B5 | S2b | 1,10,50,100 | **on** | 1.1 | 1000 | Point reads | 5 min |
+| B6 | S2c | 1,10,50,100 | off | **2.0** | 1000 | Point reads | 5 min |
+| B7 | S2d | 1,10,50,100 | off | 1.1 | **100** | Point reads | 5 min |
+| B8 | S3 | 10 | off | 1.1 | 1000 | Queries (100→10K) | Until done |
+| B9 | S4 | 10×100 cycles | off | 1.1 | 1000 | Churn + reads | 100 cycles |
+| B10 | S5 | 50 | off | 1.1 | **100** | High concurrency | 5 min |
+| B11 | S5 | 50 | off | **2.0** | **100** | High concurrency | 5 min |
+
+### 10.2 Before/After Comparison
+
+After implementing a fix (e.g., A1: fix `ClientTelemetry.close()`):
+
+1. Re-run the relevant baseline (e.g., B9 for leak detection)
+2. Compare the specific metric (e.g., thread count over cycles)
+3. The fix passes if the metric matches the expected post-fix behavior
+
+### 10.3 Comparison Table Template
+
+| Metric | Baseline (before fix) | After Fix | Δ | Pass? |
+|---|---|---|---|---|
+| Threads after 100 churn cycles | 218 | 18 | −200 | ✅ |
+| Heap after close (MB) | 342 | 134 | −208 MB | ✅ |
+| P99 latency at 100 clients (ms) | 45.2 | 43.1 | −2.1 ms | ✅ |
+
+---
+
+## 11. Result Schema & Comparison
+
+### 11.1 Cosmos DB Result Document (for `CosmosTotalResultReporter` upload)
+
+```json
+{
+    "id": "B4-100clients-http11-nosharing-20260218T143022Z",
+    "testRunId": "B4",
+    "scenario": "S2a",
+    "timestamp": "2026-02-18T14:30:22Z",
+    "config": {
+        "numClients": 100,
+        "connectionSharing": false,
+        "httpVersion": "1.1",
+        "poolSize": 1000,
+        "concurrency": 200,
+        "workload": "POINT_READ"
+    },
+    "throughput": {
+        "opsPerSec": 1744.7,
+        "totalOps": 523412
+    },
+    "latency": {
+        "p50Ms": 2.1,
+        "p99Ms": 12.4,
+        "p999Ms": 45.2,
+        "maxMs": 312.0
+    },
+    "resources": {
+        "heapBaselineMB": 128,
+        "heapPeakMB": 1247,
+        "heapPerClientMB": 11.2,
+        "directMemPeakMB": 342,
+        "threadsBaseline": 18,
+        "threadsPeak": 218,
+        "threadsPerClient": 2.0,
+        "tcpConnectionsPeak": 4312,
+        "fileDescriptorsPeak": 4428,
+        "gcCount": 847,
+        "gcTotalMs": 2341
+    },
+    "caches": {
+        "avgQueryPlanEntries": 142,
+        "avgPkRangeEntries": 250,
+        "avgSessionTokens": 250
+    },
+    "leakCheck": {
+        "heapAfterCloseMB": 134,
+        "threadsAfterClose": 19,
+        "heapDeltaFromBaselineMB": 6,
+        "threadDeltaFromBaseline": 1
+    },
+    "branch": "multi-tenancy-analysis",
+    "commitId": "abc1234"
+}
+```
+
+### 11.2 Automated Pass/Fail Criteria
+
+| Metric | Threshold | Action on Fail |
+|---|---|---|
+| Threads after close ≤ baseline + 2 | Hard fail | Leak detected |
+| Heap after close ≤ baseline × 1.1 | Hard fail | Memory leak |
+| P99 latency at N=100 ≤ 5× P99 at N=1 | Soft warn | Investigate contention |
+| Throughput at N=100 ≥ 0.7× throughput at N=1 | Soft warn | Investigate bottleneck |
+| Query plan cache size = distinct queries executed | Info | Confirms unbounded (pre-fix) |
+| GC pause max ≤ 200ms | Soft warn | Tune GC or reduce allocation |
+
+---
+
+## Appendix: Files to Create/Modify
+
+| File | Purpose |
+|---|---|
+| `sdk/cosmos/azure-cosmos-benchmark/src/main/java/com/azure/cosmos/benchmark/MultiTenancyBenchmark.java` | Orchestrator: reads `tenants.json`, creates N `AsyncBenchmark` instances on thread pool, coordinates lifecycle |
+| `sdk/cosmos/azure-cosmos-benchmark/src/main/java/com/azure/cosmos/benchmark/MultiTenancyConfig.java` | CLI config for orchestrator-level params (`--tenantsFile`, `--scenario`, `--outputDir`) |
+| `sdk/cosmos/azure-cosmos-benchmark/src/main/java/com/azure/cosmos/benchmark/TenantAccountInfo.java` | POJO for tenant JSON deserialization (endpoint, key, overrides) |
+| `sdk/cosmos/azure-cosmos-benchmark/src/main/java/com/azure/cosmos/benchmark/ResourceMonitor.java` | JVM/OS metric collection (heap, threads, FDs, CPU, GC, caches) |
+| `sdk/cosmos/azure-cosmos-benchmark/src/main/java/com/azure/cosmos/benchmark/ResultSink.java` | Interface for result output (CSV, Cosmos, Kusto) |
+| `sdk/cosmos/azure-cosmos-benchmark/src/main/java/com/azure/cosmos/benchmark/CsvResultSink.java` | CSV file writer (always enabled) |
+| `sdk/cosmos/azure-sdk-for-java/sdk/cosmos/azure-cosmos-benchmark/src/main/java/com/azure/cosmos/benchmark/CosmosResultSink.java` | Cosmos DB result writer |
+| `sdk/cosmos/azure-cosmos-benchmark/src/main/java/com/azure/cosmos/benchmark/KustoResultSink.java` | Kusto (ADX) result ingestion |
+| `sdk/cosmos/azure-cosmos-benchmark/src/main/java/com/azure/cosmos/benchmark/CompositeResultSink.java` | Wraps multiple sinks for `--resultSink ALL` |
+| `sdk/cosmos/azure-cosmos-benchmark/tenants-sample.json` | Sample `tenants.json` with 3 accounts + template for scaling |
+| `sdk/cosmos/azure-cosmos-benchmark/scripts/setup-benchmark-vm.sh` | Azure VM provisioning + setup script |
+| `sdk/cosmos/azure-cosmos-benchmark/scripts/provision-benchmark-vm.sh` | Create new VM or connect to existing one (supports `--new` and `--existing` modes) |
+| `sdk/cosmos/azure-cosmos-benchmark/scripts/run-benchmark.sh` | Run a single benchmark scenario with JVM flags + JFR + GC logging |
+| `sdk/cosmos/azure-cosmos-benchmark/scripts/run-baseline-matrix.sh` | Run the full B1–B11 baseline matrix sequentially |
+| `sdk/cosmos/azure-cosmos-benchmark/scripts/capture-diagnostics.sh` | On-demand thread dump, heap dump, and JFR capture for a running benchmark |
+| `sdk/cosmos/azure-cosmos-benchmark/scripts/trigger-benchmark.sh` | Checkout branch/PR → build → run benchmark → upload results (one command) |
+| `sdk/cosmos/azure-cosmos-benchmark/scripts/setup-result-storage.sh` | Create Cosmos DB account + containers for benchmark result storage |
+| `sdk/cosmos/azure-cosmos-benchmark/scripts/compare-results.py` | Compare two result sets and generate delta report |
+| **Modified**: `Configuration.java` | Add `skipSystemPropertyInit` flag; add instance-level AAD fields (`aadLoginEndpoint`, `aadTenantId`, `aadManagedIdentityClientId`) with `getInstanceAad*()` getters and `buildTokenCredential()` method; add `setApplicationName()` setter for per-tenant `userAgentSuffix` |
+| **Modified**: `AsyncBenchmark.java` | Remove static `CREDENTIAL` field; build credential per-instance from `Configuration.buildTokenCredential()` |
+| **Modified**: `SyncBenchmark.java` | Same as `AsyncBenchmark.java` |
+| **Modified**: `AsyncEncryptionBenchmark.java` | Same as `AsyncBenchmark.java` |
+| **Modified**: `AsyncCtlWorkload.java` | Same as `AsyncBenchmark.java` |

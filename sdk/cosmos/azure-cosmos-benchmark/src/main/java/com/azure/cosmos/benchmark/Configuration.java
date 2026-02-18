@@ -148,6 +148,15 @@ public class Configuration {
     @Parameter(names = "isPartitionLevelCircuitBreakerEnabled", description = "A flag to denote whether partition level circuit breaker is enabled.")
     private String isPartitionLevelCircuitBreakerEnabled = String.valueOf(true);
 
+    @Parameter(names = "-aadLoginEndpoint", description = "AAD login endpoint for this configuration instance. Overrides COSMOS.AAD_LOGIN_ENDPOINT / COSMOS_AAD_LOGIN_ENDPOINT.")
+    private String aadLoginEndpoint;
+
+    @Parameter(names = "-aadTenantId", description = "AAD tenant ID for this configuration instance. Overrides COSMOS.AAD_TENANT_ID / COSMOS_AAD_TENANT_ID.")
+    private String aadTenantId;
+
+    @Parameter(names = "-aadManagedIdentityClientId", description = "AAD managed identity client ID for this configuration instance. Overrides COSMOS.AAD_MANAGED_IDENTITY_ID / COSMOS_AAD_MANAGED_IDENTITY_ID.")
+    private String aadManagedIdentityClientId;
+
     @Parameter(names = "-isManagedIdentityRequired", description = "A flag to denote whether benchmark-specific CosmosClient instance should use Managed Identity to authenticate.")
     private String isManagedIdentityRequired = String.valueOf(false);
 
@@ -423,6 +432,10 @@ public class Configuration {
 
     public String getApplicationName() {
         return applicationName;
+    }
+
+    public void setApplicationName(String applicationName) {
+        this.applicationName = applicationName;
     }
 
     public boolean isHelp() {
@@ -880,6 +893,57 @@ public class Configuration {
 
     public static String getAadTenantId() {
         return getOptionalConfigProperty("AAD_TENANT_ID", null, v -> v);
+    }
+
+    /**
+     * Returns the AAD login endpoint for this configuration instance.
+     * Falls back to the static/system-property value if not set per-instance.
+     */
+    public String getInstanceAadLoginEndpoint() {
+        return aadLoginEndpoint != null ? aadLoginEndpoint : getAadLoginUri();
+    }
+
+    /**
+     * Returns the AAD managed identity client ID for this configuration instance.
+     * Falls back to the static/system-property value if not set per-instance.
+     */
+    public String getInstanceAadManagedIdentityClientId() {
+        return aadManagedIdentityClientId != null ? aadManagedIdentityClientId : getAadManagedIdentityId();
+    }
+
+    /**
+     * Returns the AAD tenant ID for this configuration instance.
+     * Falls back to the static/system-property value if not set per-instance.
+     */
+    public String getInstanceAadTenantId() {
+        return aadTenantId != null ? aadTenantId : getAadTenantId();
+    }
+
+    /**
+     * Builds a {@link com.azure.core.credential.TokenCredential} based on this configuration instance's
+     * AAD settings. Each call returns a new credential, allowing per-tenant identity in multi-tenant benchmarks.
+     *
+     * @return a new TokenCredential configured with this instance's AAD login endpoint, tenant ID,
+     *         and managed identity client ID.
+     */
+    public com.azure.core.credential.TokenCredential buildTokenCredential() {
+        return new com.azure.identity.DefaultAzureCredentialBuilder()
+            .managedIdentityClientId(getInstanceAadManagedIdentityClientId())
+            .authorityHost(getInstanceAadLoginEndpoint())
+            .tenantId(getInstanceAadTenantId())
+            .build();
+    }
+
+    public void setAadLoginEndpoint(String aadLoginEndpoint) {
+        this.aadLoginEndpoint = aadLoginEndpoint;
+    }
+
+    public void setAadTenantId(String aadTenantId) {
+        this.aadTenantId = aadTenantId;
+    }
+
+    public void setAadManagedIdentityClientId(String aadManagedIdentityClientId) {
+        this.aadManagedIdentityClientId = aadManagedIdentityClientId;
     }
 
     private static <T> T getOptionalConfigProperty(String name, T defaultValue, Function<String, T> conversion) {

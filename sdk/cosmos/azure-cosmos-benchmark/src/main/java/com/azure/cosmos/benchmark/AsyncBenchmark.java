@@ -22,7 +22,6 @@ import com.azure.cosmos.models.CosmosContainerIdentity;
 import com.azure.cosmos.models.CosmosMicrometerMetricsOptions;
 import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.models.ThroughputProperties;
-import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.codahale.metrics.ConsoleReporter;
 import com.codahale.metrics.CsvReporter;
 import com.codahale.metrics.Meter;
@@ -95,18 +94,16 @@ abstract class AsyncBenchmark<T> {
         "COSMOS.PARTITION_LEVEL_CIRCUIT_BREAKER_CONFIG" // Implicitly set when COSMOS.IS_PER_PARTITION_AUTOMATIC_FAILOVER_ENABLED is set to true
     );
 
-    private static final TokenCredential CREDENTIAL = new DefaultAzureCredentialBuilder()
-            .managedIdentityClientId(Configuration.getAadManagedIdentityId())
-            .authorityHost(Configuration.getAadLoginUri())
-            .tenantId(Configuration.getAadTenantId())
-            .build();
-
     private AtomicBoolean warmupMode = new AtomicBoolean(false);
 
     AsyncBenchmark(Configuration cfg) {
 
         logger = LoggerFactory.getLogger(this.getClass());
         configuration = cfg;
+
+        final TokenCredential credential = cfg.isManagedIdentityRequired()
+            ? cfg.buildTokenCredential()
+            : null;
 
         if (configuration.isPartitionLevelCircuitBreakerEnabled()) {
             System.setProperty(
@@ -133,7 +130,7 @@ abstract class AsyncBenchmark<T> {
 
         CosmosClientBuilder benchmarkSpecificClientBuilder = isManagedIdentityRequired ?
                 new CosmosClientBuilder()
-                        .credential(CREDENTIAL) :
+                        .credential(credential) :
                 new CosmosClientBuilder()
                         .key(cfg.getMasterKey());
 
@@ -375,7 +372,7 @@ abstract class AsyncBenchmark<T> {
 
         CosmosClientBuilder cosmosClientBuilderForOpeningConnections = isManagedIdentityRequired ?
                 new CosmosClientBuilder()
-                        .credential(CREDENTIAL) :
+                        .credential(credential) :
                 new CosmosClientBuilder()
                         .key(configuration.getMasterKey());
 
@@ -443,7 +440,7 @@ abstract class AsyncBenchmark<T> {
 
             CosmosClientBuilder clientBuilderForUnwarmedContainer = isManagedIdentityRequired ?
                     new CosmosClientBuilder()
-                            .credential(CREDENTIAL) :
+                            .credential(credential) :
                     new CosmosClientBuilder()
                             .key(configuration.getMasterKey());
 
