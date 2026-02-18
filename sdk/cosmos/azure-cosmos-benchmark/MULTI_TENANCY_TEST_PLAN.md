@@ -17,6 +17,7 @@
 9. [External Result Storage](#9-external-result-storage)
 10. [Execution Runbook](#10-execution-runbook)
 11. [Result Schema & Comparison](#11-result-schema--comparison)
+12. [Copilot Analysis Agent](#12-copilot-analysis-agent)
 
 ---
 
@@ -962,16 +963,30 @@ echo "Results in: $OUTPUT_DIR"
 
 ### 6.5 Azure VM Provisioning Script
 
-The provisioning script supports two modes: **use an existing VM** or **create a new one**.
+The provisioning script supports two modes: **use an existing VM** or **create a new one**. Authentication uses **SSH key pairs** (Azure default). Password auth is not supported.
+
+**SSH key options** (pick one):
+| Option | What it does |
+|---|---|
+| `--ssh-key <pub-key-path>` | Use a **pre-existing** key pair. Provide the `.pub` file; the private key is derived by stripping the `.pub` suffix. |
+| `--create-key [<path>]` | **Generate a new** key pair. Default path: `~/.ssh/cosmos-bench-<vm-name>`. The key is created with `ssh-keygen` and used for the VM. |
+| *(neither)* | Falls back to `az vm create --generate-ssh-keys`, which reuses `~/.ssh/id_rsa` if it exists or creates it if not. |
 
 ```bash
 #!/bin/bash
 # provision-benchmark-vm.sh — Create a new VM or connect to an existing one
 #
+# Authentication: Uses SSH key pairs (not passwords).
+#
+# SSH Key Modes:
+#   --ssh-key <pub-key-path>    Use a pre-existing key pair (provide .pub file)
+#   --create-key [<path>]       Generate a new key pair (default: ~/.ssh/cosmos-bench-<vm-name>)
+#   (neither)                   Falls back to az vm create --generate-ssh-keys (~/.ssh/id_rsa)
+#
 # Usage:
-#   ./provision-benchmark-vm.sh --new --location eastus [--rg rg-name] [--vm-name name] [--size size]
-#   ./provision-benchmark-vm.sh --existing --ip <ip-or-hostname> --user <ssh-user> [--key <ssh-key-path>]
-#   ./provision-benchmark-vm.sh --existing --rg <rg-name> --vm-name <vm-name>
+#   ./provision-benchmark-vm.sh --new --location eastus [--ssh-key <pub>|--create-key [path]] [options]
+#   ./provision-benchmark-vm.sh --existing --ip <ip> --user <user> --key <private-key-path>
+#   ./provision-benchmark-vm.sh --existing --rg <rg-name> --vm-name <vm-name> --key <private-key-path>
 
 set -euo pipefail
 
@@ -982,7 +997,10 @@ VM_NAME="vm-benchmark-01"
 VM_SIZE="Standard_D16s_v5"
 VM_IP=""
 SSH_USER="benchuser"
-SSH_KEY=""
+SSH_PRIVATE_KEY=""           # Path to private key for connecting (e.g., ~/.ssh/id_rsa)
+SSH_PUBLIC_KEY=""            # Path to public key for VM creation (e.g., ~/.ssh/id_rsa.pub)
+CREATE_KEY=false             # Whether to generate a new key pair
+CREATE_KEY_PATH=""           # Optional: custom path for the generated key
 DISK_SIZE=256
 SETUP_AFTER_CREATE=true
 
@@ -996,7 +1014,15 @@ while [[ $# -gt 0 ]]; do
         --size)         VM_SIZE="$2"; shift ;;
         --ip)           VM_IP="$2"; shift ;;
         --user)         SSH_USER="$2"; shift ;;
-        --key)          SSH_KEY="$2"; shift ;;
+        --key)          SSH_PRIVATE_KEY="$2"; shift ;;
+        --ssh-key)      SSH_PUBLIC_KEY="$2"; shift ;;
+        --create-key)
+            CREATE_KEY=true
+            # Check if next arg is a path (not another flag)
+            if [[ $# -gt 1 && ! "$2" =~ ^-- ]]; then
+                CREATE_KEY_PATH="$2"; shift
+            fi
+            ;;
         --disk-size)    DISK_SIZE="$2"; shift ;;
         --skip-setup)   SETUP_AFTER_CREATE=false ;;
         *) echo "Unknown option: $1"; exit 1 ;;
@@ -1004,9 +1030,83 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+# Helper: build SSH command with key if provided
+ssh_cmd() {
+    local cmd="ssh"
+    if [[ -n "$SSH_PRIVATE_KEY" ]]; then
+        cmd="$cmd -i $SSH_PRIVATE_KEY"
+    fi
+    echo "$cmd"
+}
+
+scp_cmd() {
+    local cmd="scp"
+    if [[ -n "$SSH_PRIVATE_KEY" ]]; then
+        cmd="$cmd -i $SSH_PRIVATE_KEY"
+    fi
+    echo "$cmd"
+}
+
+# Generate a new SSH key pair if requested
+generate_ssh_key() {
+    local key_path="$1"
+    local key_dir
+    key_dir=$(dirname "$key_path")
+
+    mkdir -p "$key_dir"
+
+    if [[ -f "$key_path" ]]; then
+        echo "  SSH key already exists at $key_path — reusing it."
+    else
+        echo "  Generating new SSH key pair: $key_path"
+        ssh-keygen -t rsa -b 4096 -f "$key_path" -N "" -C "cosmos-benchmark-${VM_NAME}" -q
+        echo "  Created: $key_path (private) + ${key_path}.pub (public)"
+    fi
+
+    chmod 600 "$key_path"
+    chmod 644 "${key_path}.pub"
+
+    SSH_PRIVATE_KEY="$key_path"
+    SSH_PUBLIC_KEY="${key_path}.pub"
+}
+
 if [[ "$MODE" == "new" ]]; then
     echo "=== Creating new VM: $VM_NAME in $RG ($LOCATION) ==="
     az group create --name "$RG" --location "$LOCATION" 2>/dev/null || true
+
+    # Resolve SSH key: --create-key > --ssh-key > fallback to --generate-ssh-keys
+    SSH_KEY_ARGS=""
+    if [[ "$CREATE_KEY" == "true" ]]; then
+        # Generate a new key pair
+        if [[ -z "$CREATE_KEY_PATH" ]]; then
+            CREATE_KEY_PATH="$HOME/.ssh/cosmos-bench-${VM_NAME}"
+        fi
+        generate_ssh_key "$CREATE_KEY_PATH"
+        SSH_KEY_ARGS="--ssh-key-value $SSH_PUBLIC_KEY"
+    elif [[ -n "$SSH_PUBLIC_KEY" ]]; then
+        # Use the provided pre-existing public key
+        if [[ ! -f "$SSH_PUBLIC_KEY" ]]; then
+            echo "ERROR: Public key not found: $SSH_PUBLIC_KEY"
+            exit 1
+        fi
+        SSH_KEY_ARGS="--ssh-key-value $SSH_PUBLIC_KEY"
+        # Derive private key path (convention: remove .pub suffix)
+        if [[ -z "$SSH_PRIVATE_KEY" && "$SSH_PUBLIC_KEY" == *.pub ]]; then
+            SSH_PRIVATE_KEY="${SSH_PUBLIC_KEY%.pub}"
+            if [[ ! -f "$SSH_PRIVATE_KEY" ]]; then
+                echo "ERROR: Private key not found at derived path: $SSH_PRIVATE_KEY"
+                echo "  Provide it explicitly: --key <private-key-path>"
+                exit 1
+            fi
+            echo "  Using private key: $SSH_PRIVATE_KEY (derived from public key path)"
+        fi
+    else
+        # Fallback: let az cli handle it (reuses ~/.ssh/id_rsa or creates it)
+        SSH_KEY_ARGS="--generate-ssh-keys"
+        if [[ -z "$SSH_PRIVATE_KEY" ]]; then
+            SSH_PRIVATE_KEY="$HOME/.ssh/id_rsa"
+        fi
+    fi
 
     az vm create \
       --resource-group "$RG" \
@@ -1015,36 +1115,60 @@ if [[ "$MODE" == "new" ]]; then
       --size "$VM_SIZE" \
       --accelerated-networking true \
       --admin-username "$SSH_USER" \
-      --generate-ssh-keys \
+      $SSH_KEY_ARGS \
+      --authentication-type ssh \
       --os-disk-size-gb "$DISK_SIZE" \
       --storage-sku Premium_LRS
 
     az vm open-port --resource-group "$RG" --name "$VM_NAME" --port 22
     VM_IP=$(az vm show -g "$RG" -n "$VM_NAME" -d --query publicIps -o tsv)
     echo "VM created. IP: $VM_IP"
+    echo "  SSH key: $SSH_PRIVATE_KEY"
 
     if [[ "$SETUP_AFTER_CREATE" == "true" ]]; then
         echo "=== Running setup script on new VM ==="
-        ssh -o StrictHostKeyChecking=no "${SSH_USER}@${VM_IP}" 'bash -s' < scripts/setup-benchmark-vm.sh
+        $(ssh_cmd) -o StrictHostKeyChecking=no "${SSH_USER}@${VM_IP}" 'bash -s' < scripts/setup-benchmark-vm.sh
     fi
 
 elif [[ "$MODE" == "existing" ]]; then
+    if [[ -z "$SSH_PRIVATE_KEY" ]]; then
+        # Try default key location
+        if [[ -f "$HOME/.ssh/id_rsa" ]]; then
+            SSH_PRIVATE_KEY="$HOME/.ssh/id_rsa"
+            echo "  Using default SSH key: $SSH_PRIVATE_KEY"
+        else
+            echo "ERROR: --key <private-key-path> is required for --existing mode."
+            echo "  Example: $0 --existing --ip 10.0.0.1 --user benchuser --key ~/.ssh/my_key"
+            exit 1
+        fi
+    fi
+
+    if [[ ! -f "$SSH_PRIVATE_KEY" ]]; then
+        echo "ERROR: Private key not found: $SSH_PRIVATE_KEY"
+        exit 1
+    fi
+
     if [[ -z "$VM_IP" ]]; then
         # Resolve IP from Azure resource
         VM_IP=$(az vm show -g "$RG" -n "$VM_NAME" -d --query publicIps -o tsv)
     fi
     echo "=== Using existing VM at ${SSH_USER}@${VM_IP} ==="
+    echo "  SSH key: $SSH_PRIVATE_KEY"
     echo "Verifying connectivity..."
-    ssh ${SSH_KEY:+-i "$SSH_KEY"} -o ConnectTimeout=10 "${SSH_USER}@${VM_IP}" 'echo "VM reachable. JDK: $(java -version 2>&1 | head -1)"'
+    $(ssh_cmd) -o ConnectTimeout=10 "${SSH_USER}@${VM_IP}" 'echo "VM reachable. JDK: $(java -version 2>&1 | head -1)"'
 else
-    echo "Usage: $0 --new --location <region> | --existing --ip <ip> --user <user>"
+    echo "Usage:"
+    echo "  $0 --new --location <region> [--ssh-key <pub-key>|--create-key [path]]"
+    echo "  $0 --existing --ip <ip> --user <user> --key <private-key-path>"
+    echo "  $0 --existing --rg <rg> --vm-name <name> --key <private-key-path>"
     exit 1
 fi
 
 # Output connection info for other scripts
 echo "$VM_IP" > .vm-ip
 echo "$SSH_USER" > .vm-user
-echo "=== Ready: ssh ${SSH_USER}@${VM_IP} ==="
+echo "$SSH_PRIVATE_KEY" > .vm-key
+echo "=== Ready: $(ssh_cmd) ${SSH_USER}@${VM_IP} ==="
 
 # After tests — tear down to save costs (only for new VMs)
 # az group delete --name "$RG" --yes --no-wait
@@ -1053,18 +1177,29 @@ echo "=== Ready: ssh ${SSH_USER}@${VM_IP} ==="
 **Usage examples**:
 
 ```bash
-# Create a new VM
+# Create a new VM — generate a dedicated key pair (recommended for isolation)
+./scripts/provision-benchmark-vm.sh --new --location eastus --create-key
+
+# Create a new VM — generate key at a custom path
+./scripts/provision-benchmark-vm.sh --new --location eastus --create-key ~/.ssh/my-bench-key
+
+# Create a new VM — use a pre-existing key pair
+./scripts/provision-benchmark-vm.sh --new --location eastus --ssh-key ~/.ssh/bench_key.pub
+
+# Create a new VM — fallback: reuse ~/.ssh/id_rsa (or create it if missing)
 ./scripts/provision-benchmark-vm.sh --new --location eastus --size Standard_D16s_v5
 
-# Use an existing VM by IP
-./scripts/provision-benchmark-vm.sh --existing --ip 20.84.100.42 --user benchuser
+# Use an existing VM by IP with SSH key
+./scripts/provision-benchmark-vm.sh --existing --ip 20.84.100.42 --user benchuser --key ~/.ssh/id_rsa
 
 # Use an existing Azure VM by resource name
-./scripts/provision-benchmark-vm.sh --existing --rg rg-cosmos-benchmark --vm-name vm-benchmark-01
+./scripts/provision-benchmark-vm.sh --existing --rg rg-cosmos-benchmark --vm-name vm-benchmark-01 --key ~/.ssh/bench_key
 
 # Create a new VM but skip auto-setup (run setup-benchmark-vm.sh manually later)
-./scripts/provision-benchmark-vm.sh --new --location eastus --skip-setup
+./scripts/provision-benchmark-vm.sh --new --location eastus --create-key --skip-setup
 ```
+
+**Note**: The script persists connection info to `.vm-ip`, `.vm-user`, and `.vm-key` files. Other scripts (`run-benchmark.sh`, `trigger-benchmark.sh`) can read these to SSH into the VM without re-specifying credentials.
 
 ### 6.6 Managed Identity for Cosmos Access (Optional)
 
@@ -2019,6 +2154,233 @@ After implementing a fix (e.g., A1: fix `ClientTelemetry.close()`):
 
 ---
 
+## 12. Copilot Analysis Agent
+
+### 12.1 Design Philosophy
+
+The shell scripts (§6–§8) are the **reliable, deterministic execution layer**. The Copilot agent is a **thin analysis layer on top** — it doesn't replace any scripts, it consumes their output and provides natural-language interpretation.
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Copilot Analysis Agent (conversational layer)      │
+│                                                     │
+│  "Run CHURN on my branch and tell me if the leak    │
+│   is fixed"                                         │
+│                                                     │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────┐  │
+│  │ Trigger Skill│  │ Analyze Skill│  │ Query Skill│  │
+│  │ (wraps       │  │ (interprets  │  │ (Cosmos /  │  │
+│  │  scripts)    │  │  results)    │  │  Kusto)    │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬─────┘  │
+└─────────┼─────────────────┼─────────────────┼────────┘
+          │                 │                 │
+  ┌───────▼───────┐  ┌──────▼───────┐  ┌──────▼──────┐
+  │ Shell Scripts  │  │ Result Docs  │  │ Cosmos DB / │
+  │ (trigger,run,  │  │ (CSV, JSON)  │  │ Kusto       │
+  │  provision)    │  │              │  │             │
+  └────────────────┘  └──────────────┘  └─────────────┘
+```
+
+### 12.2 Skills / Tools
+
+The agent exposes 3 skills, implementable as MCP tools or Copilot chat participants:
+
+#### Skill 1: `bench/trigger` — Run a Benchmark
+
+**When to use**: User wants to run a benchmark from a conversation.
+
+| Parameter | Required | Description |
+|---|---|---|
+| `branch` or `pr` | Yes (one of) | What code to benchmark |
+| `scenario` | Yes | `SCALING`, `CHURN`, `CACHE_GROWTH`, `POOL_PRESSURE`, `SOAK` |
+| `tenants` | No (default: `tenants.json`) | Tenant config file |
+| `compare` | No | If set, runs both `main` and the specified branch |
+| `resultSink` | No (default: `COSMOS`) | Where to store results |
+
+**What it does**: Shells out to `trigger-benchmark.sh` with the right flags. Returns the test run ID when complete.
+
+**Example conversation**:
+```
+User:  Run the churn leak test on my PR #12345
+Agent: Running scenario CHURN on PR #12345...
+       ⏳ Building azure-cosmos + benchmark module...
+       ⏳ Executing 100 churn cycles with 10 clients...
+       ✅ Complete. Test run ID: B9-pr12345-abc1234-20260218T143022Z
+       Results uploaded to Cosmos DB. Want me to analyze them?
+```
+
+#### Skill 2: `bench/analyze` — Interpret Results (Primary Value)
+
+This is the **highest-value skill** — it turns raw metrics into actionable conclusions.
+
+| Parameter | Required | Description |
+|---|---|---|
+| `runId` | Yes (or `latest`) | Test run ID to analyze |
+| `compareWith` | No | Another run ID or `baseline` (auto-picks latest main run for same scenario) |
+
+**What it does**:
+1. Reads the result document from Cosmos DB (or local CSV)
+2. Applies the pass/fail criteria from §11.2
+3. If `compareWith` is provided, computes deltas
+4. Uses the multi-tenancy analysis doc as context to **explain** anomalies
+
+**Example conversation**:
+```
+User:  Analyze the latest CHURN run on my branch vs main
+
+Agent: 📊 Comparing B9 runs:
+       Branch: fix-telemetry-close (abc1234) vs main (def5678)
+
+       ✅ Thread leak: FIXED
+          main:  218 threads after 100 cycles (+200 from baseline)
+          yours: 19 threads after 100 cycles (+1 from baseline)
+          This confirms the ClientTelemetry.close() fix (A1) is working —
+          the IMDS HTTP client pool is now properly disposed.
+
+       ✅ Heap after close: 134 MB (was 342 MB on main)
+          The 208 MB reduction is consistent with eliminating the leaked
+          ClientTelemetryInfo histograms (~3 MB × 10 clients × retained by GC roots).
+
+       🟡 P99 latency: 43.1ms (was 45.2ms on main) — marginal improvement
+          This is expected — the telemetry leak doesn't directly affect
+          request-path latency.
+
+       Overall: ✅ PASSED — safe to merge.
+```
+
+**Context the agent uses for interpretation**:
+- [multi-tenancy-analysis.md](sdk/cosmos/multi-tenancy-analysis.md) — maps metric anomalies to root causes (e.g., "threads growing = Bug #1: ClientTelemetry.close() no-op")
+- §11.2 pass/fail thresholds — determines ✅/🔴 status
+- §3.6 per-client memory breakdown — validates whether heap numbers make sense
+
+#### Skill 3: `bench/query` — Ad-Hoc Result Queries
+
+**When to use**: User wants to explore historical data.
+
+| Parameter | Required | Description |
+|---|---|---|
+| `question` | Yes | Natural-language question about benchmark results |
+
+**What it does**: Translates the question into a Cosmos SQL or Kusto KQL query, executes it, and summarizes the results.
+
+**Example conversations**:
+```
+User:  Show me all CHURN runs on the fix-telemetry-close branch
+Agent: Found 3 runs:
+       | Run ID | Commit  | Threads After Close | P99 (ms) | Passed |
+       |--------|---------|---------------------|----------|--------|
+       | B9-001 | abc1234 | 19                  | 43.1     | ✅     |
+       | B9-002 | abc1234 | 18                  | 42.8     | ✅     |
+       | B9-003 | def5678 | 22                  | 44.0     | ✅     |
+```
+
+```
+User:  Has P99 latency regressed on any branch in the last 2 weeks?
+Agent: Checking BenchmarkRuns for scenario S2a, numClients=100...
+       No regressions found. P99 range: 11.8–13.2ms across 14 runs.
+       Baseline (main median): 12.1ms. All within 1.1× threshold.
+```
+
+### 12.3 Implementation Options
+
+| Approach | How | Effort | Best For |
+|---|---|---|---|
+| **Copilot Chat Participant** (VS Code) | `@bench analyze latest` — registers as a chat participant using the VS Code Chat API | Medium | Developers using VS Code daily |
+| **MCP Tools** | Register `bench/trigger`, `bench/analyze`, `bench/query` as MCP tools on the Azure SDK MCP server | Medium | IDE-agnostic; works with any MCP-compatible client |
+| **GitHub Copilot Extension** | GitHub App that responds to `@bench` mentions in PR comments | High | PR-integrated workflow: "@bench run CHURN on this PR" |
+| **Copilot Instructions file** | `.github/copilot-instructions.md` with analysis rules + the agent uses existing tools (terminal, file read) | Low | Quick start — no new code, just prompt engineering |
+
+**Recommended**: Start with **Copilot Instructions** (zero code) → graduate to **MCP Tools** when the workflow stabilizes.
+
+### 12.4 Copilot Instructions Approach (Phase 1 — Zero Code)
+
+Add benchmark analysis rules to the repo's Copilot instructions so any Copilot session can interpret results:
+
+```markdown
+<!-- .github/copilot-instructions.md (append) -->
+
+## Multi-Tenancy Benchmark Analysis
+
+When the user asks about benchmark results, follow these rules:
+
+1. Read the result document from `<outputDir>/test_config.json` and CSV files,
+   or query Cosmos DB if a run ID is provided.
+
+2. Apply pass/fail thresholds:
+   - Thread leak: threads after close ≤ baseline + 2 (HARD FAIL if exceeded)
+   - Memory leak: heap after close ≤ baseline × 1.1 (HARD FAIL)
+   - Latency: P99 at N=100 ≤ 5× P99 at N=1 (WARN)
+   - Throughput: ops/s at N=100 ≥ 0.7× ops/s at N=1 (WARN)
+
+3. When explaining anomalies, reference the root causes in
+   sdk/cosmos/multi-tenancy-analysis.md:
+   - Thread growth → Bug #1 (ClientTelemetry.close no-op) or §3.3.1
+   - Heap growth → §3.2 (unbounded caches) or Bug #1 (histogram leak)
+   - Connection count → §3.1 (per-client ConnectionProvider)
+   - High P99 → §3.4 (HTTP/1.1 head-of-line blocking)
+
+4. When comparing two runs, compute deltas and state whether each metric
+   improved, regressed, or stayed flat. Use ✅/🔴/🟡 indicators.
+
+5. Reference the specific action item (A1–A21) from the analysis doc
+   that the fix addresses.
+```
+
+This gives Copilot the domain knowledge to interpret results correctly **without writing any tool code**. Users can then say things like:
+- "Read the results in `./results/20260218T143022-CHURN/` and tell me if the leak is fixed"
+- "Compare these two result CSVs and summarize the differences"
+
+### 12.5 MCP Tools Approach (Phase 2 — When Workflow Stabilizes)
+
+Register tools on the existing Azure SDK MCP server (`eng/common/mcp/`):
+
+```json
+{
+  "tools": [
+    {
+      "name": "bench_trigger",
+      "description": "Trigger a multi-tenancy benchmark run on a branch or PR",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "branch": { "type": "string" },
+          "pr": { "type": "integer" },
+          "scenario": { "type": "string", "enum": ["SCALING","CHURN","CACHE_GROWTH","POOL_PRESSURE","SOAK"] },
+          "compare": { "type": "boolean", "default": false }
+        }
+      }
+    },
+    {
+      "name": "bench_analyze",
+      "description": "Analyze benchmark results and compare with baseline",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": { "type": "string", "description": "Test run ID or 'latest'" },
+          "compareWith": { "type": "string", "description": "Another run ID or 'baseline'" }
+        },
+        "required": ["runId"]
+      }
+    },
+    {
+      "name": "bench_query",
+      "description": "Query historical benchmark results from Cosmos DB or Kusto",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "question": { "type": "string", "description": "Natural language question about benchmark history" }
+        },
+        "required": ["question"]
+      }
+    }
+  ]
+}
+```
+
+Tool implementations call the existing shell scripts and Cosmos/Kusto queries — the tools are **thin wrappers**, not reimplementations.
+
+---
+
 ## Appendix: Files to Create/Modify
 
 | File | Purpose |
@@ -2041,6 +2403,7 @@ After implementing a fix (e.g., A1: fix `ClientTelemetry.close()`):
 | `sdk/cosmos/azure-cosmos-benchmark/scripts/trigger-benchmark.sh` | Checkout branch/PR → build → run benchmark → upload results (one command) |
 | `sdk/cosmos/azure-cosmos-benchmark/scripts/setup-result-storage.sh` | Create Cosmos DB account + containers for benchmark result storage |
 | `sdk/cosmos/azure-cosmos-benchmark/scripts/compare-results.py` | Compare two result sets and generate delta report |
+| `.github/copilot-instructions.md` (append) | Add multi-tenancy benchmark analysis rules for Copilot context (Phase 1 — zero code) |
 | **Modified**: `Configuration.java` | Add `skipSystemPropertyInit` flag; add instance-level AAD fields (`aadLoginEndpoint`, `aadTenantId`, `aadManagedIdentityClientId`) with `getInstanceAad*()` getters and `buildTokenCredential()` method; add `setApplicationName()` setter for per-tenant `userAgentSuffix` |
 | **Modified**: `AsyncBenchmark.java` | Remove static `CREDENTIAL` field; build credential per-instance from `Configuration.buildTokenCredential()` |
 | **Modified**: `SyncBenchmark.java` | Same as `AsyncBenchmark.java` |
