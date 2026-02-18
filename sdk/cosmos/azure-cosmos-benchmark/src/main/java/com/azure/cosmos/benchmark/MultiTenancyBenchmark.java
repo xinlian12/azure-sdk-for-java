@@ -262,23 +262,59 @@ public class MultiTenancyBenchmark {
             String key = entry.getKey();
             String value = entry.getValue();
 
-            // Map known override keys to Configuration setters
-            switch (key) {
-                case "serviceEndpoint": cfg.setServiceEndpoint(value); break;
-                case "masterKey": cfg.setMasterKey(value); break;
-                case "databaseId": cfg.setDatabaseId(value); break;
-                case "collectionId":
-                case "containerId": cfg.setCollectionId(value); break;
-                case "applicationName": cfg.setApplicationName(value); break;
-                case "aadLoginEndpoint": cfg.setAadLoginEndpoint(value); break;
-                case "aadTenantId": cfg.setAadTenantId(value); break;
-                case "aadManagedIdentityClientId": cfg.setAadManagedIdentityClientId(value); break;
-                // Note: connectionMode, concurrency, maxConnectionPoolSize, operation, etc.
-                // are read from JCommander annotations and cannot be easily set programmatically.
-                // For now, log a warning for unrecognized keys. Future: add setters for all.
-                default:
-                    logger.debug("Override key '{}' not mapped to Configuration setter (value: {})", key, value);
-                    break;
+            try {
+                switch (key) {
+                    // Identity / endpoint
+                    case "serviceEndpoint": cfg.setServiceEndpoint(value); break;
+                    case "masterKey": cfg.setMasterKey(value); break;
+                    case "databaseId": cfg.setDatabaseId(value); break;
+                    case "collectionId":
+                    case "containerId": cfg.setCollectionId(value); break;
+                    case "applicationName": cfg.setApplicationName(value); break;
+
+                    // AAD
+                    case "aadLoginEndpoint": cfg.setAadLoginEndpoint(value); break;
+                    case "aadTenantId": cfg.setAadTenantId(value); break;
+                    case "aadManagedIdentityClientId": cfg.setAadManagedIdentityClientId(value); break;
+
+                    // Workload
+                    case "operation": cfg.setOperationFromString(value); break;
+                    case "concurrency": cfg.setConcurrency(Integer.parseInt(value)); break;
+                    case "numberOfOperations": cfg.setNumberOfOperations(Integer.parseInt(value)); break;
+                    case "numberOfPreCreatedDocuments": cfg.setNumberOfPreCreatedDocuments(Integer.parseInt(value)); break;
+                    case "skipWarmUpOperations": cfg.setSkipWarmUpOperations(Integer.parseInt(value)); break;
+                    case "throughput": cfg.setThroughput(Integer.parseInt(value)); break;
+
+                    // Connection
+                    case "connectionMode":
+                        cfg.setConnectionMode(com.azure.cosmos.ConnectionMode.valueOf(value.toUpperCase()));
+                        break;
+                    case "consistencyLevel":
+                        cfg.setConsistencyLevel(com.azure.cosmos.ConsistencyLevel.valueOf(value.toUpperCase()));
+                        break;
+                    case "maxConnectionPoolSize": cfg.setMaxConnectionPoolSize(Integer.parseInt(value)); break;
+                    case "preferredRegionsList": cfg.setPreferredRegionsList(value); break;
+                    case "manageDatabase": cfg.setManageDatabase(Boolean.parseBoolean(value)); break;
+
+                    // Flags that are string-backed booleans in Configuration
+                    case "connectionSharingAcrossClientsEnabled":
+                    case "http2Enabled":
+                    case "isManagedIdentityRequired":
+                    case "isPartitionLevelCircuitBreakerEnabled":
+                    case "isPerPartitionAutomaticFailoverRequired":
+                    case "contentResponseOnWriteEnabled":
+                    case "defaultLog4jLoggerEnabled":
+                        // These are string fields in Configuration set via JCommander.
+                        // For now, log them — they need individual setters if we want to override.
+                        logger.debug("String-flag override '{}' = '{}' (applied via JCommander defaults)", key, value);
+                        break;
+
+                    default:
+                        logger.debug("Override key '{}' not mapped to Configuration setter (value: {})", key, value);
+                        break;
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to apply override '{}' = '{}': {}", key, value, e.getMessage());
             }
         }
     }

@@ -475,6 +475,57 @@ public class Configuration {
         this.collectionId = collectionId;
     }
 
+    public void setOperation(Operation operation) {
+        this.operation = operation;
+    }
+
+    public void setOperationFromString(String operationName) {
+        Operation op = Operation.fromString(operationName);
+        if (op != null) {
+            this.operation = op;
+        }
+    }
+
+    public void setConcurrency(int concurrency) {
+        this.concurrency = concurrency;
+    }
+
+    public void setConnectionMode(ConnectionMode connectionMode) {
+        this.connectionMode = connectionMode;
+    }
+
+    public void setMaxConnectionPoolSize(int maxConnectionPoolSize) {
+        this.maxConnectionPoolSize = maxConnectionPoolSize;
+    }
+
+    public void setNumberOfOperations(int numberOfOperations) {
+        this.numberOfOperations = numberOfOperations;
+    }
+
+    public void setNumberOfPreCreatedDocuments(int numberOfPreCreatedDocuments) {
+        this.numberOfPreCreatedDocuments = numberOfPreCreatedDocuments;
+    }
+
+    public void setConsistencyLevel(ConsistencyLevel consistencyLevel) {
+        this.consistencyLevel = consistencyLevel;
+    }
+
+    public void setThroughput(int throughput) {
+        this.throughput = throughput;
+    }
+
+    public void setManageDatabase(boolean manageDatabase) {
+        this.manageDatabase = manageDatabase;
+    }
+
+    public void setPreferredRegionsList(String preferredRegionsList) {
+        this.preferredRegionsList = preferredRegionsList;
+    }
+
+    public void setSkipWarmUpOperations(int skipWarmUpOperations) {
+        this.skipWarmUpOperations = skipWarmUpOperations;
+    }
+
     public boolean isHelp() {
         return help;
     }
