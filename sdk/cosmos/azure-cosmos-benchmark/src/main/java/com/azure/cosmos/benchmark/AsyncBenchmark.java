@@ -105,7 +105,7 @@ abstract class AsyncBenchmark<T> {
             ? cfg.buildTokenCredential()
             : null;
 
-        if (configuration.isPartitionLevelCircuitBreakerEnabled()) {
+        if (!configuration.isSkipSystemPropertyInit() && configuration.isPartitionLevelCircuitBreakerEnabled()) {
             System.setProperty(
                 "COSMOS.PARTITION_LEVEL_CIRCUIT_BREAKER_CONFIG",
                 "{\"isPartitionLevelCircuitBreakerEnabled\": true, "
@@ -118,7 +118,7 @@ abstract class AsyncBenchmark<T> {
             System.setProperty("COSMOS.ALLOWED_PARTITION_UNAVAILABILITY_DURATION_IN_SECONDS", "30");
         }
 
-        if (configuration.isPerPartitionAutomaticFailoverRequired()) {
+        if (!configuration.isSkipSystemPropertyInit() && configuration.isPerPartitionAutomaticFailoverRequired()) {
             System.setProperty(
                 "COSMOS.IS_PER_PARTITION_AUTOMATIC_FAILOVER_ENABLED", "true");
             System.setProperty("COSMOS.IS_SESSION_TOKEN_FALSE_PROGRESS_MERGE_ENABLED", "true");
@@ -331,7 +331,7 @@ abstract class AsyncBenchmark<T> {
             metricsRegistry.register("memory", new MemoryUsageGaugeSet());
         }
 
-        if (configuration.getGraphiteEndpoint() != null) {
+        if (!configuration.isSuppressReporter() && configuration.getGraphiteEndpoint() != null) {
             final Graphite graphite = new Graphite(new InetSocketAddress(
                 configuration.getGraphiteEndpoint(),
                 configuration.getGraphiteEndpointPort()));
@@ -341,19 +341,23 @@ abstract class AsyncBenchmark<T> {
                 .convertRatesTo(TimeUnit.SECONDS)
                 .filter(MetricFilter.ALL)
                 .build(graphite);
-        } else if (configuration.getReportingDirectory() != null) {
+        } else if (!configuration.isSuppressReporter() && configuration.getReportingDirectory() != null) {
             reporter = CsvReporter.forRegistry(metricsRegistry)
                 .convertDurationsTo(TimeUnit.MILLISECONDS)
                 .convertRatesTo(TimeUnit.SECONDS)
                 .build(configuration.getReportingDirectory());
-        } else {
+        } else if (!configuration.isSuppressReporter()) {
             reporter = ConsoleReporter.forRegistry(metricsRegistry)
                 .convertDurationsTo(TimeUnit.MILLISECONDS)
                 .convertRatesTo(TimeUnit.SECONDS)
                 .build();
+        } else {
+            reporter = null;
         }
 
-        if (configuration.getResultUploadDatabase() != null && configuration.getResultUploadContainer() != null) {
+        if (!configuration.isSuppressReporter()
+            && configuration.getResultUploadDatabase() != null
+            && configuration.getResultUploadContainer() != null) {
             resultReporter = CosmosTotalResultReporter
                 .forRegistry(
                     metricsRegistry,

@@ -160,6 +160,11 @@ public class Configuration {
     @Parameter(names = "-isManagedIdentityRequired", description = "A flag to denote whether benchmark-specific CosmosClient instance should use Managed Identity to authenticate.")
     private String isManagedIdentityRequired = String.valueOf(false);
 
+    // ── Multi-tenancy orchestrator flags (not CLI — set programmatically) ──
+
+    private boolean skipSystemPropertyInit = false;
+    private boolean suppressReporter = false;
+
     @Parameter(names = "-isPerPartitionAutomaticFailoverRequired", description = "A flag to denote whether per-partition automatic failover is required.")
     private String isPerPartitionAutomaticFailoverRequired = String.valueOf(true);
 
@@ -436,6 +441,38 @@ public class Configuration {
 
     public void setApplicationName(String applicationName) {
         this.applicationName = applicationName;
+    }
+
+    public boolean isSkipSystemPropertyInit() {
+        return skipSystemPropertyInit;
+    }
+
+    public void setSkipSystemPropertyInit(boolean skipSystemPropertyInit) {
+        this.skipSystemPropertyInit = skipSystemPropertyInit;
+    }
+
+    public boolean isSuppressReporter() {
+        return suppressReporter;
+    }
+
+    public void setSuppressReporter(boolean suppressReporter) {
+        this.suppressReporter = suppressReporter;
+    }
+
+    public void setServiceEndpoint(String serviceEndpoint) {
+        this.serviceEndpoint = serviceEndpoint;
+    }
+
+    public void setMasterKey(String masterKey) {
+        this.masterKey = masterKey;
+    }
+
+    public void setDatabaseId(String databaseId) {
+        this.databaseId = databaseId;
+    }
+
+    public void setCollectionId(String collectionId) {
+        this.collectionId = collectionId;
     }
 
     public boolean isHelp() {
