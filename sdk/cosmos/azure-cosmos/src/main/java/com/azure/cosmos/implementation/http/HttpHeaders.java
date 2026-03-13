@@ -3,12 +3,15 @@
 
 package com.azure.cosmos.implementation.http;
 
+import com.azure.cosmos.implementation.HttpConstants;
+import com.azure.cosmos.implementation.directconnectivity.WFConstants;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializable;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Locale;
@@ -18,6 +21,11 @@ import java.util.Map;
  * A collection of headers on an HTTP request or response.
  */
 public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
+    // Pre-computed lowercase mappings for known header names.
+    // Avoids String.toLowerCase() allocation for the ~80% of headers
+    // whose names are known SDK constants.
+    private static final Map<String, String> LOWERCASE_CACHE = buildLowerCaseCache();
+
     private Map<String, HttpHeader> headers;
 
     /**
@@ -66,7 +74,7 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * @return this HttpHeaders
      */
     public HttpHeaders set(String name, String value) {
-        final String headerKey = name.toLowerCase(Locale.ROOT);
+        final String headerKey = internLowerCase(name);
         if (value == null) {
             headers.remove(headerKey);
         } else {
@@ -100,8 +108,46 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
     }
 
     private HttpHeader getHeader(String headerName) {
-        final String headerKey = headerName.toLowerCase(Locale.ROOT);
+        final String headerKey = internLowerCase(headerName);
         return headers.get(headerKey);
+    }
+
+    /**
+     * Returns the lowercase form of a header name, using a pre-computed cache
+     * for known SDK header constants to avoid String allocation.
+     */
+    private static String internLowerCase(String name) {
+        String cached = LOWERCASE_CACHE.get(name);
+        return cached != null ? cached : name.toLowerCase(Locale.ROOT);
+    }
+
+    private static Map<String, String> buildLowerCaseCache() {
+        Map<String, String> cache = new HashMap<>(256);
+        // Populate from HttpConstants.HttpHeaders
+        collectStringConstants(HttpConstants.HttpHeaders.class, cache);
+        // Populate from WFConstants.BackendHeaders
+        collectStringConstants(WFConstants.BackendHeaders.class, cache);
+        return cache;
+    }
+
+    private static void collectStringConstants(Class<?> clazz, Map<String, String> cache) {
+        for (Field field : clazz.getDeclaredFields()) {
+            if (field.getType() == String.class
+                && java.lang.reflect.Modifier.isStatic(field.getModifiers())
+                && java.lang.reflect.Modifier.isFinal(field.getModifiers())) {
+                try {
+                    String value = (String) field.get(null);
+                    if (value != null) {
+                        String lower = value.toLowerCase(Locale.ROOT);
+                        cache.put(value, lower);
+                        // Also cache the lowercase form mapping to itself
+                        cache.put(lower, lower);
+                    }
+                } catch (IllegalAccessException e) {
+                    // skip inaccessible fields
+                }
+            }
+        }
     }
 
     /**
