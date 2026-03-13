@@ -32,8 +32,7 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
 public class StoreResponse {
     private static final Logger logger = LoggerFactory.getLogger(StoreResponse.class.getSimpleName());
     final private int status;
-    final private String[] responseHeaderNames;
-    final private String[] responseHeaderValues;
+    final private Map<String, String> responseHeaders;
     private int requestPayloadLength;
     private RequestTimeline requestTimeline;
     private RntbdChannelAcquisitionTimeline channelAcquisitionTimeline;
@@ -58,16 +57,8 @@ public class StoreResponse {
         checkArgument((contentStream == null) == (responsePayloadLength == 0),
             "Parameter 'contentStream' must be consistent with 'responsePayloadLength'.");
         requestTimeline = RequestTimeline.empty();
-        responseHeaderNames = new String[headerMap.size()];
-        responseHeaderValues = new String[headerMap.size()];
+        this.responseHeaders = headerMap;
         this.endpoint = endpoint != null ? endpoint : "";
-
-        int i = 0;
-        for (Map.Entry<String, String> headerEntry : headerMap.entrySet()) {
-            responseHeaderNames[i] = headerEntry.getKey();
-            responseHeaderValues[i] = headerEntry.getValue();
-            i++;
-        }
 
         this.status = status;
         replicaStatusList = new HashMap<>();
@@ -79,7 +70,6 @@ public class StoreResponse {
                     contentStream.close();
                 } catch (Throwable e) {
                     if (!(e instanceof IllegalReferenceCountException)) {
-                        // Log as warning instead of debug to make ByteBuf leak issues more visible
                         logger.warn("Failed to close content stream. This may cause a Netty ByteBuf leak.", e);
                     }
                 }
@@ -90,9 +80,8 @@ public class StoreResponse {
     }
 
     /**
-     * Creates a StoreResponse directly from SDK HttpHeaders, avoiding the intermediate
-     * toLowerCaseMap() + HttpUtils.unescape() passes. HttpHeaders already stores keys
-     * in lowercase (done in HttpHeaders.set()), so we extract them directly.
+     * Creates a StoreResponse directly from SDK HttpHeaders, building the internal
+     * Map from HttpHeaders.toLowerCaseMap() and inlining HttpUtils.unescape().
      */
     public StoreResponse(
             String endpoint,
@@ -101,51 +90,7 @@ public class StoreResponse {
             ByteBufInputStream contentStream,
             int responsePayloadLength) {
 
-        checkArgument((contentStream == null) == (responsePayloadLength == 0),
-            "Parameter 'contentStream' must be consistent with 'responsePayloadLength'.");
-        requestTimeline = RequestTimeline.empty();
-        int headerCount = httpHeaders.size();
-        responseHeaderNames = new String[headerCount];
-        responseHeaderValues = new String[headerCount];
-        this.endpoint = endpoint != null ? endpoint : "";
-
-        // Single-pass: extract headers + inline unescape for OWNER_FULL_NAME
-        int i = 0;
-        Map<String, String> headerMap = null;
-        for (HttpHeader header : httpHeaders) {
-            String name = header.name();
-            String value = header.value();
-            // Inline HttpUtils.unescape: URL-decode OWNER_FULL_NAME if present
-            if (HttpConstants.HttpHeaders.OWNER_FULL_NAME.equalsIgnoreCase(name)) {
-                value = HttpUtils.urlDecode(value);
-            }
-            responseHeaderNames[i] = name.toLowerCase(java.util.Locale.ROOT);
-            responseHeaderValues[i] = value;
-            i++;
-        }
-
-        this.status = status;
-        replicaStatusList = new HashMap<>();
-        if (contentStream != null) {
-            // Build the headerMap lazily only for JsonNodeStorePayload
-            headerMap = new HashMap<>(headerCount);
-            for (int j = 0; j < headerCount; j++) {
-                headerMap.put(responseHeaderNames[j], responseHeaderValues[j]);
-            }
-            try {
-                this.responsePayload = new JsonNodeStorePayload(contentStream, responsePayloadLength, headerMap);
-            } finally {
-                try {
-                    contentStream.close();
-                } catch (Throwable e) {
-                    if (!(e instanceof IllegalReferenceCountException)) {
-                        logger.warn("Failed to close content stream. This may cause a Netty ByteBuf leak.", e);
-                    }
-                }
-            }
-        } else {
-            this.responsePayload = null;
-        }
+        this(endpoint, status, HttpUtils.unescape(httpHeaders.toLowerCaseMap()), contentStream, responsePayloadLength);
     }
 
     private StoreResponse(
@@ -157,16 +102,8 @@ public class StoreResponse {
         checkNotNull(endpoint, "Parameter 'endpoint' must not be null.");
 
         requestTimeline = RequestTimeline.empty();
-        responseHeaderNames = new String[headerMap.size()];
-        responseHeaderValues = new String[headerMap.size()];
+        this.responseHeaders = headerMap;
         this.endpoint = endpoint;
-
-        int i = 0;
-        for (Map.Entry<String, String> headerEntry : headerMap.entrySet()) {
-            responseHeaderNames[i] = headerEntry.getKey();
-            responseHeaderValues[i] = headerEntry.getValue();
-            i++;
-        }
 
         this.status = status;
         replicaStatusList = new HashMap<>();
@@ -177,12 +114,16 @@ public class StoreResponse {
         return status;
     }
 
+    public Map<String, String> getResponseHeaders() {
+        return responseHeaders;
+    }
+
     public String[] getResponseHeaderNames() {
-        return responseHeaderNames;
+        return responseHeaders.keySet().toArray(new String[0]);
     }
 
     public String[] getResponseHeaderValues() {
-        return responseHeaderValues;
+        return responseHeaders.values().toArray(new String[0]);
     }
 
     public void setRntbdRequestLength(int rntbdRequestLength) {
@@ -252,29 +193,35 @@ public class StoreResponse {
     }
 
     public String getHeaderValue(String attribute) {
-        if (this.responseHeaderValues == null || this.responseHeaderNames.length != this.responseHeaderValues.length) {
+        if (this.responseHeaders == null) {
             return null;
         }
-
-        for (int i = 0; i < responseHeaderNames.length; i++) {
-            if (responseHeaderNames[i].equalsIgnoreCase(attribute)) {
-                return responseHeaderValues[i];
+        String value = responseHeaders.get(attribute);
+        if (value != null) {
+            return value;
+        }
+        // Fallback: case-insensitive scan for backward compatibility
+        for (Map.Entry<String, String> entry : responseHeaders.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(attribute)) {
+                return entry.getValue();
             }
         }
-
         return null;
     }
 
     //NOTE: only used for testing purpose to change the response header value
     void setHeaderValue(String headerName, String value) {
-        if (this.responseHeaderValues == null || this.responseHeaderNames.length != this.responseHeaderValues.length) {
+        if (this.responseHeaders == null) {
             return;
         }
-
-        for (int i = 0; i < responseHeaderNames.length; i++) {
-            if (responseHeaderNames[i].equalsIgnoreCase(headerName)) {
-                responseHeaderValues[i] = value;
-                break;
+        if (responseHeaders.containsKey(headerName)) {
+            responseHeaders.put(headerName, value);
+            return;
+        }
+        for (String key : responseHeaders.keySet()) {
+            if (key.equalsIgnoreCase(headerName)) {
+                responseHeaders.put(key, value);
+                return;
             }
         }
     }
@@ -371,15 +318,13 @@ public class StoreResponse {
 
     public StoreResponse withRemappedStatusCode(int newStatusCode, double additionalRequestCharge) {
 
-        Map<String, String> headers = new HashMap<>();
-        for (int i = 0; i < this.responseHeaderNames.length; i++) {
-            String headerName = this.responseHeaderNames[i];
-            if (headerName.equalsIgnoreCase(HttpConstants.HttpHeaders.REQUEST_CHARGE)) {
+        Map<String, String> headers = new HashMap<>(this.responseHeaders);
+        for (String key : headers.keySet()) {
+            if (key.equalsIgnoreCase(HttpConstants.HttpHeaders.REQUEST_CHARGE)) {
                 double currentRequestCharge = this.getRequestCharge();
                 double newRequestCharge = currentRequestCharge + additionalRequestCharge;
-                headers.put(headerName, String.valueOf(newRequestCharge));
-            } else {
-                headers.put(headerName, this.responseHeaderValues[i]);
+                headers.put(key, String.valueOf(newRequestCharge));
+                break;
             }
         }
 

@@ -124,8 +124,8 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      */
     public Map<String, String> toLowerCaseMap() {
         final Map<String, String> result = new HashMap<>(headers.size());
-        for (String headerName : headers.keySet()) {
-            result.put(headerName, headers.get(headerName).value());
+        for (Map.Entry<String, HttpHeader> entry : headers.entrySet()) {
+            result.put(entry.getKey(), entry.getValue().value());
         }
         return result;
     }
