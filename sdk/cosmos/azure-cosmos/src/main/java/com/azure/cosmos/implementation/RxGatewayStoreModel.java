@@ -242,7 +242,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
             return new StoreResponse(
                 endpoint,
                 statusCode,
-                HttpUtils.unescape(headers.toLowerCaseMap()),
+                headers,
                 new ByteBufInputStream(retainedContent, true),
                 size);
         } else {
@@ -252,7 +252,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         return new StoreResponse(
             endpoint,
             statusCode,
-            HttpUtils.unescape(headers.toLowerCaseMap()),
+            headers,
             null,
             0);
     }

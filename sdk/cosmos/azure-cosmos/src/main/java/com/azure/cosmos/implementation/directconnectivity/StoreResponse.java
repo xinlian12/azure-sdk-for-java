@@ -9,6 +9,8 @@ import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdChannelAcquisitionTimeline;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdChannelStatistics;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdEndpointStatistics;
+import com.azure.cosmos.implementation.http.HttpHeader;
+import com.azure.cosmos.implementation.http.HttpHeaders;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.util.IllegalReferenceCountException;
@@ -78,6 +80,65 @@ public class StoreResponse {
                 } catch (Throwable e) {
                     if (!(e instanceof IllegalReferenceCountException)) {
                         // Log as warning instead of debug to make ByteBuf leak issues more visible
+                        logger.warn("Failed to close content stream. This may cause a Netty ByteBuf leak.", e);
+                    }
+                }
+            }
+        } else {
+            this.responsePayload = null;
+        }
+    }
+
+    /**
+     * Creates a StoreResponse directly from SDK HttpHeaders, avoiding the intermediate
+     * toLowerCaseMap() + HttpUtils.unescape() passes. HttpHeaders already stores keys
+     * in lowercase (done in HttpHeaders.set()), so we extract them directly.
+     */
+    public StoreResponse(
+            String endpoint,
+            int status,
+            HttpHeaders httpHeaders,
+            ByteBufInputStream contentStream,
+            int responsePayloadLength) {
+
+        checkArgument((contentStream == null) == (responsePayloadLength == 0),
+            "Parameter 'contentStream' must be consistent with 'responsePayloadLength'.");
+        requestTimeline = RequestTimeline.empty();
+        int headerCount = httpHeaders.size();
+        responseHeaderNames = new String[headerCount];
+        responseHeaderValues = new String[headerCount];
+        this.endpoint = endpoint != null ? endpoint : "";
+
+        // Single-pass: extract headers + inline unescape for OWNER_FULL_NAME
+        int i = 0;
+        Map<String, String> headerMap = null;
+        for (HttpHeader header : httpHeaders) {
+            String name = header.name();
+            String value = header.value();
+            // Inline HttpUtils.unescape: URL-decode OWNER_FULL_NAME if present
+            if (HttpConstants.HttpHeaders.OWNER_FULL_NAME.equalsIgnoreCase(name)) {
+                value = HttpUtils.urlDecode(value);
+            }
+            responseHeaderNames[i] = name.toLowerCase(java.util.Locale.ROOT);
+            responseHeaderValues[i] = value;
+            i++;
+        }
+
+        this.status = status;
+        replicaStatusList = new HashMap<>();
+        if (contentStream != null) {
+            // Build the headerMap lazily only for JsonNodeStorePayload
+            headerMap = new HashMap<>(headerCount);
+            for (int j = 0; j < headerCount; j++) {
+                headerMap.put(responseHeaderNames[j], responseHeaderValues[j]);
+            }
+            try {
+                this.responsePayload = new JsonNodeStorePayload(contentStream, responsePayloadLength, headerMap);
+            } finally {
+                try {
+                    contentStream.close();
+                } catch (Throwable e) {
+                    if (!(e instanceof IllegalReferenceCountException)) {
                         logger.warn("Failed to close content stream. This may cause a Netty ByteBuf leak.", e);
                     }
                 }
