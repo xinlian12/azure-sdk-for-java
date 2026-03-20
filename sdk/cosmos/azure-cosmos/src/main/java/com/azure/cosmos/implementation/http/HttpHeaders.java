@@ -19,12 +19,14 @@ import java.util.Map;
  */
 public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
     private Map<String, HttpHeader> headers;
+    private final boolean keysAlreadyLowerCased;
 
     /**
      * Create an empty HttpHeaders instance.
      */
     public HttpHeaders() {
         this.headers = new HashMap<>();
+        this.keysAlreadyLowerCased = false;
     }
 
     /**
@@ -32,6 +34,21 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      */
     public HttpHeaders(int size) {
         this.headers = new HashMap<>(size);
+        this.keysAlreadyLowerCased = false;
+    }
+
+    /**
+     * Create an HttpHeaders instance with the given size.
+     * When {@code keysAlreadyLowerCased} is true, {@link #set(String, String)} skips
+     * the {@code toLowerCase()} call on header names. This is an optimization for HTTP/2
+     * responses where header names are guaranteed to be lowercase per RFC 7540 §8.1.2.
+     *
+     * @param size the initial capacity
+     * @param keysAlreadyLowerCased true if header names are guaranteed to be lowercase (e.g. HTTP/2)
+     */
+    public HttpHeaders(int size, boolean keysAlreadyLowerCased) {
+        this.headers = new HashMap<>(size);
+        this.keysAlreadyLowerCased = keysAlreadyLowerCased;
     }
 
     /**
@@ -41,6 +58,7 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      */
     public HttpHeaders(Map<String, String> headers) {
         this.headers = new HashMap<>(headers.size());
+        this.keysAlreadyLowerCased = false;
         for (final Map.Entry<String, String> header : headers.entrySet()) {
             this.set(header.getKey(), header.getValue());
         }
@@ -66,7 +84,7 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * @return this HttpHeaders
      */
     public HttpHeaders set(String name, String value) {
-        final String headerKey = name.toLowerCase(Locale.ROOT);
+        final String headerKey = keysAlreadyLowerCased ? name : name.toLowerCase(Locale.ROOT);
         if (value == null) {
             headers.remove(headerKey);
         } else {
@@ -100,7 +118,7 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
     }
 
     private HttpHeader getHeader(String headerName) {
-        final String headerKey = headerName.toLowerCase(Locale.ROOT);
+        final String headerKey = keysAlreadyLowerCased ? headerName : headerName.toLowerCase(Locale.ROOT);
         return headers.get(headerKey);
     }
 
@@ -128,6 +146,14 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
             result.put(entry.getKey(), entry.getValue().value());
         }
         return result;
+    }
+
+    /**
+     * Returns true if header keys are guaranteed to be lowercase,
+     * meaning {@link #toLowerCaseMap()} and {@link #toMap()} produce equivalent keys.
+     */
+    public boolean areKeysLowerCased() {
+        return keysAlreadyLowerCased;
     }
 
     @Override

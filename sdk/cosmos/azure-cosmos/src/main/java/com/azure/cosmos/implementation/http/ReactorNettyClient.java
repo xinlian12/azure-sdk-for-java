@@ -409,7 +409,11 @@ public class ReactorNettyClient implements HttpClient {
 
         @Override
         public HttpHeaders headers() {
-            HttpHeaders headers = new HttpHeaders(reactorNettyResponse.responseHeaders().size());
+            // HTTP/2 header names are guaranteed lowercase per RFC 7540 §8.1.2.
+            // Detect directly from the response protocol version, not from the request record,
+            // to handle HTTP/1.1 fallback correctly even when H2 was requested.
+            boolean isHttp2 = reactorNettyResponse.version().majorVersion() == 2;
+            HttpHeaders headers = new HttpHeaders(reactorNettyResponse.responseHeaders().size(), isHttp2);
             reactorNettyResponse.responseHeaders().forEach(e -> headers.set(e.getKey(), e.getValue()));
             return headers;
         }
