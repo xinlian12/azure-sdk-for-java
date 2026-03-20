@@ -230,11 +230,6 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         // If there is any error in the header response this throws exception
         validateOrThrow(request, HttpResponseStatus.valueOf(statusCode), headers, retainedContent);
 
-        // For HTTP/2, header keys are already lowercase per RFC 7540 §8.1.2 and were stored
-        // as-is (no toLowerCase) in HttpHeaders. Use toMap() directly to avoid redundant work.
-        Map<String, String> headerMap = HttpUtils.unescape(
-            headers.areKeysLowerCased() ? headers.toMap() : headers.toLowerCaseMap());
-
         int size;
         if ((size = retainedContent.readableBytes()) > 0) {
             if (leakDetectionDebuggingEnabled) {
@@ -245,7 +240,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
             return new StoreResponse(
                 endpoint,
                 statusCode,
-                headerMap,
+                HttpUtils.unescape(headers.toLowerCaseMap()),
                 new ByteBufInputStream(retainedContent, true),
                 size);
         } else {
@@ -255,7 +250,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         return new StoreResponse(
             endpoint,
             statusCode,
-            headerMap,
+            HttpUtils.unescape(headers.toLowerCaseMap()),
             null,
             0);
     }
@@ -736,8 +731,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 String.format("%s, StatusCode: %s", cosmosError.getMessage(), statusCodeString),
                 cosmosError.getPartitionedQueryExecutionInfo());
 
-            CosmosException dce = BridgeInternal.createCosmosException(request.requestContext.resourcePhysicalAddress, statusCode, cosmosError,
-                headers.areKeysLowerCased() ? headers.toMap() : headers.toLowerCaseMap());
+            CosmosException dce = BridgeInternal.createCosmosException(request.requestContext.resourcePhysicalAddress, statusCode, cosmosError, headers.toLowerCaseMap());
             BridgeInternal.setRequestHeaders(dce, request.getHeaders());
             throw dce;
         }
