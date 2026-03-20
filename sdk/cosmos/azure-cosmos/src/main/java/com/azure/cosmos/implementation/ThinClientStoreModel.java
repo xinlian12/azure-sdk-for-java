@@ -3,6 +3,7 @@
 package com.azure.cosmos.implementation;
 
 import com.azure.cosmos.ConsistencyLevel;
+import com.azure.cosmos.implementation.directconnectivity.HttpUtils;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdConstants;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdFramer;
@@ -99,7 +100,7 @@ public class ThinClientStoreModel extends RxGatewayStoreModel {
         String endpoint,
         RxDocumentServiceRequest request,
         int statusCode,
-        HttpHeaders headers,
+        Map<String, String> headers,
         ByteBuf content) {
 
         if (content == null) {
@@ -141,7 +142,7 @@ public class ThinClientStoreModel extends RxGatewayStoreModel {
                             endpoint,
                             request,
                             response.getStatus().code(),
-                            new HttpHeaders(response.getHeaders().asMap(request.getActivityId())),
+                            HttpUtils.unescape(response.getHeaders().asMap(request.getActivityId())),
                             payloadBuf
                         );
 

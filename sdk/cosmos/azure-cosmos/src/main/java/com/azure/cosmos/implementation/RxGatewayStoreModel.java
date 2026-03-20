@@ -213,7 +213,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         String endpoint,
         RxDocumentServiceRequest request,
         int statusCode,
-        HttpHeaders headers,
+        Map<String, String> headers,
         ByteBuf retainedContent) {
 
         checkNotNull(headers, "Argument 'headers' must not be null.");
@@ -240,7 +240,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
             return new StoreResponse(
                 endpoint,
                 statusCode,
-                HttpUtils.unescape(headers.toLowerCaseMap()),
+                headers,
                 new ByteBufInputStream(retainedContent, true),
                 size);
         } else {
@@ -250,7 +250,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         return new StoreResponse(
             endpoint,
             statusCode,
-            HttpUtils.unescape(headers.toLowerCaseMap()),
+            headers,
             null,
             0);
     }
@@ -439,8 +439,9 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
             .publishOn(CosmosSchedulers.TRANSPORT_RESPONSE_BOUNDED_ELASTIC)
             .flatMap(httpResponse -> {
 
-                // header key/value pairs
-                HttpHeaders httpResponseHeaders = httpResponse.headers();
+                // Build lowercase header map directly from transport headers.
+                // For HTTP/2, keys are already lowercase (no toLowerCase overhead).
+                Map<String, String> responseHeaders = HttpUtils.unescape(httpResponse.headersAsLowerCaseMap());
                 int httpResponseStatus = httpResponse.statusCode();
 
                 // Track the retained ByteBuf so we can release it as a safety net in doFinally
@@ -505,7 +506,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                         }
                         StoreResponse rsp = request
                             .getEffectiveHttpTransportSerializer(this)
-                            .unwrapToStoreResponse(httpRequest.uri().toString(), request, httpResponseStatus, httpResponseHeaders, content);
+                            .unwrapToStoreResponse(httpRequest.uri().toString(), request, httpResponseStatus, responseHeaders, content);
 
                         // Only clear retainedBufRef AFTER StoreResponse successfully takes ownership.
                         // If unwrapToStoreResponse throws, retainedBufRef remains set so doFinally
@@ -709,7 +710,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
 
     private void validateOrThrow(RxDocumentServiceRequest request,
                                  HttpResponseStatus status,
-                                 HttpHeaders headers,
+                                 Map<String, String> headers,
                                  ByteBuf retainedBodyAsByteBuf) {
 
         int statusCode = status.code();
@@ -731,7 +732,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 String.format("%s, StatusCode: %s", cosmosError.getMessage(), statusCodeString),
                 cosmosError.getPartitionedQueryExecutionInfo());
 
-            CosmosException dce = BridgeInternal.createCosmosException(request.requestContext.resourcePhysicalAddress, statusCode, cosmosError, headers.toLowerCaseMap());
+            CosmosException dce = BridgeInternal.createCosmosException(request.requestContext.resourcePhysicalAddress, statusCode, cosmosError, headers);
             BridgeInternal.setRequestHeaders(dce, request.getHeaders());
             throw dce;
         }
