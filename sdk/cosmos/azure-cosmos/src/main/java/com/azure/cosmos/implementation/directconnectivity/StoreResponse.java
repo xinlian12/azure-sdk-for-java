@@ -288,9 +288,11 @@ public class StoreResponse {
 
         Map<String, String> headers = new HashMap<>(this.responseHeaders);
         String requestChargeKey = HttpConstants.HttpHeaders.REQUEST_CHARGE.toLowerCase(Locale.ROOT);
-        double currentRequestCharge = this.getRequestCharge();
-        double newRequestCharge = currentRequestCharge + additionalRequestCharge;
-        headers.put(requestChargeKey, String.valueOf(newRequestCharge));
+        if (headers.containsKey(requestChargeKey)) {
+            double currentRequestCharge = this.getRequestCharge();
+            double newRequestCharge = currentRequestCharge + additionalRequestCharge;
+            headers.put(requestChargeKey, String.valueOf(newRequestCharge));
+        }
 
         return new StoreResponse(
             this.endpoint,
