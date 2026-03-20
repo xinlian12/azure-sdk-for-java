@@ -23,6 +23,7 @@ import java.util.function.Consumer;
 public final class CosmosPagedIterable<T> extends ContinuablePagedIterable<String, T, FeedResponse<T>> {
     private static final int SMALLEST_POSSIBLE_QUEUE_SIZE_LARGER_THAN_ONE = 8;
     private final CosmosPagedFlux<T> cosmosPagedFlux;
+    
 
     /**
      * Creates instance given {@link CosmosPagedFlux}.
