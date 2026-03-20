@@ -20,7 +20,6 @@ import com.azure.cosmos.implementation.ISessionContainer;
 import com.azure.cosmos.implementation.ISessionToken;
 import com.azure.cosmos.implementation.InternalServerErrorException;
 import com.azure.cosmos.implementation.OperationType;
-import com.azure.cosmos.implementation.RMResources;
 import com.azure.cosmos.implementation.ResourceType;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.RxDocumentServiceResponse;
@@ -174,19 +173,7 @@ public class StoreClient implements IStoreClient {
         StoreResponse storeResponse,
         RxDocumentServiceRequest request) throws InternalServerErrorException {
 
-        if (storeResponse.getResponseHeaderNames().length != storeResponse.getResponseHeaderValues().length) {
-            throw new InternalServerErrorException(
-                Exceptions.getInternalServerErrorMessage(RMResources.InvalidBackendResponse),
-                HttpConstants.SubStatusCodes.INVALID_BACKEND_RESPONSE);
-        }
-
-        Map<String, String> headers = new HashMap<>(storeResponse.getResponseHeaderNames().length);
-        for (int idx = 0; idx < storeResponse.getResponseHeaderNames().length; idx++) {
-            String name = storeResponse.getResponseHeaderNames()[idx];
-            String value = storeResponse.getResponseHeaderValues()[idx];
-
-            headers.put(name, value);
-        }
+        Map<String, String> headers = new HashMap<>(storeResponse.getResponseHeaders());
 
         this.updateResponseHeader(request, headers);
         this.captureSessionToken(request, headers);

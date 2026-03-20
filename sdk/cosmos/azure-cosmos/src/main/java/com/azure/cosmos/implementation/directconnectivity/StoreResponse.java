@@ -15,9 +15,9 @@ import io.netty.util.IllegalReferenceCountException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -30,8 +30,7 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
 public class StoreResponse {
     private static final Logger logger = LoggerFactory.getLogger(StoreResponse.class.getSimpleName());
     final private int status;
-    final private String[] responseHeaderNames;
-    final private String[] responseHeaderValues;
+    final private Map<String, String> responseHeaders;
     private int requestPayloadLength;
     private RequestTimeline requestTimeline;
     private RntbdChannelAcquisitionTimeline channelAcquisitionTimeline;
@@ -56,22 +55,14 @@ public class StoreResponse {
         checkArgument((contentStream == null) == (responsePayloadLength == 0),
             "Parameter 'contentStream' must be consistent with 'responsePayloadLength'.");
         requestTimeline = RequestTimeline.empty();
-        responseHeaderNames = new String[headerMap.size()];
-        responseHeaderValues = new String[headerMap.size()];
+        this.responseHeaders = toLowerCasedMap(headerMap);
         this.endpoint = endpoint != null ? endpoint : "";
-
-        int i = 0;
-        for (Map.Entry<String, String> headerEntry : headerMap.entrySet()) {
-            responseHeaderNames[i] = headerEntry.getKey();
-            responseHeaderValues[i] = headerEntry.getValue();
-            i++;
-        }
 
         this.status = status;
         replicaStatusList = new HashMap<>();
         if (contentStream != null) {
             try {
-                this.responsePayload = new JsonNodeStorePayload(contentStream, responsePayloadLength, headerMap);
+                this.responsePayload = new JsonNodeStorePayload(contentStream, responsePayloadLength, this.responseHeaders);
             } finally {
                 try {
                     contentStream.close();
@@ -91,37 +82,34 @@ public class StoreResponse {
         String endpoint,
         int status,
         Map<String, String> headerMap,
-        JsonNodeStorePayload responsePayload) {
+        JsonNodeStorePayload responsePayload,
+        boolean keysAlreadyLowerCased) {
 
         checkNotNull(endpoint, "Parameter 'endpoint' must not be null.");
 
         requestTimeline = RequestTimeline.empty();
-        responseHeaderNames = new String[headerMap.size()];
-        responseHeaderValues = new String[headerMap.size()];
+        this.responseHeaders = keysAlreadyLowerCased ? headerMap : toLowerCasedMap(headerMap);
         this.endpoint = endpoint;
-
-        int i = 0;
-        for (Map.Entry<String, String> headerEntry : headerMap.entrySet()) {
-            responseHeaderNames[i] = headerEntry.getKey();
-            responseHeaderValues[i] = headerEntry.getValue();
-            i++;
-        }
 
         this.status = status;
         replicaStatusList = new HashMap<>();
         this.responsePayload = responsePayload;
     }
 
+    private static Map<String, String> toLowerCasedMap(Map<String, String> map) {
+        Map<String, String> result = new HashMap<>(map.size());
+        for (Map.Entry<String, String> entry : map.entrySet()) {
+            result.put(entry.getKey().toLowerCase(Locale.ROOT), entry.getValue());
+        }
+        return result;
+    }
+
     public int getStatus() {
         return status;
     }
 
-    public String[] getResponseHeaderNames() {
-        return responseHeaderNames;
-    }
-
-    public String[] getResponseHeaderValues() {
-        return responseHeaderValues;
+    public Map<String, String> getResponseHeaders() {
+        return responseHeaders;
     }
 
     public void setRntbdRequestLength(int rntbdRequestLength) {
@@ -191,31 +179,19 @@ public class StoreResponse {
     }
 
     public String getHeaderValue(String attribute) {
-        if (this.responseHeaderValues == null || this.responseHeaderNames.length != this.responseHeaderValues.length) {
+        if (this.responseHeaders == null) {
             return null;
         }
 
-        for (int i = 0; i < responseHeaderNames.length; i++) {
-            if (responseHeaderNames[i].equalsIgnoreCase(attribute)) {
-                return responseHeaderValues[i];
-            }
-        }
-
-        return null;
+        return responseHeaders.get(attribute.toLowerCase(Locale.ROOT));
     }
 
-    //NOTE: only used for testing purpose to change the response header value
     void setHeaderValue(String headerName, String value) {
-        if (this.responseHeaderValues == null || this.responseHeaderNames.length != this.responseHeaderValues.length) {
+        if (this.responseHeaders == null) {
             return;
         }
 
-        for (int i = 0; i < responseHeaderNames.length; i++) {
-            if (responseHeaderNames[i].equalsIgnoreCase(headerName)) {
-                responseHeaderValues[i] = value;
-                break;
-            }
-        }
+        this.responseHeaders.put(headerName.toLowerCase(Locale.ROOT), value);
     }
 
     public double getRequestCharge() {
@@ -310,23 +286,18 @@ public class StoreResponse {
 
     public StoreResponse withRemappedStatusCode(int newStatusCode, double additionalRequestCharge) {
 
-        Map<String, String> headers = new HashMap<>();
-        for (int i = 0; i < this.responseHeaderNames.length; i++) {
-            String headerName = this.responseHeaderNames[i];
-            if (headerName.equalsIgnoreCase(HttpConstants.HttpHeaders.REQUEST_CHARGE)) {
-                double currentRequestCharge = this.getRequestCharge();
-                double newRequestCharge = currentRequestCharge + additionalRequestCharge;
-                headers.put(headerName, String.valueOf(newRequestCharge));
-            } else {
-                headers.put(headerName, this.responseHeaderValues[i]);
-            }
-        }
+        Map<String, String> headers = new HashMap<>(this.responseHeaders);
+        String requestChargeKey = HttpConstants.HttpHeaders.REQUEST_CHARGE.toLowerCase(Locale.ROOT);
+        double currentRequestCharge = this.getRequestCharge();
+        double newRequestCharge = currentRequestCharge + additionalRequestCharge;
+        headers.put(requestChargeKey, String.valueOf(newRequestCharge));
 
         return new StoreResponse(
             this.endpoint,
             newStatusCode,
             headers,
-            this.responsePayload);
+            this.responsePayload,
+            true);
     }
 
     public String getEndpoint() {

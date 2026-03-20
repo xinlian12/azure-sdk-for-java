@@ -49,10 +49,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -69,13 +71,13 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     private static final boolean leakDetectionDebuggingEnabled = ResourceLeakDetector.getLevel().ordinal() >=
         ResourceLeakDetector.Level.ADVANCED.ordinal();
     private static final boolean HTTP_CONNECTION_WITHOUT_TLS_ALLOWED = Configs.isHttpConnectionWithoutTLSAllowed();
-    private static final List<String> headersNeedToBeEscaped = Arrays.asList(
+    private static final Set<String> headersNeedToBeEscaped = new HashSet<>(Arrays.asList(
         HttpConstants.HttpHeaders.PARTITION_KEY,
         HttpConstants.HttpHeaders.POST_TRIGGER_EXCLUDE,
         HttpConstants.HttpHeaders.POST_TRIGGER_INCLUDE,
         HttpConstants.HttpHeaders.PRE_TRIGGER_EXCLUDE,
         HttpConstants.HttpHeaders.PRE_TRIGGER_INCLUDE
-    );
+    ));
 
     private final DiagnosticsClientContext clientContext;
     private final Logger logger = LoggerFactory.getLogger(RxGatewayStoreModel.class);
