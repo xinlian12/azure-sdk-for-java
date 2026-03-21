@@ -142,7 +142,7 @@ public class ThinClientStoreModel extends RxGatewayStoreModel {
                             endpoint,
                             request,
                             response.getStatus().code(),
-                            HttpUtils.unescape(response.getHeaders().asMap(request.getActivityId())),
+                            HttpUtils.unescape(new HashMap<>(response.getHeaders().asMap(request.getActivityId()))),
                             payloadBuf
                         );
 

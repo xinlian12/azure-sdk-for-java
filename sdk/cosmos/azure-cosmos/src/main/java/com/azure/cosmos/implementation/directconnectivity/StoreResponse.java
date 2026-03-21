@@ -15,6 +15,7 @@ import io.netty.util.IllegalReferenceCountException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -109,7 +110,7 @@ public class StoreResponse {
     }
 
     public Map<String, String> getResponseHeaders() {
-        return responseHeaders;
+        return Collections.unmodifiableMap(responseHeaders);
     }
 
     public void setRntbdRequestLength(int rntbdRequestLength) {
