@@ -237,7 +237,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 logger.debug("RxGatewayStoreModel before creating StoreResponse - refCnt: {}", retainedContent.refCnt());
             }
 
-            return new StoreResponse(
+            return StoreResponse.withLowerCasedHeaders(
                 endpoint,
                 statusCode,
                 headers,
@@ -247,7 +247,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
             retainedContent.release();
         }
 
-        return new StoreResponse(
+        return StoreResponse.withLowerCasedHeaders(
             endpoint,
             statusCode,
             headers,

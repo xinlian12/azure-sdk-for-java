@@ -97,6 +97,44 @@ public class StoreResponse {
         this.responsePayload = responsePayload;
     }
 
+    /**
+     * Creates a StoreResponse taking ownership of a map whose keys are already lowercase.
+     * Callers must guarantee that all keys in {@code lowerCasedHeaders} are lowercase;
+     * no defensive copy or key normalization is performed.
+     */
+    public static StoreResponse withLowerCasedHeaders(
+        String endpoint,
+        int status,
+        Map<String, String> lowerCasedHeaders,
+        ByteBufInputStream contentStream,
+        int responsePayloadLength) {
+
+        checkArgument((contentStream == null) == (responsePayloadLength == 0),
+            "Parameter 'contentStream' must be consistent with 'responsePayloadLength'.");
+
+        JsonNodeStorePayload payload = null;
+        if (contentStream != null) {
+            try {
+                payload = new JsonNodeStorePayload(contentStream, responsePayloadLength, lowerCasedHeaders);
+            } finally {
+                try {
+                    contentStream.close();
+                } catch (Throwable e) {
+                    if (!(e instanceof IllegalReferenceCountException)) {
+                        logger.warn("Failed to close content stream. This may cause a Netty ByteBuf leak.", e);
+                    }
+                }
+            }
+        }
+
+        return new StoreResponse(
+            endpoint != null ? endpoint : "",
+            status,
+            lowerCasedHeaders,
+            payload,
+            true);
+    }
+
     private static Map<String, String> toLowerCasedMap(Map<String, String> map) {
         Map<String, String> result = new HashMap<>(map.size());
         for (Map.Entry<String, String> entry : map.entrySet()) {

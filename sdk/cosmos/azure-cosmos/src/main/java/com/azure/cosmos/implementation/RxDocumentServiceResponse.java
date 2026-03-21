@@ -33,6 +33,8 @@ public class RxDocumentServiceResponse {
 
     public RxDocumentServiceResponse(DiagnosticsClientContext diagnosticsClientContext, StoreResponse response) {
 
+        // StoreResponse.getResponseHeaders() returns an unmodifiable view over lowercase-keyed map.
+        // Copy it for RxDocumentServiceResponse's own mutable use (callers may put into headersMap).
         this.headersMap = new HashMap<>(response.getResponseHeaders());
 
         // Gets status code.
