@@ -30,3 +30,4 @@
 
 # Always keep local version of agentic workflow files on merge
 .github/aw/** merge=ours
+.github/workflows/** merge=ours
