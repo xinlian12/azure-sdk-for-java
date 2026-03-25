@@ -41,6 +41,9 @@ public class HttpUtils {
 
     public static String urlDecode(String url) {
         try {
+            if (url.indexOf('+') < 0) {
+                return URLDecoder.decode(url, UrlEncodingInfo.UTF_8);
+            }
             return URLDecoder.decode(PLUS_SYMBOL_ESCAPE_PATTERN.matcher(url).replaceAll(UrlEncodingInfo.PLUS_SYMBOL_URI_ENCODING),
                 UrlEncodingInfo.UTF_8);
         } catch (UnsupportedEncodingException e) {
@@ -53,14 +56,9 @@ public class HttpUtils {
         if (headers == null) {
             return new HashMap<>();
         }
-        HashMap<String, String> map = new HashMap<>(headers.size());
-        for (Entry<String, String> entry : headers.toMap().entrySet()) {
-            if (entry.getKey().equals(HttpConstants.HttpHeaders.OWNER_FULL_NAME)) {
-                map.put(entry.getKey(), HttpUtils.urlDecode(entry.getValue()));
-            } else {
-                map.put(entry.getKey(), entry.getValue());
-            }
-        }
+        HashMap<String, String> map = new HashMap<>(headers.toMap());
+        map.computeIfPresent(HttpConstants.HttpHeaders.OWNER_FULL_NAME,
+            (key, value) -> HttpUtils.urlDecode(value));
         return map;
     }
 

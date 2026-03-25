@@ -44,7 +44,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
@@ -69,6 +68,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     private static final boolean leakDetectionDebuggingEnabled = ResourceLeakDetector.getLevel().ordinal() >=
         ResourceLeakDetector.Level.ADVANCED.ordinal();
     private static final boolean HTTP_CONNECTION_WITHOUT_TLS_ALLOWED = Configs.isHttpConnectionWithoutTLSAllowed();
+    private static final String HTTPS_SCHEME = "https";
     private static final List<String> headersNeedToBeEscaped = Arrays.asList(
         HttpConstants.HttpHeaders.PARTITION_KEY,
         HttpConstants.HttpHeaders.POST_TRIGGER_EXCLUDE,
@@ -194,14 +194,14 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     }
 
     @Override
-    public HttpRequest wrapInHttpRequest(RxDocumentServiceRequest request, URI requestUri) throws Exception {
+    public HttpRequest wrapInHttpRequest(RxDocumentServiceRequest request, String requestUriString, int port) throws Exception {
         HttpMethod method = getHttpMethod(request);
         HttpHeaders httpHeaders = this.getHttpRequestHeaders(request.getHeaders());
 
         Flux<byte[]> contentAsByteArray = request.getContentAsByteArrayFlux();
         return new HttpRequest(method,
-            requestUri,
-            requestUri.getPort(),
+            requestUriString,
+            port,
             httpHeaders,
             contentAsByteArray);
     }
@@ -279,14 +279,15 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 request.requestContext.cosmosDiagnostics = clientContext.createDiagnostics();
             }
 
-            URI uri = getUri(request);
-            request.requestContext.resourcePhysicalAddress = uri.toString();
+            String uriString = getUriAsString(request);
+            int port = getPortForRequest(request);
+            request.requestContext.resourcePhysicalAddress = uriString;
 
             if (this.throughputControlStore != null) {
-                return this.throughputControlStore.processRequest(request, Mono.defer(() -> this.performRequestInternal(request, uri)));
+                return this.throughputControlStore.processRequest(request, Mono.defer(() -> this.performRequestInternal(request, uriString, port)));
             }
 
-            return this.performRequestInternal(request, uri);
+            return this.performRequestInternal(request, uriString, port);
         } catch (Exception e) {
             return Mono.error(e);
         }
@@ -297,31 +298,32 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     }
 
     /**
-     * Given the request it creates an flux which upon subscription issues HTTP call and emits one RxDocumentServiceResponse.
+     * Given the request it creates a flux which upon subscription issues HTTP call and emits one RxDocumentServiceResponse.
      *
      * @param request
-     * @param requestUri
+     * @param requestUriString
+     * @param port
      * @return Flux<RxDocumentServiceResponse>
      */
-    public Mono<RxDocumentServiceResponse> performRequestInternal(RxDocumentServiceRequest request, URI requestUri) {
+    public Mono<RxDocumentServiceResponse> performRequestInternal(RxDocumentServiceRequest request, String requestUriString, int port) {
         if (!partitionKeyRangeResolutionNeeded(request)) {
-            return this.performRequestInternalCore(request, requestUri);
+            return this.performRequestInternalCore(request, requestUriString, port);
         }
 
         return this
             .resolvePartitionKeyRangeByPkRangeId(request)
             .flatMap((pkRange) -> {
                 request.requestContext.resolvedPartitionKeyRange = pkRange;
-                return this.performRequestInternalCore(request, requestUri);
+                return this.performRequestInternalCore(request, requestUriString, port);
             });
     }
 
-    private Mono<RxDocumentServiceResponse> performRequestInternalCore(RxDocumentServiceRequest request, URI requestUri) {
+    private Mono<RxDocumentServiceResponse> performRequestInternalCore(RxDocumentServiceRequest request, String requestUriString, int port) {
 
         try {
             HttpRequest httpRequest = request
                 .getEffectiveHttpTransportSerializer(this)
-                .wrapInHttpRequest(request, requestUri);
+                .wrapInHttpRequest(request, requestUriString, port);
 
             // Capture the request record early so it's available on both success and error paths.
             // Each retry creates a new HttpRequest with a new record, so this is per-attempt.
@@ -378,11 +380,33 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         return this.globalEndpointManager.resolveServiceEndpoint(request).getGatewayRegionalEndpoint();
     }
 
-    private URI getUri(RxDocumentServiceRequest request) throws URISyntaxException {
+    /**
+     * Builds the URI prefix string (scheme://host[:port]) from a root URI.
+     * This is cached per root URI to avoid repeated string construction.
+     *
+     * @param rootUri the root endpoint URI
+     * @return the URI prefix string, e.g. "https://account.documents.azure.com:443"
+     */
+    private static String buildUriPrefix(URI rootUri) {
+        String scheme = HTTP_CONNECTION_WITHOUT_TLS_ALLOWED ? rootUri.getScheme() : HTTPS_SCHEME;
+        int port = rootUri.getPort();
+        String host = rootUri.getHost();
+
+        if (port > 0) {
+            return scheme + "://" + host + ":" + port;
+        }
+        return scheme + "://" + host;
+    }
+
+    /**
+     * Builds the full request URI as a string, avoiding the cost of {@code new URI()} construction.
+     * The root URI prefix (scheme://host:port) is stable per endpoint and only the path varies per request.
+     * Non-ASCII characters in the path are percent-encoded to produce the same output as {@link URI#toASCIIString()}.
+     */
+    private String getUriAsString(RxDocumentServiceRequest request) {
         URI rootUri = request.getEndpointOverride();
         if (rootUri == null) {
             if (request.getIsMedia()) {
-                // For media read request, always use the write endpoint.
                 rootUri = this.globalEndpointManager.getWriteEndpoints().get(0).getGatewayRegionalEndpoint();
             } else {
                 rootUri = getRootUri(request);
@@ -394,16 +418,92 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
             path = StringUtils.EMPTY;
         }
 
-        // allow using http connections if customer opt in to use http for vnext emulator
-        String scheme = HTTP_CONNECTION_WITHOUT_TLS_ALLOWED ? rootUri.getScheme() : "https";
+        String prefix = buildUriPrefix(rootUri);
+        String encodedPath = encodeNonAsciiPath(ensureSlashPrefixed(path));
 
-        return new URI(scheme,
-            null,
-            rootUri.getHost(),
-            rootUri.getPort(),
-            ensureSlashPrefixed(path),
-            null,  // Query string not used.
-            null);
+        return prefix + encodedPath;
+    }
+
+    /**
+     * Returns the port for the request's root URI.
+     */
+    private int getPortForRequest(RxDocumentServiceRequest request) {
+        URI rootUri = request.getEndpointOverride();
+        if (rootUri == null) {
+            if (request.getIsMedia()) {
+                rootUri = this.globalEndpointManager.getWriteEndpoints().get(0).getGatewayRegionalEndpoint();
+            } else {
+                rootUri = getRootUri(request);
+            }
+        }
+        return rootUri.getPort();
+    }
+
+    /**
+     * Percent-encodes characters in a URI path that are not allowed unencoded per RFC 3986.
+     * This produces the same encoding as constructing a {@link URI} via the 7-arg constructor
+     * and calling {@link URI#toASCIIString()}.
+     * <p>
+     * Characters that are NOT encoded (safe in URI paths per RFC 3986):
+     * <ul>
+     *   <li>unreserved: A-Z a-z 0-9 - . _ ~</li>
+     *   <li>sub-delims: ! $ &amp; ' ( ) * + , ; =</li>
+     *   <li>pchar extras: : @</li>
+     *   <li>path separator: /</li>
+     * </ul>
+     *
+     * @param path the path to encode
+     * @return the encoded path (same reference if no encoding needed)
+     */
+    static String encodeNonAsciiPath(String path) {
+        if (path == null || path.isEmpty()) {
+            return path;
+        }
+
+        boolean needsEncoding = false;
+        for (int i = 0; i < path.length(); i++) {
+            if (!isPathCharSafe(path.charAt(i))) {
+                needsEncoding = true;
+                break;
+            }
+        }
+        if (!needsEncoding) {
+            return path;
+        }
+
+        byte[] bytes = path.getBytes(StandardCharsets.UTF_8);
+        StringBuilder sb = new StringBuilder(bytes.length + (bytes.length >> 1));
+        for (byte b : bytes) {
+            int ub = b & 0xFF;
+            if (isPathCharSafe(ub)) {
+                sb.append((char) ub);
+            } else {
+                sb.append('%');
+                sb.append(Character.toUpperCase(Character.forDigit(ub >> 4, 16)));
+                sb.append(Character.toUpperCase(Character.forDigit(ub & 0xF, 16)));
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Returns true if the character is safe (does not need percent-encoding) in a URI path
+     * per RFC 3986 section 3.3.
+     */
+    private static boolean isPathCharSafe(int c) {
+        if (c >= 'a' && c <= 'z') return true;
+        if (c >= 'A' && c <= 'Z') return true;
+        if (c >= '0' && c <= '9') return true;
+        switch (c) {
+            case '-': case '.': case '_': case '~':                          // unreserved
+            case '!': case '$': case '&': case '\'': case '(': case ')':     // sub-delims
+            case '*': case '+': case ',': case ';': case '=':                // sub-delims
+            case ':': case '@':                                              // pchar
+            case '/':                                                        // path separator
+                return true;
+            default:
+                return false;
+        }
     }
 
     private String ensureSlashPrefixed(String path) {
@@ -503,7 +603,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                         }
                         StoreResponse rsp = request
                             .getEffectiveHttpTransportSerializer(this)
-                            .unwrapToStoreResponse(httpRequest.uri().toString(), request, httpResponseStatus, httpResponseHeaders, content);
+                            .unwrapToStoreResponse(httpRequest.uriAsString(), request, httpResponseStatus, httpResponseHeaders, content);
 
                         // Only clear retainedBufRef AFTER StoreResponse successfully takes ownership.
                         // If unwrapToStoreResponse throws, retainedBufRef remains set so doFinally
@@ -619,7 +719,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 ImplementationBridgeHelpers
                     .CosmosExceptionHelper
                     .getCosmosExceptionAccessor()
-                    .setRequestUri(dce, Uri.create(httpRequest.uri().toString()));
+                    .setRequestUri(dce, Uri.create(httpRequest.uriAsString()));
 
                 if (request.requestContext.cosmosDiagnostics != null) {
                     if (httpRequest.reactorNettyRequestRecord() != null) {
@@ -671,7 +771,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                     ImplementationBridgeHelpers
                         .CosmosExceptionHelper
                         .getCosmosExceptionAccessor()
-                        .setRequestUri(oce, Uri.create(httpRequest.uri().toString()));
+                        .setRequestUri(oce, Uri.create(httpRequest.uriAsString()));
 
                     if (request.requestContext.getCrossRegionAvailabilityContext() != null) {
 
