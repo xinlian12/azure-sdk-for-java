@@ -33,6 +33,7 @@ import reactor.netty.transport.ProxyProvider;
 import reactor.util.context.Context;
 
 import java.lang.invoke.WrongMethodTypeException;
+import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
@@ -202,7 +203,7 @@ public class ReactorNettyClient implements HttpClient {
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
             .responseTimeout(responseTimeout)
             .request(HttpMethod.valueOf(request.httpMethod().toString()))
-            .uri(request.uriAsString())
+            .uri(URI.create(request.uriAsString()))
             .send(bodySendDelegate(request))
             .responseConnection((reactorNettyResponse, reactorNettyConnection) -> {
                 HttpResponse httpResponse = new ReactorNettyHttpResponse(reactorNettyResponse,
