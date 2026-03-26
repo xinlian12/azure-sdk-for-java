@@ -400,11 +400,9 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     }
 
     /**
-     * Builds the URI prefix string (scheme://host[:port]) from a root URI.
-     * Results are cached per root URI to avoid repeated string construction.
-     *
-     * @param rootUri the root endpoint URI
-     * @return the URI prefix string, e.g. "https://account.documents.azure.com:443"
+     * Returns the cached URI prefix string (scheme://host[:port]) for the given root URI.
+     * Uses the JDK URI constructor to build the prefix, ensuring correct formatting.
+     * The HTTPS scheme is enforced unless HTTP connections without TLS are explicitly allowed.
      */
     private String getOrBuildUriPrefix(URI rootUri) {
         return uriPrefixCache.computeIfAbsent(rootUri, RxGatewayStoreModel::buildUriPrefix);
@@ -412,13 +410,11 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
 
     private static String buildUriPrefix(URI rootUri) {
         String scheme = HTTP_CONNECTION_WITHOUT_TLS_ALLOWED ? rootUri.getScheme() : HTTPS_SCHEME;
-        int port = rootUri.getPort();
-        String host = rootUri.getHost();
-
-        if (port > 0) {
-            return scheme + "://" + host + ":" + port;
+        try {
+            return new URI(scheme, null, rootUri.getHost(), rootUri.getPort(), null, null, null).toString();
+        } catch (URISyntaxException e) {
+            throw new IllegalStateException("Invalid root URI: " + rootUri, e);
         }
-        return scheme + "://" + host;
     }
 
     /**
