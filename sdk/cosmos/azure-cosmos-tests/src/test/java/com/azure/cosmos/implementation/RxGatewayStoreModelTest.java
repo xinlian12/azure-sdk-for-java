@@ -434,10 +434,10 @@ public class RxGatewayStoreModelTest {
         SDK  // SDK maintained session token
     }
 
-    // --- percentEncodePath tests ---
+    // --- encodePathIfNeeded tests ---
 
-    @DataProvider(name = "percentEncodePathProvider")
-    public Object[][] percentEncodePathProvider() {
+    @DataProvider(name = "encodePathIfNeededProvider")
+    public Object[][] encodePathIfNeededProvider() {
         return new Object[][]{
             // ASCII-safe path (fast-path no-op)
             { "/dbs/mydb/colls/mycoll", "/dbs/mydb/colls/mycoll" },
@@ -467,14 +467,14 @@ public class RxGatewayStoreModelTest {
         };
     }
 
-    @Test(groups = "unit", dataProvider = "percentEncodePathProvider")
-    public void percentEncodePathProducesCorrectOutput(String input, String expected) {
-        String actual = RxGatewayStoreModel.percentEncodePath(input);
+    @Test(groups = "unit", dataProvider = "encodePathIfNeededProvider")
+    public void encodePathIfNeededProducesCorrectOutput(String input, String expected) {
+        String actual = RxGatewayStoreModel.encodePathIfNeeded(input);
         assertThat(actual).isEqualTo(expected);
     }
 
     @Test(groups = "unit")
-    public void percentEncodePathMatchesJdkUriConstructor() throws Exception {
+    public void encodePathIfNeededMatchesJdkUriConstructor() throws Exception {
         // Verify parity with new URI(7-arg).toASCIIString() for various paths
         String[] paths = {
             "/dbs/mydb/colls/mycoll",
@@ -494,7 +494,7 @@ public class RxGatewayStoreModelTest {
             String prefix = "https://" + host + ":" + port;
             String jdkPath = jdkEncoded.substring(prefix.length());
 
-            String ourPath = RxGatewayStoreModel.percentEncodePath(path);
+            String ourPath = RxGatewayStoreModel.encodePathIfNeeded(path);
 
             assertThat(ourPath)
                 .as("Path encoding should match JDK URI for input: %s", path)
@@ -503,9 +503,9 @@ public class RxGatewayStoreModelTest {
     }
 
     @Test(groups = "unit")
-    public void percentEncodePathReturnsSameReferenceForSafePaths() {
+    public void encodePathIfNeededReturnsSameReferenceForSafePaths() {
         String safePath = "/dbs/mydb/colls/mycoll/docs/docid";
-        String result = RxGatewayStoreModel.percentEncodePath(safePath);
+        String result = RxGatewayStoreModel.encodePathIfNeeded(safePath);
         // Should return the exact same reference (no new String allocation)
         assertThat(result).isSameAs(safePath);
     }

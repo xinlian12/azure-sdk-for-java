@@ -44,6 +44,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
@@ -434,9 +435,9 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         }
 
         String prefix = getOrBuildUriPrefix(rootUri);
-        String encodedPath = percentEncodePath(ensureSlashPrefixed(path));
+        String safePath = encodePathIfNeeded(ensureSlashPrefixed(path));
 
-        return new ResolvedRequestUri(prefix + encodedPath, rootUri.getPort());
+        return new ResolvedRequestUri(prefix + safePath, rootUri.getPort());
     }
 
     /**
@@ -456,70 +457,53 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     }
 
     /**
-     * Percent-encodes characters in a URI path that are not allowed unencoded per RFC 3986.
-     * This produces the same encoding as constructing a {@link URI} via the 7-arg constructor
-     * and calling {@link URI#toASCIIString()}.
+     * Encodes a URI path if it contains characters that need percent-encoding.
      * <p>
-     * Characters that are NOT encoded (safe in URI paths per RFC 3986):
-     * <ul>
-     *   <li>unreserved: A-Z a-z 0-9 - . _ ~</li>
-     *   <li>sub-delims: ! $ &amp; ' ( ) * + , ; =</li>
-     *   <li>pchar extras: : @</li>
-     *   <li>path separator: /</li>
-     * </ul>
+     * For the common case (ASCII-safe paths), returns the input unchanged.
+     * For rare non-ASCII paths (e.g. Unicode document IDs), falls back to the JDK's
+     * {@link URI} constructor to perform RFC 3986-compliant encoding — the same
+     * encoding the main branch uses via the 7-arg URI constructor.
      *
      * @param path the path to encode
-     * @return the encoded path (same reference if no encoding needed)
+     * @return the path, percent-encoded if necessary
      */
-    static String percentEncodePath(String path) {
+    static String encodePathIfNeeded(String path) {
         if (path == null || path.isEmpty()) {
             return path;
         }
 
-        boolean needsEncoding = false;
-        for (int i = 0; i < path.length(); i++) {
-            if (!isPathCharSafe(path.charAt(i))) {
-                needsEncoding = true;
-                break;
-            }
-        }
-        if (!needsEncoding) {
+        if (isAsciiSafe(path)) {
             return path;
         }
 
-        byte[] bytes = path.getBytes(StandardCharsets.UTF_8);
-        StringBuilder sb = new StringBuilder(bytes.length + (bytes.length >> 1));
-        for (byte b : bytes) {
-            int ub = b & 0xFF;
-            if (isPathCharSafe(ub)) {
-                sb.append((char) ub);
-            } else {
-                sb.append('%');
-                sb.append(Character.toUpperCase(Character.forDigit(ub >> 4, 16)));
-                sb.append(Character.toUpperCase(Character.forDigit(ub & 0xF, 16)));
-            }
+        // Fallback: use JDK URI to encode the path — same logic as
+        // new URI(scheme, null, host, port, path, null, null).toASCIIString()
+        // but without the host/port parsing overhead.
+        try {
+            return new URI(null, null, null, -1, path, null, null).toASCIIString();
+        } catch (URISyntaxException e) {
+            throw new IllegalStateException("Invalid URI path: " + path, e);
         }
-        return sb.toString();
     }
 
     /**
-     * Returns true if the character is safe (does not need percent-encoding) in a URI path
-     * per RFC 3986 section 3.3.
+     * Returns true if the path contains only characters that do not need
+     * percent-encoding in a URI path. This covers the vast majority of
+     * Cosmos DB resource paths (database/collection/document IDs with
+     * alphanumeric characters, hyphens, underscores, etc.).
+     * <p>
+     * Characters outside printable ASCII (0x21..0x7E) or URI-reserved
+     * characters ({@code %}, {@code #}, {@code ?}, {@code [}, {@code ]})
+     * trigger the encoding fallback.
      */
-    private static boolean isPathCharSafe(int c) {
-        if (c >= 'a' && c <= 'z') return true;
-        if (c >= 'A' && c <= 'Z') return true;
-        if (c >= '0' && c <= '9') return true;
-        switch (c) {
-            case '-': case '.': case '_': case '~':                          // unreserved
-            case '!': case '$': case '&': case '\'': case '(': case ')':     // sub-delims
-            case '*': case '+': case ',': case ';': case '=':                // sub-delims
-            case ':': case '@':                                              // pchar
-            case '/':                                                        // path separator
-                return true;
-            default:
+    private static boolean isAsciiSafe(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c <= 0x20 || c >= 0x7F || c == '%' || c == '#' || c == '?' || c == '[' || c == ']') {
                 return false;
+            }
         }
+        return true;
     }
 
     private String ensureSlashPrefixed(String path) {
