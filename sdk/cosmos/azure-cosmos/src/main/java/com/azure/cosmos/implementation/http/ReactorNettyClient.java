@@ -149,6 +149,7 @@ public class ReactorNettyClient implements HttpClient {
                         )))
                 .protocol(HttpProtocol.H2, HttpProtocol.HTTP11)
                 .http2Settings(settings -> settings
+                    .headerTableSize(0)
                     .initialWindowSize(1024 * 1024) // 1MB initial window size
                     .maxFrameSize(64 * 1024)        // 64KB max frame size
                     .maxConcurrentStreams(http2CfgAccessor.getEffectiveMaxConcurrentStreams(http2Cfg))  // Increased from default 30
