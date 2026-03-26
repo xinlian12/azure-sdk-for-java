@@ -435,9 +435,9 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         }
 
         String prefix = getOrBuildUriPrefix(rootUri);
-        String safePath = encodePathIfNeeded(ensureSlashPrefixed(path));
+        String encodedPath = encodePath(ensureSlashPrefixed(path));
 
-        return new ResolvedRequestUri(prefix + safePath, rootUri.getPort());
+        return new ResolvedRequestUri(prefix + encodedPath, rootUri.getPort());
     }
 
     /**
@@ -457,42 +457,24 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     }
 
     /**
-     * Encodes a URI path if it contains characters that need percent-encoding.
-     * <p>
-     * For the common case (pure ASCII paths), returns the input unchanged.
-     * For paths with non-ASCII characters (e.g. Unicode document IDs), falls back
-     * to the JDK's {@link URI} constructor which performs the same encoding as the
-     * 7-arg URI constructor used by the main branch.
+     * Percent-encodes a URI path using the JDK's {@link URI} constructor.
+     * This produces the same encoding as the 7-arg URI constructor
+     * ({@code new URI(scheme, null, host, port, path, null, null).toASCIIString()})
+     * but skips scheme/host/port parsing for lower overhead.
      *
      * @param path the path to encode
-     * @return the path, percent-encoded if necessary
+     * @return the percent-encoded path
      */
-    static String encodePathIfNeeded(String path) {
+    static String encodePath(String path) {
         if (path == null || path.isEmpty()) {
             return path;
         }
 
-        if (isAscii(path)) {
-            return path;
-        }
-
-        // Fallback: use JDK URI to encode the path — same logic as
-        // new URI(scheme, null, host, port, path, null, null).toASCIIString()
-        // but without the host/port/scheme parsing overhead.
         try {
             return new URI(null, null, null, -1, path, null, null).toASCIIString();
         } catch (URISyntaxException e) {
             throw new IllegalStateException("Invalid URI path: " + path, e);
         }
-    }
-
-    private static boolean isAscii(String s) {
-        for (int i = 0; i < s.length(); i++) {
-            if (s.charAt(i) >= 128) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private String ensureSlashPrefixed(String path) {
