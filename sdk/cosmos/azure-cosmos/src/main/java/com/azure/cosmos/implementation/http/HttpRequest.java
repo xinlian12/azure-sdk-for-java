@@ -6,7 +6,6 @@ import io.netty.handler.codec.http.HttpMethod;
 import reactor.core.publisher.Flux;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 
@@ -15,7 +14,6 @@ import java.time.Instant;
  */
 public class HttpRequest {
     private HttpMethod httpMethod;
-    private URI uri;
     private String uriAsString;
     private int port;
     private HttpHeaders headers;
@@ -28,29 +26,22 @@ public class HttpRequest {
      *
      * @param httpMethod the HTTP request method
      * @param uri        the target address to send the request to
+     * @param port       the target port
+     * @param httpHeaders the HTTP headers
      */
     public HttpRequest(HttpMethod httpMethod, URI uri, int port, HttpHeaders httpHeaders) {
-        this.httpMethod = httpMethod;
-        this.uri = uri;
-        this.uriAsString = uri.toASCIIString();
-        this.port = port;
-        this.headers = httpHeaders;
-        this.reactorNettyRequestRecord = createReactorNettyRequestRecord();
+        this(httpMethod, uri.toASCIIString(), port, httpHeaders, null);
     }
 
     /**
      * Create a new HttpRequest instance.
      *
      * @param httpMethod the HTTP request method
-     * @param uri        the target address to send the request to
+     * @param uri        the target address as a URI string
+     * @param port       the target port
      */
-    public HttpRequest(HttpMethod httpMethod, String uri, int port) throws URISyntaxException {
-        this.httpMethod = httpMethod;
-        this.uri = new URI(uri);
-        this.uriAsString = this.uri.toASCIIString();
-        this.port = port;
-        this.headers = new HttpHeaders();
-        this.reactorNettyRequestRecord = createReactorNettyRequestRecord();
+    public HttpRequest(HttpMethod httpMethod, String uri, int port) {
+        this(httpMethod, uri, port, new HttpHeaders(), null);
     }
 
     /**
@@ -58,23 +49,16 @@ public class HttpRequest {
      *
      * @param httpMethod the HTTP request method
      * @param uri        the target address to send the request to
+     * @param port       the target port
      * @param headers    the HTTP headers to use with this request
      * @param body       the request content
      */
     public HttpRequest(HttpMethod httpMethod, URI uri, int port, HttpHeaders headers, Flux<byte[]> body) {
-        this.httpMethod = httpMethod;
-        this.uri = uri;
-        this.uriAsString = uri.toASCIIString();
-        this.port = port;
-        this.headers = headers;
-        this.body = body;
-        this.reactorNettyRequestRecord = createReactorNettyRequestRecord();
+        this(httpMethod, uri.toASCIIString(), port, headers, body);
     }
 
     /**
-     * Create a new HttpRequest instance using a pre-built URI string.
-     * Avoids the cost of constructing a {@link URI} object on the hot path.
-     * The URI object is created lazily if needed (e.g., for error diagnostics).
+     * Create a new HttpRequest instance.
      *
      * @param httpMethod    the HTTP request method
      * @param uriAsString   the target address as a fully-formed URI string
@@ -132,44 +116,12 @@ public class HttpRequest {
     }
 
     /**
-     * Get the target address as a {@link URI}.
-     * If the request was constructed with a string URI, the URI object is created lazily.
+     * Get the target address as a string.
      *
-     * @return the target address
-     */
-    public URI uri() {
-        URI snapshot = this.uri;
-        if (snapshot == null) {
-            try {
-                snapshot = new URI(this.uriAsString);
-            } catch (URISyntaxException e) {
-                throw new IllegalStateException("Invalid URI: " + this.uriAsString, e);
-            }
-            this.uri = snapshot;
-        }
-        return snapshot;
-    }
-
-    /**
-     * Get the target address as a string. This is the fast path that avoids
-     * constructing a {@link URI} object.
-     *
-     * @return the target address as an ASCII-safe string
+     * @return the target address as a string
      */
     public String uriAsString() {
         return this.uriAsString;
-    }
-
-    /**
-     * Set the target address to send the request to.
-     *
-     * @param uri target address as {@link URI}
-     * @return this HttpRequest
-     */
-    public HttpRequest withUri(URI uri) {
-        this.uri = uri;
-        this.uriAsString = uri.toASCIIString();
-        return this;
     }
 
     /**

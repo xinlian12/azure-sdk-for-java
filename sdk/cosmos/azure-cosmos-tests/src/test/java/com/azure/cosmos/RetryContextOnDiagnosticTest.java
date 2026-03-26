@@ -69,7 +69,6 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.lang.reflect.Field;
-import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -1100,10 +1099,6 @@ public class RetryContextOnDiagnosticTest extends TestSuiteBase {
             }
         };
 
-        try {
-            return httpResponse.withRequest(new HttpRequest(HttpMethod.POST, TestConfigurations.HOST, 443));
-        } catch (URISyntaxException e) {
-            return httpResponse;
-        }
+        return httpResponse.withRequest(new HttpRequest(HttpMethod.POST, TestConfigurations.HOST, 443));
     }
 }

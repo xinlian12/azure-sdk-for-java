@@ -455,7 +455,7 @@ public class SessionTest extends TestSuiteBase {
                 .filter(r -> r.httpMethod() == HttpMethod.GET)
                 .filter(r -> {
                     try {
-                        return URLDecoder.decode(r.uri().toString().replaceAll("\\+", "%2b"), "UTF-8").contains(
+                        return URLDecoder.decode(r.uriAsString().replaceAll("\\+", "%2b"), "UTF-8").contains(
                                 StringUtils.removeEnd(documentLink, "/"));
                     } catch (UnsupportedEncodingException e) {
                         return false;
@@ -479,7 +479,7 @@ public class SessionTest extends TestSuiteBase {
                 .filter(r -> r.httpMethod() == HttpMethod.GET)
                 .filter(r -> {
                     try {
-                        return URLDecoder.decode(r.uri().toString().replaceAll("\\+", "%2b"), "UTF-8").contains(
+                        return URLDecoder.decode(r.uriAsString().replaceAll("\\+", "%2b"), "UTF-8").contains(
                                 StringUtils.removeEnd(collectionLink, "/"));
                     } catch (UnsupportedEncodingException e) {
                         return false;

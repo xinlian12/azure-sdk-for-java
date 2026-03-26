@@ -154,7 +154,7 @@ public class HttpTransportClient extends TransportClient {
                         sendTimeUtc.v = Instant.now();
                         this.beforeRequest(
                                 activityId,
-                                httpRequest.uri(),
+                                URI.create(httpRequest.uriAsString()),
                                 request.getResourceType(),
                                 httpRequest.headers());
                     })
@@ -798,7 +798,7 @@ public class HttpTransportClient extends TransportClient {
                                             RMResources.ExceptionMessage,
                                             Strings.isNullOrEmpty(errorMessage) ? RMResources.Unauthorized : errorMessage),
                                     response.headers(),
-                                    request.uri());
+                                    URI.create(request.uriAsString()));
                             break;
 
                         case HttpConstants.StatusCodes.FORBIDDEN:
@@ -807,7 +807,7 @@ public class HttpTransportClient extends TransportClient {
                                             RMResources.ExceptionMessage,
                                             Strings.isNullOrEmpty(errorMessage) ? RMResources.Forbidden : errorMessage),
                                     response.headers(),
-                                    request.uri());
+                                    URI.create(request.uriAsString()));
                             break;
 
                         case HttpConstants.StatusCodes.NOTFOUND:
@@ -826,7 +826,7 @@ public class HttpTransportClient extends TransportClient {
                                         String.format(
                                                 RMResources.ExceptionMessage,
                                                 RMResources.Gone),
-                                        request.uri().toString(),
+                                        request.uriAsString(),
                                         HttpConstants.SubStatusCodes.UNKNOWN);
                                 exception.getResponseHeaders().put(HttpConstants.HttpHeaders.ACTIVITY_ID,
                                         activityId);
@@ -838,7 +838,7 @@ public class HttpTransportClient extends TransportClient {
                                                 RMResources.ExceptionMessage,
                                                 Strings.isNullOrEmpty(errorMessage) ? RMResources.NotFound : errorMessage),
                                         response.headers(),
-                                        request.uri());
+                                        URI.create(request.uriAsString()));
                                 break;
                             }
 
@@ -848,7 +848,7 @@ public class HttpTransportClient extends TransportClient {
                                             RMResources.ExceptionMessage,
                                             Strings.isNullOrEmpty(errorMessage) ? RMResources.BadRequest : errorMessage),
                                     response.headers(),
-                                    request.uri());
+                                    URI.create(request.uriAsString()));
                             break;
 
                         case HttpConstants.StatusCodes.METHOD_NOT_ALLOWED:
@@ -858,14 +858,14 @@ public class HttpTransportClient extends TransportClient {
                                             Strings.isNullOrEmpty(errorMessage) ? RMResources.MethodNotAllowed : errorMessage),
                                     null,
                                     response.headers(),
-                                    request.uri().toString());
+                                    request.uriAsString());
                             break;
 
                         case HttpConstants.StatusCodes.GONE: {
 
                             // TODO: update perf counter
                             // https://msdata.visualstudio.com/CosmosDB/_workitems/edit/258624
-                            ErrorUtils.logGoneException(request.uri(), activityId);
+                            ErrorUtils.logGoneException(request.uriAsString(), activityId);
 
                             Integer nSubStatus = getSubStatusCodeFromHeader(response);
 
@@ -875,7 +875,7 @@ public class HttpTransportClient extends TransportClient {
                                                 RMResources.ExceptionMessage,
                                                 Strings.isNullOrEmpty(errorMessage) ? RMResources.Gone : errorMessage),
                                         response.headers(),
-                                        request.uri().toString());
+                                        request.uriAsString());
                                 break;
                             } else if (nSubStatus == HttpConstants.SubStatusCodes.PARTITION_KEY_RANGE_GONE) {
                                 exception = new PartitionKeyRangeGoneException(
@@ -883,7 +883,7 @@ public class HttpTransportClient extends TransportClient {
                                                 RMResources.ExceptionMessage,
                                                 Strings.isNullOrEmpty(errorMessage) ? RMResources.Gone : errorMessage),
                                         response.headers(),
-                                        request.uri().toString());
+                                        request.uriAsString());
                                 break;
                             } else if (nSubStatus == HttpConstants.SubStatusCodes.COMPLETING_SPLIT_OR_MERGE) {
                                 exception = new PartitionKeyRangeIsSplittingException(
@@ -891,7 +891,7 @@ public class HttpTransportClient extends TransportClient {
                                                 RMResources.ExceptionMessage,
                                                 Strings.isNullOrEmpty(errorMessage) ? RMResources.Gone : errorMessage),
                                         response.headers(),
-                                        request.uri().toString());
+                                        request.uriAsString());
                                 break;
                             } else if (nSubStatus == HttpConstants.SubStatusCodes.COMPLETING_PARTITION_MIGRATION) {
                                 exception = new PartitionIsMigratingException(
@@ -899,7 +899,7 @@ public class HttpTransportClient extends TransportClient {
                                                 RMResources.ExceptionMessage,
                                                 Strings.isNullOrEmpty(errorMessage) ? RMResources.Gone : errorMessage),
                                         response.headers(),
-                                        request.uri().toString());
+                                        request.uriAsString());
                                 break;
                             } else {
                                 // Have the request URL in the exception message for debugging purposes.
@@ -908,7 +908,7 @@ public class HttpTransportClient extends TransportClient {
                                                 RMResources.ExceptionMessage,
                                                 RMResources.Gone),
                                         response.headers(),
-                                        request.uri(),
+                                        URI.create(request.uriAsString()),
                                         (nSubStatus == 0) ? HttpConstants.SubStatusCodes.TRANSPORT_GENERATED_410
                                             : HttpConstants.SubStatusCodes.UNKNOWN);
                                 goneExceptionFromService.setIsBasedOn410ResponseFromService();
@@ -928,7 +928,7 @@ public class HttpTransportClient extends TransportClient {
                                             RMResources.ExceptionMessage,
                                             Strings.isNullOrEmpty(errorMessage) ? RMResources.EntityAlreadyExists : errorMessage),
                                     response.headers(),
-                                    request.uri().toString());
+                                    request.uriAsString());
                             break;
 
                         case HttpConstants.StatusCodes.PRECONDITION_FAILED:
@@ -937,7 +937,7 @@ public class HttpTransportClient extends TransportClient {
                                             RMResources.ExceptionMessage,
                                             Strings.isNullOrEmpty(errorMessage) ? RMResources.PreconditionFailed : errorMessage),
                                     response.headers(),
-                                    request.uri().toString());
+                                    request.uriAsString());
                             break;
 
                         case HttpConstants.StatusCodes.REQUEST_ENTITY_TOO_LARGE:
@@ -948,7 +948,7 @@ public class HttpTransportClient extends TransportClient {
                                                     RMResources.RequestEntityTooLarge,
                                                     HttpConstants.HttpHeaders.PAGE_SIZE)),
                                     response.headers(),
-                                    request.uri().toString());
+                                    request.uriAsString());
                             break;
 
                         case HttpConstants.StatusCodes.LOCKED:
@@ -957,12 +957,12 @@ public class HttpTransportClient extends TransportClient {
                                             RMResources.ExceptionMessage,
                                             Strings.isNullOrEmpty(errorMessage) ? RMResources.Locked : errorMessage),
                                     response.headers(),
-                                    request.uri().toString());
+                                    request.uriAsString());
                             break;
 
                         case HttpConstants.StatusCodes.SERVICE_UNAVAILABLE:
                             int subStatusCode = getSubStatusCodeFromHeader(response);
-                            exception = new ServiceUnavailableException(errorMessage, response.headers(), request.uri(),
+                            exception = new ServiceUnavailableException(errorMessage, response.headers(), URI.create(request.uriAsString()),
                                 (subStatusCode == 0) ? HttpConstants.SubStatusCodes.SERVER_GENERATED_503
                                     : HttpConstants.SubStatusCodes.UNKNOWN);
                             break;
@@ -973,7 +973,7 @@ public class HttpTransportClient extends TransportClient {
                                             RMResources.ExceptionMessage,
                                             Strings.isNullOrEmpty(errorMessage) ? RMResources.RequestTimeout : errorMessage),
                                     response.headers(),
-                                    request.uri());
+                                    URI.create(request.uriAsString()));
                             break;
 
                         case HttpConstants.StatusCodes.RETRY_WITH:
@@ -982,7 +982,7 @@ public class HttpTransportClient extends TransportClient {
                                             RMResources.ExceptionMessage,
                                             Strings.isNullOrEmpty(errorMessage) ? RMResources.RetryWith : errorMessage),
                                     response.headers(),
-                                    request.uri());
+                                    URI.create(request.uriAsString()));
                             break;
 
                         case HttpConstants.StatusCodes.TOO_MANY_REQUESTS:
@@ -992,7 +992,7 @@ public class HttpTransportClient extends TransportClient {
                                                     RMResources.ExceptionMessage,
                                                     Strings.isNullOrEmpty(errorMessage) ? RMResources.TooManyRequests : errorMessage),
                                             response.headers(),
-                                            request.uri());
+                                            URI.create(request.uriAsString()));
 
                             List<String> values = null;
                             headerValues = response.headers().values(HttpConstants.HttpHeaders.RETRY_AFTER_IN_MILLISECONDS);
@@ -1014,20 +1014,20 @@ public class HttpTransportClient extends TransportClient {
                                             RMResources.ExceptionMessage,
                                             Strings.isNullOrEmpty(errorMessage) ? RMResources.InternalServerError : errorMessage),
                                     response.headers(),
-                                    request.uri(),
+                                    URI.create(request.uriAsString()),
                                     HttpConstants.SubStatusCodes.UNKNOWN);
                             break;
 
                         default:
                             logger.error("Unrecognized status code {} returned by backend. ActivityId {}", statusCode, activityId);
-                            ErrorUtils.logException(request.uri(), activityId);
+                            ErrorUtils.logException(request.uriAsString(), activityId);
                             exception = new InternalServerErrorException(
                                     Exceptions.getInternalServerErrorMessage(
                                         String.format(
                                             RMResources.ExceptionMessage,
                                             RMResources.InvalidBackendResponse)),
                                     response.headers(),
-                                    request.uri(),
+                                    URI.create(request.uriAsString()),
                                     HttpConstants.SubStatusCodes.INVALID_BACKEND_RESPONSE);
                             break;
                     }
@@ -1053,7 +1053,7 @@ public class HttpTransportClient extends TransportClient {
                             RMResources.ExceptionMessage,
                             RMResources.InvalidBackendResponse)),
                     response.headers(),
-                    response.request().uri(),
+                    URI.create(response.request().uriAsString()),
                     HttpConstants.SubStatusCodes.INVALID_BACKEND_RESPONSE);
             }
         }
