@@ -12,7 +12,7 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
 
 public abstract class FaultInjectionRequestArgs {
     private final long transportRequestId;
-    private final URI requestURI;
+    private final String requestURIString;
     private final RxDocumentServiceRequest serviceRequest;
     private boolean isPrimary;
 
@@ -22,11 +22,20 @@ public abstract class FaultInjectionRequestArgs {
         boolean isPrimary,
         RxDocumentServiceRequest serviceRequest) {
 
-        checkNotNull(requestURI, "Argument 'requestURI' can not null");
+        this(transportRequestId, requestURI != null ? requestURI.toString() : null, isPrimary, serviceRequest);
+    }
+
+    public FaultInjectionRequestArgs(
+        long transportRequestId,
+        String requestURIString,
+        boolean isPrimary,
+        RxDocumentServiceRequest serviceRequest) {
+
+        checkNotNull(requestURIString, "Argument 'requestURIString' can not null");
         checkNotNull(serviceRequest, "Argument 'serviceRequest' can not be null");
 
         this.transportRequestId = transportRequestId;
-        this.requestURI = requestURI;
+        this.requestURIString = requestURIString;
         this.isPrimary = isPrimary;
         this.serviceRequest = serviceRequest;
     }
@@ -36,7 +45,11 @@ public abstract class FaultInjectionRequestArgs {
     }
 
     public URI getRequestURI() {
-        return this.requestURI;
+        return URI.create(this.requestURIString);
+    }
+
+    public String getRequestURIString() {
+        return this.requestURIString;
     }
 
     public RxDocumentServiceRequest getServiceRequest() {

@@ -8,7 +8,6 @@ import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.Strings;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 
-import java.net.URI;
 import java.util.List;
 
 public class GatewayFaultInjectionRequestArgs extends FaultInjectionRequestArgs {
@@ -16,11 +15,11 @@ public class GatewayFaultInjectionRequestArgs extends FaultInjectionRequestArgs 
 
     public GatewayFaultInjectionRequestArgs(
         long transportRequestId,
-        URI requestURI,
+        String requestURIString,
         RxDocumentServiceRequest serviceRequest,
         List<String> partitionKeyRangeIds) {
 
-        super(transportRequestId, requestURI, false, serviceRequest);
+        super(transportRequestId, requestURIString, false, serviceRequest);
         this.partitionKeyRangeIds = partitionKeyRangeIds;
     }
 

@@ -771,7 +771,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
 
                 if (httpRequest.reactorNettyRequestRecord() != null) {
 
-                    OperationCancelledException oce = new OperationCancelledException("", httpRequest.uri());
+                    OperationCancelledException oce = new OperationCancelledException("", httpRequest.uriAsString());
 
                     ReactorNettyRequestRecord reactorNettyRequestRecord = httpRequest.reactorNettyRequestRecord();
 
