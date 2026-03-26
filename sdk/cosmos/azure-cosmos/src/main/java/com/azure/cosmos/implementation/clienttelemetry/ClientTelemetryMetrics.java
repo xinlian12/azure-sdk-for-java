@@ -91,6 +91,7 @@ public final class ClientTelemetryMetrics {
         private final ConcurrentHashMap<Tags, Counter> counters = new ConcurrentHashMap<>();
         private final ConcurrentHashMap<Tags, Timer> timers = new ConcurrentHashMap<>();
         private final ConcurrentHashMap<Tags, DistributionSummary> summaries = new ConcurrentHashMap<>();
+        private final ConcurrentHashMap<Tags, DistributionSummary> summariesNoHistogram = new ConcurrentHashMap<>();
 
         Counter getOrCreateCounter(Tags tags, CosmosMeterOptions options,
                                    String baseUnit, String description) {
@@ -131,7 +132,7 @@ public final class ClientTelemetryMetrics {
         DistributionSummary getOrCreateSummaryNoHistogram(Tags tags, CosmosMeterOptions options,
                                                           String baseUnit, String description,
                                                           double maxExpected) {
-            return summaries.computeIfAbsent(tags, t -> DistributionSummary
+            return summariesNoHistogram.computeIfAbsent(tags, t -> DistributionSummary
                 .builder(options.getMeterName().toString())
                 .baseUnit(baseUnit)
                 .description(description)
@@ -146,6 +147,7 @@ public final class ClientTelemetryMetrics {
             counters.clear();
             timers.clear();
             summaries.clear();
+            summariesNoHistogram.clear();
         }
     }
     private static final Tag QUERYPLAN_TAG = Tag.of(
