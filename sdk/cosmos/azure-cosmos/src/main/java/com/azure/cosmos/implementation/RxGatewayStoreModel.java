@@ -13,6 +13,7 @@ import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
 import com.azure.cosmos.implementation.directconnectivity.GatewayServiceConfigurationReader;
 import com.azure.cosmos.implementation.directconnectivity.HttpUtils;
 import com.azure.cosmos.implementation.directconnectivity.RequestHelper;
+import com.azure.cosmos.implementation.guava25.base.CharMatcher;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
 import com.azure.cosmos.implementation.directconnectivity.Uri;
 import com.azure.cosmos.implementation.directconnectivity.WebExceptionUtility;
@@ -71,6 +72,14 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         ResourceLeakDetector.Level.ADVANCED.ordinal();
     private static final boolean HTTP_CONNECTION_WITHOUT_TLS_ALLOWED = Configs.isHttpConnectionWithoutTLSAllowed();
     private static final String HTTPS_SCHEME = "https";
+
+    // Characters that are safe (do not need percent-encoding) in a URI path per RFC 3986.
+    // Uses a precomputed lookup table for O(1) per-character checks.
+    private static final CharMatcher PATH_SAFE_CHARS = CharMatcher.inRange('a', 'z')
+        .or(CharMatcher.inRange('A', 'Z'))
+        .or(CharMatcher.inRange('0', '9'))
+        .or(CharMatcher.anyOf("/-._~!$&'()*+,;=:@"))
+        .precomputed();
     private static final List<String> headersNeedToBeEscaped = Arrays.asList(
         HttpConstants.HttpHeaders.PARTITION_KEY,
         HttpConstants.HttpHeaders.POST_TRIGGER_EXCLUDE,
@@ -459,10 +468,11 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     /**
      * Encodes a URI path if it contains characters that need percent-encoding.
      * <p>
-     * For the common case (ASCII-safe paths), returns the input unchanged.
-     * For rare non-ASCII paths (e.g. Unicode document IDs), falls back to the JDK's
-     * {@link URI} constructor to perform RFC 3986-compliant encoding — the same
-     * encoding the main branch uses via the 7-arg URI constructor.
+     * For the common case (paths with only RFC 3986 path-safe characters),
+     * returns the input unchanged using a precomputed {@link CharMatcher} lookup.
+     * For rare paths with unsafe characters (e.g. Unicode document IDs), falls back
+     * to the JDK's {@link URI} constructor which performs the same encoding as the
+     * 7-arg URI constructor used by the main branch.
      *
      * @param path the path to encode
      * @return the path, percent-encoded if necessary
@@ -472,7 +482,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
             return path;
         }
 
-        if (isAsciiSafe(path)) {
+        if (PATH_SAFE_CHARS.matchesAllOf(path)) {
             return path;
         }
 
@@ -484,26 +494,6 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         } catch (URISyntaxException e) {
             throw new IllegalStateException("Invalid URI path: " + path, e);
         }
-    }
-
-    /**
-     * Returns true if the path contains only characters that do not need
-     * percent-encoding in a URI path. This covers the vast majority of
-     * Cosmos DB resource paths (database/collection/document IDs with
-     * alphanumeric characters, hyphens, underscores, etc.).
-     * <p>
-     * Characters outside printable ASCII (0x21..0x7E) or URI-reserved
-     * characters ({@code %}, {@code #}, {@code ?}, {@code [}, {@code ]})
-     * trigger the encoding fallback.
-     */
-    private static boolean isAsciiSafe(String s) {
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c <= 0x20 || c >= 0x7F || c == '%' || c == '#' || c == '?' || c == '[' || c == ']') {
-                return false;
-            }
-        }
-        return true;
     }
 
     private String ensureSlashPrefixed(String path) {
