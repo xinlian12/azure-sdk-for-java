@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.azure.cosmos.implementation.HttpConstants.HttpHeaders.INTENDED_COLLECTION_RID_HEADER;
@@ -91,6 +92,24 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     private GatewayServiceConfigurationReader gatewayServiceConfigurationReader;
     private RxClientCollectionCache collectionCache;
     private GatewayServerErrorInjector gatewayServerErrorInjector;
+    private final ConcurrentHashMap<URI, String> uriPrefixCache = new ConcurrentHashMap<>();
+
+    /**
+     * Holds both the URI string and port resolved from a single root URI lookup.
+     * This avoids resolving the service endpoint twice per request (once for URI, once for port)
+     * and eliminates the TOCTOU risk during endpoint failover.
+     * <p>
+     * JIT can scalar-replace this allocation since it does not escape the calling method.
+     */
+    static final class ResolvedRequestUri {
+        final String uriString;
+        final int port;
+
+        ResolvedRequestUri(String uriString, int port) {
+            this.uriString = uriString;
+            this.port = port;
+        }
+    }
 
     public RxGatewayStoreModel(
         DiagnosticsClientContext clientContext,
@@ -279,15 +298,14 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 request.requestContext.cosmosDiagnostics = clientContext.createDiagnostics();
             }
 
-            String uriString = getUriAsString(request);
-            int port = getPortForRequest(request);
-            request.requestContext.resourcePhysicalAddress = uriString;
+            ResolvedRequestUri resolved = resolveRequestUri(request);
+            request.requestContext.resourcePhysicalAddress = resolved.uriString;
 
             if (this.throughputControlStore != null) {
-                return this.throughputControlStore.processRequest(request, Mono.defer(() -> this.performRequestInternal(request, uriString, port)));
+                return this.throughputControlStore.processRequest(request, Mono.defer(() -> this.performRequestInternal(request, resolved.uriString, resolved.port)));
             }
 
-            return this.performRequestInternal(request, uriString, port);
+            return this.performRequestInternal(request, resolved.uriString, resolved.port);
         } catch (Exception e) {
             return Mono.error(e);
         }
@@ -382,11 +400,15 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
 
     /**
      * Builds the URI prefix string (scheme://host[:port]) from a root URI.
-     * This is cached per root URI to avoid repeated string construction.
+     * Results are cached per root URI to avoid repeated string construction.
      *
      * @param rootUri the root endpoint URI
      * @return the URI prefix string, e.g. "https://account.documents.azure.com:443"
      */
+    private String getOrBuildUriPrefix(URI rootUri) {
+        return uriPrefixCache.computeIfAbsent(rootUri, RxGatewayStoreModel::buildUriPrefix);
+    }
+
     private static String buildUriPrefix(URI rootUri) {
         String scheme = HTTP_CONNECTION_WITHOUT_TLS_ALLOWED ? rootUri.getScheme() : HTTPS_SCHEME;
         int port = rootUri.getPort();
@@ -399,35 +421,29 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     }
 
     /**
-     * Builds the full request URI as a string, avoiding the cost of {@code new URI()} construction.
-     * The root URI prefix (scheme://host:port) is stable per endpoint and only the path varies per request.
-     * Non-ASCII characters in the path are percent-encoded to produce the same output as {@link URI#toASCIIString()}.
+     * Resolves the root URI for the request once, then derives both the full request URI string
+     * and the port from the same resolution. This avoids the cost of double endpoint resolution
+     * and eliminates TOCTOU risk during failover.
      */
-    private String getUriAsString(RxDocumentServiceRequest request) {
-        URI rootUri = request.getEndpointOverride();
-        if (rootUri == null) {
-            if (request.getIsMedia()) {
-                rootUri = this.globalEndpointManager.getWriteEndpoints().get(0).getGatewayRegionalEndpoint();
-            } else {
-                rootUri = getRootUri(request);
-            }
-        }
+    private ResolvedRequestUri resolveRequestUri(RxDocumentServiceRequest request) {
+        URI rootUri = resolveRootUri(request);
 
         String path = PathsHelper.generatePath(request.getResourceType(), request, request.isFeed);
         if (request.getResourceType().equals(ResourceType.DatabaseAccount)) {
             path = StringUtils.EMPTY;
         }
 
-        String prefix = buildUriPrefix(rootUri);
-        String encodedPath = encodeNonAsciiPath(ensureSlashPrefixed(path));
+        String prefix = getOrBuildUriPrefix(rootUri);
+        String encodedPath = percentEncodePath(ensureSlashPrefixed(path));
 
-        return prefix + encodedPath;
+        return new ResolvedRequestUri(prefix + encodedPath, rootUri.getPort());
     }
 
     /**
-     * Returns the port for the request's root URI.
+     * Resolves the root URI for the given request. Centralizes the endpoint resolution
+     * logic so that it is performed exactly once per request.
      */
-    private int getPortForRequest(RxDocumentServiceRequest request) {
+    private URI resolveRootUri(RxDocumentServiceRequest request) {
         URI rootUri = request.getEndpointOverride();
         if (rootUri == null) {
             if (request.getIsMedia()) {
@@ -436,7 +452,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 rootUri = getRootUri(request);
             }
         }
-        return rootUri.getPort();
+        return rootUri;
     }
 
     /**
@@ -455,7 +471,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
      * @param path the path to encode
      * @return the encoded path (same reference if no encoding needed)
      */
-    static String encodeNonAsciiPath(String path) {
+    static String percentEncodePath(String path) {
         if (path == null || path.isEmpty()) {
             return path;
         }

@@ -15,7 +15,7 @@ import java.time.Instant;
  */
 public class HttpRequest {
     private HttpMethod httpMethod;
-    private volatile URI uri;
+    private URI uri;
     private String uriAsString;
     private int port;
     private HttpHeaders headers;

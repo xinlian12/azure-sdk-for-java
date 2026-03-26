@@ -433,4 +433,80 @@ public class RxGatewayStoreModelTest {
         USER, // userControlled session token
         SDK  // SDK maintained session token
     }
+
+    // --- percentEncodePath tests ---
+
+    @DataProvider(name = "percentEncodePathProvider")
+    public Object[][] percentEncodePathProvider() {
+        return new Object[][]{
+            // ASCII-safe path (fast-path no-op)
+            { "/dbs/mydb/colls/mycoll", "/dbs/mydb/colls/mycoll" },
+
+            // Non-ASCII characters (Unicode → UTF-8 percent-encoded)
+            { "/dbs/db/docs/caf\u00e9", "/dbs/db/docs/caf%C3%A9" },
+
+            // Surrogate pair (emoji → 4-byte UTF-8)
+            { "/dbs/db/docs/\uD83D\uDE00", "/dbs/db/docs/%F0%9F%98%80" },
+
+            // Characters that are safe in URI paths (should NOT be encoded)
+            { "/a:b@c!d$e&f'g(h)i*j+k,l;m=n~o._-p", "/a:b@c!d$e&f'g(h)i*j+k,l;m=n~o._-p" },
+
+            // Unsafe ASCII characters that must be encoded
+            { "/dbs/db/docs/a b", "/dbs/db/docs/a%20b" },           // space
+            { "/dbs/db/docs/a%b", "/dbs/db/docs/a%25b" },           // percent
+            { "/dbs/db/docs/a#b", "/dbs/db/docs/a%23b" },           // hash
+            { "/dbs/db/docs/a?b", "/dbs/db/docs/a%3Fb" },           // question mark
+            { "/dbs/db/docs/a[b]c", "/dbs/db/docs/a%5Bb%5Dc" },     // brackets
+
+            // Empty and null
+            { "", "" },
+            { null, null },
+
+            // Path with mixed safe and unsafe chars
+            { "/dbs/\u00fcber/colls/my coll", "/dbs/%C3%BCber/colls/my%20coll" },
+        };
+    }
+
+    @Test(groups = "unit", dataProvider = "percentEncodePathProvider")
+    public void percentEncodePathProducesCorrectOutput(String input, String expected) {
+        String actual = RxGatewayStoreModel.percentEncodePath(input);
+        assertThat(actual).isEqualTo(expected);
+    }
+
+    @Test(groups = "unit")
+    public void percentEncodePathMatchesJdkUriConstructor() throws Exception {
+        // Verify parity with new URI(7-arg).toASCIIString() for various paths
+        String[] paths = {
+            "/dbs/mydb/colls/mycoll",
+            "/dbs/db/docs/caf\u00e9",
+            "/dbs/db/docs/\uD83D\uDE00",
+            "/dbs/\u00fcber/colls/my coll",
+            "/a:b@c+d;e=f",
+            "/dbs/db/docs/a%b#c?d",
+        };
+        String host = "account.documents.azure.com";
+        int port = 443;
+
+        for (String path : paths) {
+            URI jdkUri = new URI("https", null, host, port, path, null, null);
+            String jdkEncoded = jdkUri.toASCIIString();
+            // Extract just the path portion from the JDK URI string
+            String prefix = "https://" + host + ":" + port;
+            String jdkPath = jdkEncoded.substring(prefix.length());
+
+            String ourPath = RxGatewayStoreModel.percentEncodePath(path);
+
+            assertThat(ourPath)
+                .as("Path encoding should match JDK URI for input: %s", path)
+                .isEqualTo(jdkPath);
+        }
+    }
+
+    @Test(groups = "unit")
+    public void percentEncodePathReturnsSameReferenceForSafePaths() {
+        String safePath = "/dbs/mydb/colls/mycoll/docs/docid";
+        String result = RxGatewayStoreModel.percentEncodePath(safePath);
+        // Should return the exact same reference (no new String allocation)
+        assertThat(result).isSameAs(safePath);
+    }
 }
