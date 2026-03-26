@@ -94,7 +94,7 @@ public class RntbdServerErrorInjector {
 
         return new RntbdFaultInjectionRequestArgs(
             requestRecord.args().transportRequestId(),
-            requestRecord.args().physicalAddressUri().getURI(),
+            requestRecord.args().physicalAddressUri().getURIAsString(),
             requestRecord.args().physicalAddressUri().isPrimary(),
             requestRecord.args().serviceRequest());
     }
@@ -106,7 +106,7 @@ public class RntbdServerErrorInjector {
 
         return new RntbdFaultInjectionRequestArgs(
             requestRecord.getRequestId(),
-            requestRecord.args().physicalAddressUri().getURI(),
+            requestRecord.args().physicalAddressUri().getURIAsString(),
             requestRecord.args().physicalAddressUri().isPrimary(),
             requestRecord.args().serviceRequest());
     }
