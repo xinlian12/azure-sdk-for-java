@@ -436,7 +436,6 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                                                                       HttpRequest httpRequest) {
 
         return httpResponseMono
-            .publishOn(CosmosSchedulers.TRANSPORT_RESPONSE_BOUNDED_ELASTIC)
             .flatMap(httpResponse -> {
 
                 // header key/value pairs
@@ -482,7 +481,8 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                             // so, use safeRelease
                             safeSilentRelease(buf);
                         }
-                    });
+                    })
+                    .publishOn(CosmosSchedulers.TRANSPORT_RESPONSE_BOUNDED_ELASTIC);
 
                 return contentObservable
                     .map(content -> {
