@@ -28,8 +28,11 @@ public class CosmosSchedulers {
         true);
 
     // Custom bounded elastic scheduler to switch off IO thread to process response.
+    // Uses DEFAULT_POOL_SIZE (= CPU cores) instead of DEFAULT_BOUNDED_ELASTIC_SIZE (= 10x CPU cores)
+    // because the response processing work (JSON deserialization) is CPU-bound, not blocking I/O —
+    // more threads than cores just adds context-switching overhead.
     public final static Scheduler TRANSPORT_RESPONSE_BOUNDED_ELASTIC = Schedulers.newBoundedElastic(
-        Schedulers.DEFAULT_BOUNDED_ELASTIC_SIZE,
+        Schedulers.DEFAULT_POOL_SIZE,
         Schedulers.DEFAULT_BOUNDED_ELASTIC_QUEUESIZE,
         TRANSPORT_RESPONSE_BOUNDED_ELASTIC_THREAD_NAME,
         TTL_FOR_SCHEDULER_WORKER_IN_SECONDS,
