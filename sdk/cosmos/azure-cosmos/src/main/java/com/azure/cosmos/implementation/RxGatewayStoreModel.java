@@ -228,6 +228,8 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         // If there is any error in the header response this throws exception
         validateOrThrow(request, HttpResponseStatus.valueOf(statusCode), headers, retainedContent);
 
+        Map<String, String> responseHeaders = HttpUtils.unescape(headers.toLowerCaseMap());
+
         int size;
         if ((size = retainedContent.readableBytes()) > 0) {
             if (leakDetectionDebuggingEnabled) {
@@ -238,7 +240,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
             return new StoreResponse(
                 endpoint,
                 statusCode,
-                HttpUtils.unescape(headers.toLowerCaseMap()),
+                responseHeaders,
                 new ByteBufInputStream(retainedContent, true),
                 size);
         } else {
@@ -248,7 +250,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         return new StoreResponse(
             endpoint,
             statusCode,
-            HttpUtils.unescape(headers.toLowerCaseMap()),
+            responseHeaders,
             null,
             0);
     }
@@ -480,8 +482,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                             // so, use safeRelease
                             safeSilentRelease(buf);
                         }
-                    })
-                    .publishOn(CosmosSchedulers.TRANSPORT_RESPONSE_BOUNDED_ELASTIC);
+                    });
 
                 return contentObservable
                     .map(content -> {
