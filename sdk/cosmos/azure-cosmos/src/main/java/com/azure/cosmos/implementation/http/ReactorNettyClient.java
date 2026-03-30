@@ -33,9 +33,13 @@ import reactor.netty.transport.ProxyProvider;
 import reactor.util.context.Context;
 
 import java.lang.invoke.WrongMethodTypeException;
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
@@ -48,6 +52,12 @@ public class ReactorNettyClient implements HttpClient {
     private static final String REACTOR_NETTY_REQUEST_RECORD_KEY = "reactorNettyRequestRecordKey";
 
     private static final Logger logger = LoggerFactory.getLogger(ReactorNettyClient.class.getSimpleName());
+
+    // H2 connection coalescing: cache hostname → resolved IP for pool key rewriting
+    private static final boolean H2_COALESCING_ENABLED =
+        Boolean.parseBoolean(System.getProperty("COSMOS.HTTP2_CONNECTION_COALESCING_ENABLED",
+            System.getenv().getOrDefault("COSMOS_HTTP2_CONNECTION_COALESCING_ENABLED", "false")));
+    private static final ConcurrentHashMap<String, String> hostnameToIpCache = new ConcurrentHashMap<>();
 
     private HttpClientConfig httpClientConfig;
     private reactor.netty.http.client.HttpClient httpClient;
@@ -196,13 +206,41 @@ public class ReactorNettyClient implements HttpClient {
         // so pendingAcquireTimeout (pool-level 45s) is effectively never hit.
         int connectTimeoutMs = this.resolveConnectTimeoutMs(request);
 
+        // H2 connection coalescing: rewrite URI to use resolved IP so reactor-netty
+        // pools connections by IP instead of hostname. Set Host header explicitly
+        // so HTTP/2 :authority pseudo-header preserves the original hostname for routing.
+        String requestUri = request.uri().toASCIIString();
+        if (H2_COALESCING_ENABLED) {
+            String originalHost = request.uri().getHost();
+            if (originalHost != null && !originalHost.isEmpty()) {
+                String resolvedIp = hostnameToIpCache.computeIfAbsent(originalHost, host -> {
+                    try {
+                        String ip = InetAddress.getByName(host).getHostAddress();
+                        logger.info("H2 coalescing: resolved {} → {}", host, ip);
+                        return ip;
+                    } catch (UnknownHostException e) {
+                        logger.warn("H2 coalescing: failed to resolve {}, falling back to hostname", host, e);
+                        return host;
+                    }
+                });
+                if (!resolvedIp.equals(originalHost)) {
+                    // Rewrite URI to use IP — this makes reactor-netty pool by IP
+                    requestUri = requestUri.replace(originalHost, resolvedIp);
+                    // Ensure Host header is set to original hostname for :authority
+                    request.headers().set("Host", originalHost);
+                }
+            }
+        }
+
+        final String finalRequestUri = requestUri;
+
         return this.httpClient
             .keepAlive(this.httpClientConfig.isConnectionKeepAlive())
             .port(request.port())
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
             .responseTimeout(responseTimeout)
             .request(HttpMethod.valueOf(request.httpMethod().toString()))
-            .uri(request.uri().toASCIIString())
+            .uri(finalRequestUri)
             .send(bodySendDelegate(request))
             .responseConnection((reactorNettyResponse, reactorNettyConnection) -> {
                 HttpResponse httpResponse = new ReactorNettyHttpResponse(reactorNettyResponse,
