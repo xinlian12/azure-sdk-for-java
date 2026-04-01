@@ -9,6 +9,7 @@ import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdChannelAcquisitionTimeline;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdChannelStatistics;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdEndpointStatistics;
+import com.azure.cosmos.implementation.http.HttpHeaders;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.util.IllegalReferenceCountException;
@@ -68,7 +69,7 @@ public class StoreResponse {
         }
 
         this.status = status;
-        replicaStatusList = new HashMap<>();
+        replicaStatusList = new HashMap<>(4);
         if (contentStream != null) {
             try {
                 this.responsePayload = new JsonNodeStorePayload(contentStream, responsePayloadLength, headerMap);
@@ -78,6 +79,57 @@ public class StoreResponse {
                 } catch (Throwable e) {
                     if (!(e instanceof IllegalReferenceCountException)) {
                         // Log as warning instead of debug to make ByteBuf leak issues more visible
+                        logger.warn("Failed to close content stream. This may cause a Netty ByteBuf leak.", e);
+                    }
+                }
+            }
+        } else {
+            this.responsePayload = null;
+        }
+    }
+
+    /**
+     * Creates a StoreResponse directly from HttpHeaders, avoiding intermediate HashMap allocation.
+     * Header names are stored as lowercase keys (matching HttpHeaders internal representation).
+     * The OWNER_FULL_NAME header value is URL-decoded inline.
+     */
+    public StoreResponse(
+            String endpoint,
+            int status,
+            HttpHeaders httpHeaders,
+            ByteBufInputStream contentStream,
+            int responsePayloadLength) {
+
+        checkArgument((contentStream == null) == (responsePayloadLength == 0),
+            "Parameter 'contentStream' must be consistent with 'responsePayloadLength'.");
+        requestTimeline = RequestTimeline.empty();
+
+        int headerCount = httpHeaders.size();
+        responseHeaderNames = new String[headerCount];
+        responseHeaderValues = new String[headerCount];
+        this.endpoint = endpoint != null ? endpoint : "";
+
+        httpHeaders.populateLowerCaseHeaders(responseHeaderNames, responseHeaderValues);
+
+        // URL-decode OWNER_FULL_NAME header value inline (replaces HttpUtils.unescape)
+        for (int i = 0; i < headerCount; i++) {
+            if (HttpConstants.HttpHeaders.OWNER_FULL_NAME.equals(responseHeaderNames[i])) {
+                responseHeaderValues[i] = HttpUtils.urlDecode(responseHeaderValues[i]);
+                break;
+            }
+        }
+
+        this.status = status;
+        replicaStatusList = new HashMap<>(4);
+        if (contentStream != null) {
+            try {
+                this.responsePayload = new JsonNodeStorePayload(
+                    contentStream, responsePayloadLength, responseHeaderNames, responseHeaderValues);
+            } finally {
+                try {
+                    contentStream.close();
+                } catch (Throwable e) {
+                    if (!(e instanceof IllegalReferenceCountException)) {
                         logger.warn("Failed to close content stream. This may cause a Netty ByteBuf leak.", e);
                     }
                 }
@@ -108,7 +160,7 @@ public class StoreResponse {
         }
 
         this.status = status;
-        replicaStatusList = new HashMap<>();
+        replicaStatusList = new HashMap<>(4);
         this.responsePayload = responsePayload;
     }
 
@@ -310,7 +362,7 @@ public class StoreResponse {
 
     public StoreResponse withRemappedStatusCode(int newStatusCode, double additionalRequestCharge) {
 
-        Map<String, String> headers = new HashMap<>();
+        Map<String, String> headers = new HashMap<>(this.responseHeaderNames.length * 4 / 3 + 1);
         for (int i = 0; i < this.responseHeaderNames.length; i++) {
             String headerName = this.responseHeaderNames[i];
             if (headerName.equalsIgnoreCase(HttpConstants.HttpHeaders.REQUEST_CHARGE)) {

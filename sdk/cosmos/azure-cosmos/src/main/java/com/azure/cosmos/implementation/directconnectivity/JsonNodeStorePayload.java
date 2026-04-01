@@ -18,6 +18,7 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 
 public class JsonNodeStorePayload implements StorePayload<JsonNode> {
@@ -30,6 +31,25 @@ public class JsonNodeStorePayload implements StorePayload<JsonNode> {
         if (readableBytes > 0) {
             this.responsePayloadSize = readableBytes;
             this.jsonValue = fromJson(bufferStream, readableBytes, responseHeaders);
+        } else {
+            this.responsePayloadSize = 0;
+            this.jsonValue = null;
+        }
+    }
+
+    /**
+     * Creates a JsonNodeStorePayload using pre-populated header arrays instead of a Map.
+     * The Map is constructed lazily only if needed for error reporting.
+     */
+    public JsonNodeStorePayload(
+        ByteBufInputStream bufferStream,
+        int readableBytes,
+        String[] headerNames,
+        String[] headerValues) {
+
+        if (readableBytes > 0) {
+            this.responsePayloadSize = readableBytes;
+            this.jsonValue = fromJsonWithArrayHeaders(bufferStream, readableBytes, headerNames, headerValues);
         } else {
             this.responsePayloadSize = 0;
             this.jsonValue = null;
@@ -65,6 +85,51 @@ public class JsonNodeStorePayload implements StorePayload<JsonNode> {
                     responseHeaders);
             }
         }
+    }
+
+    private static JsonNode fromJsonWithArrayHeaders(
+        ByteBufInputStream bufferStream,
+        int readableBytes,
+        String[] headerNames,
+        String[] headerValues) {
+
+        byte[] bytes = new byte[readableBytes];
+        try {
+            bufferStream.read(bytes);
+            return Utils.getSimpleObjectMapper().readTree(bytes);
+        } catch (IOException e) {
+            // Build Map lazily only on error (extremely rare in production)
+            Map<String, String> responseHeaders = buildHeaderMap(headerNames, headerValues);
+            if (fallbackCharsetDecoder != null) {
+                logger.warn("Unable to parse JSON, fallback to use customized charset decoder.", e);
+                return fromJsonWithFallbackCharsetDecoder(bytes, responseHeaders);
+            } else {
+                String baseErrorMessage = "Failed to parse JSON document. No fallback charset decoder configured.";
+
+                if (Configs.isNonParseableDocumentLoggingEnabled()) {
+                    String documentSample = Base64.getEncoder().encodeToString(bytes);
+                    logger.error(baseErrorMessage + " " + "Document in Base64 format: [" + documentSample + "]", e);
+                } else {
+                    logger.error(baseErrorMessage);
+                }
+
+                IllegalStateException innerException = new IllegalStateException("Unable to parse JSON.", e);
+
+                throw Utils.createCosmosException(
+                    HttpConstants.StatusCodes.BADREQUEST,
+                    HttpConstants.SubStatusCodes.FAILED_TO_PARSE_SERVER_RESPONSE,
+                    innerException,
+                    responseHeaders);
+            }
+        }
+    }
+
+    private static Map<String, String> buildHeaderMap(String[] headerNames, String[] headerValues) {
+        Map<String, String> map = new HashMap<>(headerNames.length * 4 / 3 + 1);
+        for (int i = 0; i < headerNames.length; i++) {
+            map.put(headerNames[i], headerValues[i]);
+        }
+        return map;
     }
 
     private static JsonNode fromJsonWithFallbackCharsetDecoder(byte[] bytes, Map<String, String> responseHeaders) {
