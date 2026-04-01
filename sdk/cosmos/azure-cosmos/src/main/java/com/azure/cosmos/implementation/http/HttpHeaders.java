@@ -3,6 +3,7 @@
 
 package com.azure.cosmos.implementation.http;
 
+import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializable;
 import com.fasterxml.jackson.databind.SerializerProvider;
@@ -13,12 +14,16 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 /**
  * A collection of headers on an HTTP request or response.
+ *
+ * Internally stores headers as lowercased-key to value mappings,
+ * avoiding per-header HttpHeader object allocation.
  */
 public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
-    private Map<String, HttpHeader> headers;
+    private Map<String, String> headers;
 
     /**
      * Create an empty HttpHeaders instance.
@@ -70,7 +75,24 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
         if (value == null) {
             headers.remove(headerKey);
         } else {
-            headers.put(headerKey, new HttpHeader(name, value));
+            headers.put(headerKey, value);
+        }
+        return this;
+    }
+
+    /**
+     * Set a header using a pre-lowered key, skipping toLowerCase.
+     * The caller MUST guarantee that loweredKey is already lowercase.
+     *
+     * @param loweredKey the already-lowercase header name
+     * @param value the value
+     * @return this HttpHeaders
+     */
+    public HttpHeaders setLowered(String loweredKey, String value) {
+        if (value == null) {
+            headers.remove(loweredKey);
+        } else {
+            headers.put(loweredKey, value);
         }
         return this;
     }
@@ -83,8 +105,19 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * @return The String value of the header, or null if the header isn't found
      */
     public String value(String name) {
-        final HttpHeader header = getHeader(name);
-        return header == null ? null : header.value();
+        final String headerKey = name.toLowerCase(Locale.ROOT);
+        return headers.get(headerKey);
+    }
+
+    /**
+     * Get the header value for a pre-lowered header name, skipping toLowerCase.
+     * The caller MUST guarantee that loweredName is already lowercase.
+     *
+     * @param loweredName the already-lowercase header name
+     * @return The String value of the header, or null if the header isn't found
+     */
+    public String valueLowered(String loweredName) {
+        return headers.get(loweredName);
     }
 
     /**
@@ -95,26 +128,17 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * @return the values of the header, or null if the header isn't found
      */
     public String[] values(String name) {
-        final HttpHeader header = getHeader(name);
-        return header == null ? null : header.values();
-    }
-
-    private HttpHeader getHeader(String headerName) {
-        final String headerKey = headerName.toLowerCase(Locale.ROOT);
-        return headers.get(headerKey);
+        final String val = value(name);
+        return val == null ? null : StringUtils.split(val, ",");
     }
 
     /**
      * Get {@link Map} representation of the HttpHeaders collection.
      *
-     * @return the headers as map
+     * @return the headers as map (keys are lowercase)
      */
     public Map<String, String> toMap() {
-        final Map<String, String> result = new HashMap<>(headers.size());
-        for (final HttpHeader header : headers.values()) {
-            result.put(header.name(), header.value());
-        }
-        return result;
+        return new HashMap<>(headers);
     }
 
     /**
@@ -123,11 +147,7 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * @return the headers as map
      */
     public Map<String, String> toLowerCaseMap() {
-        final Map<String, String> result = new HashMap<>(headers.size());
-        for (String headerName : headers.keySet()) {
-            result.put(headerName, headers.get(headerName).value());
-        }
-        return result;
+        return new HashMap<>(headers);
     }
 
     /**
@@ -139,16 +159,31 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      */
     public void populateLowerCaseHeaders(String[] names, String[] values) {
         int i = 0;
-        for (Map.Entry<String, HttpHeader> entry : headers.entrySet()) {
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
             names[i] = entry.getKey();
-            values[i] = entry.getValue().value();
+            values[i] = entry.getValue();
             i++;
         }
     }
 
     @Override
     public Iterator<HttpHeader> iterator() {
-        return headers.values().iterator();
+        final Iterator<Map.Entry<String, String>> entries = headers.entrySet().iterator();
+        return new Iterator<HttpHeader>() {
+            @Override
+            public boolean hasNext() {
+                return entries.hasNext();
+            }
+
+            @Override
+            public HttpHeader next() {
+                if (!entries.hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                Map.Entry<String, String> entry = entries.next();
+                return new HttpHeader(entry.getKey(), entry.getValue());
+            }
+        };
     }
 
     @Override

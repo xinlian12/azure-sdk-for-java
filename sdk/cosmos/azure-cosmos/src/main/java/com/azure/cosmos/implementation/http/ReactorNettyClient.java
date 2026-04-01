@@ -35,6 +35,7 @@ import reactor.util.context.Context;
 import java.lang.invoke.WrongMethodTypeException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -410,7 +411,8 @@ public class ReactorNettyClient implements HttpClient {
         @Override
         public HttpHeaders headers() {
             HttpHeaders headers = new HttpHeaders(reactorNettyResponse.responseHeaders().size());
-            reactorNettyResponse.responseHeaders().forEach(e -> headers.set(e.getKey(), e.getValue()));
+            reactorNettyResponse.responseHeaders().forEach(e ->
+                headers.setLowered(e.getKey().toLowerCase(Locale.ROOT), e.getValue()));
             return headers;
         }
 
