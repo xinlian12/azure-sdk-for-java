@@ -5,17 +5,16 @@ package com.azure.cosmos.implementation.faultinjection;
 
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 
-import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 
 public class RntbdFaultInjectionRequestArgs extends FaultInjectionRequestArgs {
     public RntbdFaultInjectionRequestArgs(
         long transportRequestId,
-        URI requestURI,
+        String requestURIString,
         boolean isPrimary,
         RxDocumentServiceRequest serviceRequest) {
-        super(transportRequestId, requestURI, isPrimary, serviceRequest);
+        super(transportRequestId, requestURIString, isPrimary, serviceRequest);
     }
 
     @Override

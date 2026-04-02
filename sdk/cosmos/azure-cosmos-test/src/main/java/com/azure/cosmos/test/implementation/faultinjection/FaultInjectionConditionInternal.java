@@ -217,7 +217,7 @@ public class FaultInjectionConditionInternal {
 
                 boolean isApplicable = this.addresses
                     .stream()
-                    .anyMatch(address -> requestArgs.getRequestURI().toString().startsWith(address.toString()));
+                    .anyMatch(address -> requestArgs.getRequestURIString().startsWith(address.toString()));
 
                 if (!isApplicable) {
                     requestArgs.getServiceRequest().faultInjectionRequestContext
@@ -226,7 +226,7 @@ public class FaultInjectionConditionInternal {
                                 "%s [Addresses mismatch: Expected [%s], Actual [%s]]",
                                 ruleId,
                                 addresses,
-                                requestArgs.getRequestURI().toString()));
+                                requestArgs.getRequestURIString()));
                 }
 
                 return isApplicable;

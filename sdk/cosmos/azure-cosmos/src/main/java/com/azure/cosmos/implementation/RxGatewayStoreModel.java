@@ -54,6 +54,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.azure.cosmos.implementation.HttpConstants.HttpHeaders.INTENDED_COLLECTION_RID_HEADER;
@@ -69,6 +70,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     private static final boolean leakDetectionDebuggingEnabled = ResourceLeakDetector.getLevel().ordinal() >=
         ResourceLeakDetector.Level.ADVANCED.ordinal();
     private static final boolean HTTP_CONNECTION_WITHOUT_TLS_ALLOWED = Configs.isHttpConnectionWithoutTLSAllowed();
+    private static final String HTTPS_SCHEME = "https";
     private static final List<String> headersNeedToBeEscaped = Arrays.asList(
         HttpConstants.HttpHeaders.PARTITION_KEY,
         HttpConstants.HttpHeaders.POST_TRIGGER_EXCLUDE,
@@ -91,6 +93,24 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     private GatewayServiceConfigurationReader gatewayServiceConfigurationReader;
     private RxClientCollectionCache collectionCache;
     private GatewayServerErrorInjector gatewayServerErrorInjector;
+    private final ConcurrentHashMap<URI, String> uriPrefixCache = new ConcurrentHashMap<>();
+
+    /**
+     * Holds both the URI string and port resolved from a single root URI lookup.
+     * This avoids resolving the service endpoint twice per request (once for URI, once for port)
+     * and eliminates the TOCTOU risk during endpoint failover.
+     * <p>
+     * JIT can scalar-replace this allocation since it does not escape the calling method.
+     */
+    static final class ResolvedRequestUri {
+        final String uriString;
+        final int port;
+
+        ResolvedRequestUri(String uriString, int port) {
+            this.uriString = uriString;
+            this.port = port;
+        }
+    }
 
     public RxGatewayStoreModel(
         DiagnosticsClientContext clientContext,
@@ -194,14 +214,14 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     }
 
     @Override
-    public HttpRequest wrapInHttpRequest(RxDocumentServiceRequest request, URI requestUri) throws Exception {
+    public HttpRequest wrapInHttpRequest(RxDocumentServiceRequest request, String requestUriString, int port) throws Exception {
         HttpMethod method = getHttpMethod(request);
         HttpHeaders httpHeaders = this.getHttpRequestHeaders(request.getHeaders());
 
         Flux<byte[]> contentAsByteArray = request.getContentAsByteArrayFlux();
         return new HttpRequest(method,
-            requestUri,
-            requestUri.getPort(),
+            requestUriString,
+            port,
             httpHeaders,
             contentAsByteArray);
     }
@@ -279,14 +299,14 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 request.requestContext.cosmosDiagnostics = clientContext.createDiagnostics();
             }
 
-            URI uri = getUri(request);
-            request.requestContext.resourcePhysicalAddress = uri.toString();
+            ResolvedRequestUri resolved = resolveRequestUri(request);
+            request.requestContext.resourcePhysicalAddress = resolved.uriString;
 
             if (this.throughputControlStore != null) {
-                return this.throughputControlStore.processRequest(request, Mono.defer(() -> this.performRequestInternal(request, uri)));
+                return this.throughputControlStore.processRequest(request, Mono.defer(() -> this.performRequestInternal(request, resolved.uriString, resolved.port)));
             }
 
-            return this.performRequestInternal(request, uri);
+            return this.performRequestInternal(request, resolved.uriString, resolved.port);
         } catch (Exception e) {
             return Mono.error(e);
         }
@@ -297,31 +317,32 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     }
 
     /**
-     * Given the request it creates an flux which upon subscription issues HTTP call and emits one RxDocumentServiceResponse.
+     * Given the request it creates a flux which upon subscription issues HTTP call and emits one RxDocumentServiceResponse.
      *
      * @param request
-     * @param requestUri
+     * @param requestUriString
+     * @param port
      * @return Flux<RxDocumentServiceResponse>
      */
-    public Mono<RxDocumentServiceResponse> performRequestInternal(RxDocumentServiceRequest request, URI requestUri) {
+    public Mono<RxDocumentServiceResponse> performRequestInternal(RxDocumentServiceRequest request, String requestUriString, int port) {
         if (!partitionKeyRangeResolutionNeeded(request)) {
-            return this.performRequestInternalCore(request, requestUri);
+            return this.performRequestInternalCore(request, requestUriString, port);
         }
 
         return this
             .resolvePartitionKeyRangeByPkRangeId(request)
             .flatMap((pkRange) -> {
                 request.requestContext.resolvedPartitionKeyRange = pkRange;
-                return this.performRequestInternalCore(request, requestUri);
+                return this.performRequestInternalCore(request, requestUriString, port);
             });
     }
 
-    private Mono<RxDocumentServiceResponse> performRequestInternalCore(RxDocumentServiceRequest request, URI requestUri) {
+    private Mono<RxDocumentServiceResponse> performRequestInternalCore(RxDocumentServiceRequest request, String requestUriString, int port) {
 
         try {
             HttpRequest httpRequest = request
                 .getEffectiveHttpTransportSerializer(this)
-                .wrapInHttpRequest(request, requestUri);
+                .wrapInHttpRequest(request, requestUriString, port);
 
             // Capture the request record early so it's available on both success and error paths.
             // Each retry creates a new HttpRequest with a new record, so this is per-attempt.
@@ -378,32 +399,78 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         return this.globalEndpointManager.resolveServiceEndpoint(request).getGatewayRegionalEndpoint();
     }
 
-    private URI getUri(RxDocumentServiceRequest request) throws URISyntaxException {
-        URI rootUri = request.getEndpointOverride();
-        if (rootUri == null) {
-            if (request.getIsMedia()) {
-                // For media read request, always use the write endpoint.
-                rootUri = this.globalEndpointManager.getWriteEndpoints().get(0).getGatewayRegionalEndpoint();
-            } else {
-                rootUri = getRootUri(request);
-            }
+    /**
+     * Returns the cached URI prefix string (scheme://host[:port]) for the given root URI.
+     * Uses the JDK URI constructor to build the prefix, ensuring correct formatting.
+     * The HTTPS scheme is enforced unless HTTP connections without TLS are explicitly allowed.
+     */
+    private String getOrBuildUriPrefix(URI rootUri) {
+        return uriPrefixCache.computeIfAbsent(rootUri, RxGatewayStoreModel::buildUriPrefix);
+    }
+
+    private static String buildUriPrefix(URI rootUri) {
+        String scheme = HTTP_CONNECTION_WITHOUT_TLS_ALLOWED ? rootUri.getScheme() : HTTPS_SCHEME;
+        try {
+            return new URI(scheme, null, rootUri.getHost(), rootUri.getPort(), null, null, null).toString();
+        } catch (URISyntaxException e) {
+            throw new IllegalStateException("Invalid root URI: " + rootUri, e);
         }
+    }
+
+    /**
+     * Resolves the root URI for the request once, then derives both the full request URI string
+     * and the port from the same resolution. This avoids the cost of double endpoint resolution
+     * and eliminates TOCTOU risk during failover.
+     */
+    private ResolvedRequestUri resolveRequestUri(RxDocumentServiceRequest request) {
+        URI rootUri = resolveRootUri(request);
 
         String path = PathsHelper.generatePath(request.getResourceType(), request, request.isFeed);
         if (request.getResourceType().equals(ResourceType.DatabaseAccount)) {
             path = StringUtils.EMPTY;
         }
 
-        // allow using http connections if customer opt in to use http for vnext emulator
-        String scheme = HTTP_CONNECTION_WITHOUT_TLS_ALLOWED ? rootUri.getScheme() : "https";
+        String prefix = getOrBuildUriPrefix(rootUri);
+        String encodedPath = encodePath(ensureSlashPrefixed(path));
 
-        return new URI(scheme,
-            null,
-            rootUri.getHost(),
-            rootUri.getPort(),
-            ensureSlashPrefixed(path),
-            null,  // Query string not used.
-            null);
+        return new ResolvedRequestUri(prefix + encodedPath, rootUri.getPort());
+    }
+
+    /**
+     * Resolves the root URI for the given request. Centralizes the endpoint resolution
+     * logic so that it is performed exactly once per request.
+     */
+    private URI resolveRootUri(RxDocumentServiceRequest request) {
+        URI rootUri = request.getEndpointOverride();
+        if (rootUri == null) {
+            if (request.getIsMedia()) {
+                rootUri = this.globalEndpointManager.getWriteEndpoints().get(0).getGatewayRegionalEndpoint();
+            } else {
+                rootUri = getRootUri(request);
+            }
+        }
+        return rootUri;
+    }
+
+    /**
+     * Percent-encodes a URI path using the JDK's {@link URI} constructor.
+     * This produces the same encoding as the 7-arg URI constructor
+     * ({@code new URI(scheme, null, host, port, path, null, null).toASCIIString()})
+     * but skips scheme/host/port parsing for lower overhead.
+     *
+     * @param path the path to encode
+     * @return the percent-encoded path
+     */
+    static String encodePath(String path) {
+        if (path == null || path.isEmpty()) {
+            return path;
+        }
+
+        try {
+            return new URI(null, null, null, -1, path, null, null).toASCIIString();
+        } catch (URISyntaxException e) {
+            throw new IllegalStateException("Invalid URI path: " + path, e);
+        }
     }
 
     private String ensureSlashPrefixed(String path) {
@@ -503,7 +570,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                         }
                         StoreResponse rsp = request
                             .getEffectiveHttpTransportSerializer(this)
-                            .unwrapToStoreResponse(httpRequest.uri().toString(), request, httpResponseStatus, httpResponseHeaders, content);
+                            .unwrapToStoreResponse(httpRequest.uriAsString(), request, httpResponseStatus, httpResponseHeaders, content);
 
                         // Only clear retainedBufRef AFTER StoreResponse successfully takes ownership.
                         // If unwrapToStoreResponse throws, retainedBufRef remains set so doFinally
@@ -619,7 +686,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 ImplementationBridgeHelpers
                     .CosmosExceptionHelper
                     .getCosmosExceptionAccessor()
-                    .setRequestUri(dce, Uri.create(httpRequest.uri().toString()));
+                    .setRequestUri(dce, Uri.create(httpRequest.uriAsString()));
 
                 if (request.requestContext.cosmosDiagnostics != null) {
                     if (httpRequest.reactorNettyRequestRecord() != null) {
@@ -655,7 +722,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
 
                 if (httpRequest.reactorNettyRequestRecord() != null) {
 
-                    OperationCancelledException oce = new OperationCancelledException("", httpRequest.uri());
+                    OperationCancelledException oce = new OperationCancelledException("", httpRequest.uriAsString());
 
                     ReactorNettyRequestRecord reactorNettyRequestRecord = httpRequest.reactorNettyRequestRecord();
 
@@ -671,7 +738,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                     ImplementationBridgeHelpers
                         .CosmosExceptionHelper
                         .getCosmosExceptionAccessor()
-                        .setRequestUri(oce, Uri.create(httpRequest.uri().toString()));
+                        .setRequestUri(oce, Uri.create(httpRequest.uriAsString()));
 
                     if (request.requestContext.getCrossRegionAvailabilityContext() != null) {
 

@@ -5,28 +5,27 @@ package com.azure.cosmos.implementation.faultinjection;
 
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 
-import java.net.URI;
 import java.util.List;
 
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
 
 public abstract class FaultInjectionRequestArgs {
     private final long transportRequestId;
-    private final URI requestURI;
+    private final String requestURIString;
     private final RxDocumentServiceRequest serviceRequest;
     private boolean isPrimary;
 
     public FaultInjectionRequestArgs(
         long transportRequestId,
-        URI requestURI,
+        String requestURIString,
         boolean isPrimary,
         RxDocumentServiceRequest serviceRequest) {
 
-        checkNotNull(requestURI, "Argument 'requestURI' can not null");
+        checkNotNull(requestURIString, "Argument 'requestURIString' can not null");
         checkNotNull(serviceRequest, "Argument 'serviceRequest' can not be null");
 
         this.transportRequestId = transportRequestId;
-        this.requestURI = requestURI;
+        this.requestURIString = requestURIString;
         this.isPrimary = isPrimary;
         this.serviceRequest = serviceRequest;
     }
@@ -35,8 +34,8 @@ public abstract class FaultInjectionRequestArgs {
         return this.transportRequestId;
     }
 
-    public URI getRequestURI() {
-        return this.requestURI;
+    public String getRequestURIString() {
+        return this.requestURIString;
     }
 
     public RxDocumentServiceRequest getServiceRequest() {

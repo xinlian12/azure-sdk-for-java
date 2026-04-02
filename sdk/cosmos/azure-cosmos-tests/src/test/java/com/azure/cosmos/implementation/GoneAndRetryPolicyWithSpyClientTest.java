@@ -131,11 +131,11 @@ public class GoneAndRetryPolicyWithSpyClientTest extends TestSuiteBase {
             }
 
             logger.info(
-                String.format("Force refresh request %s Headers: \n%s", request.uri().toString(), headersToString(request.headers())));
+                String.format("Force refresh request %s Headers: \n%s", request.uriAsString(), headersToString(request.headers())));
                 return responseObservable;
         } else {
             logger.info(
-                String.format("Other HTTP request %s Headers: \n%s", request.uri().toString(), headersToString(request.headers())));
+                String.format("Other HTTP request %s Headers: \n%s", request.uriAsString(), headersToString(request.headers())));
         }
 
         return responseObservable;

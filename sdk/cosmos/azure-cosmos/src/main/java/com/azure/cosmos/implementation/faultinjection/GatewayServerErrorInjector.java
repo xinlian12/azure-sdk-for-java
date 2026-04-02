@@ -23,7 +23,6 @@ import io.netty.channel.ConnectTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutException;
 import reactor.core.publisher.Mono;
 
-import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -142,7 +141,7 @@ public class GatewayServerErrorInjector {
                 FaultInjectionRequestArgs faultInjectionRequestArgs =
                     this.createFaultInjectionRequestArgs(
                         httpRequest.reactorNettyRequestRecord(),
-                        httpRequest.uri(),
+                        httpRequest.uriAsString(),
                         serviceRequest,
                         partitionKeyRangeIds);
 
@@ -234,12 +233,12 @@ public class GatewayServerErrorInjector {
 
     private GatewayFaultInjectionRequestArgs createFaultInjectionRequestArgs(
         ReactorNettyRequestRecord requestRecord,
-        URI requestUri,
+        String requestUriString,
         RxDocumentServiceRequest serviceRequest,
         List<String> partitionKeyRangeIds) {
         return new GatewayFaultInjectionRequestArgs(
             requestRecord.getTransportRequestId(),
-            requestUri,
+            requestUriString,
             serviceRequest,
             partitionKeyRangeIds);
     }

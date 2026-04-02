@@ -83,7 +83,6 @@ import reactor.core.publisher.Flux;
 
 import java.net.SocketTimeoutException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2205,7 +2204,7 @@ public class PerPartitionAutomaticFailoverE2ETests extends TestSuiteBase {
             Mockito.when(
                     httpClientMock.send(
                         Mockito.argThat(argument -> {
-                            URI uri = argument.uri();
+                            URI uri = URI.create(argument.uriAsString());
                             return uri.toString().contains(locationEndpointToRoute.toString());
                         }), Mockito.any(Duration.class)))
                 .thenReturn(Mono.delay(Duration.ofSeconds(10)).flatMap(aLong -> Mono.error(cosmosException)));
@@ -2218,7 +2217,7 @@ public class PerPartitionAutomaticFailoverE2ETests extends TestSuiteBase {
                 Mockito.when(
                         httpClientMock.send(
                             Mockito.argThat(argument -> {
-                                URI uri = argument.uri();
+                                URI uri = URI.create(argument.uriAsString());
                                 return uri.toString().contains(locationEndpointToRoute.toString());
                             }), Mockito.any(Duration.class)))
                     .thenReturn(Mono.error(new ReadTimeoutException()));
@@ -2226,7 +2225,7 @@ public class PerPartitionAutomaticFailoverE2ETests extends TestSuiteBase {
                 Mockito.when(
                         httpClientMock.send(
                             Mockito.argThat(argument -> {
-                                URI uri = argument.uri();
+                                URI uri = URI.create(argument.uriAsString());
                                 return uri.toString().contains(locationEndpointToRoute.toString());
                             }), Mockito.any(Duration.class)))
                     .thenReturn(Mono.error(new SocketTimeoutException()));
@@ -2239,7 +2238,7 @@ public class PerPartitionAutomaticFailoverE2ETests extends TestSuiteBase {
         Mockito.when(
                 httpClientMock.send(
                     Mockito.argThat(argument -> {
-                        URI uri = argument.uri();
+                        URI uri = URI.create(argument.uriAsString());
                         return uri.toString().contains(locationEndpointToRoute.toString());
                     }), Mockito.any(Duration.class)))
             .thenReturn(Mono.error(cosmosException));
@@ -2261,7 +2260,7 @@ public class PerPartitionAutomaticFailoverE2ETests extends TestSuiteBase {
                     return false;
                 }
 
-            URI uri = argument.uri();
+            URI uri = URI.create(argument.uriAsString());
             String uriStr = uri.toString();
 
             // basically a DatabaseAccount call
@@ -2279,7 +2278,7 @@ public class PerPartitionAutomaticFailoverE2ETests extends TestSuiteBase {
                     return false;
                 }
 
-                URI uri = argument.uri();
+                URI uri = URI.create(argument.uriAsString());
                 String uriStr = uri.toString();
 
                 // basically a Document call
@@ -2963,11 +2962,7 @@ public class PerPartitionAutomaticFailoverE2ETests extends TestSuiteBase {
             }
         };
 
-        try {
-            return httpResponse.withRequest(new HttpRequest(HttpMethod.POST, TestConfigurations.HOST, 443));
-        } catch (URISyntaxException e) {
-            return httpResponse;
-        }
+        return httpResponse.withRequest(new HttpRequest(HttpMethod.POST, TestConfigurations.HOST, 443));
     }
 
     private Mono<ByteBuf> createAutoReleasingMono(Supplier<ByteBuf> bufferSupplier) {

@@ -33,6 +33,7 @@ import reactor.netty.transport.ProxyProvider;
 import reactor.util.context.Context;
 
 import java.lang.invoke.WrongMethodTypeException;
+import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
@@ -176,7 +177,7 @@ public class ReactorNettyClient implements HttpClient {
     @Override
     public Mono<HttpResponse> send(final HttpRequest request, Duration responseTimeout) {
         Objects.requireNonNull(request.httpMethod());
-        Objects.requireNonNull(request.uri());
+        Objects.requireNonNull(request.uriAsString());
         Objects.requireNonNull(this.httpClientConfig);
         if(request.reactorNettyRequestRecord() == null) {
             ReactorNettyRequestRecord reactorNettyRequestRecord = new ReactorNettyRequestRecord();
@@ -202,7 +203,7 @@ public class ReactorNettyClient implements HttpClient {
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
             .responseTimeout(responseTimeout)
             .request(HttpMethod.valueOf(request.httpMethod().toString()))
-            .uri(request.uri().toASCIIString())
+            .uri(URI.create(request.uriAsString()))
             .send(bodySendDelegate(request))
             .responseConnection((reactorNettyResponse, reactorNettyConnection) -> {
                 HttpResponse httpResponse = new ReactorNettyHttpResponse(reactorNettyResponse,

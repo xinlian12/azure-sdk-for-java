@@ -3022,7 +3022,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             "This exception should only be used for negative timeouts");
 
         String message = String.format("Negative timeout '%s' provided.",  negativeTimeout);
-        CosmosException exception = new OperationCancelledException(message, null);
+        CosmosException exception = new OperationCancelledException(message, (String) null);
         BridgeInternal.setSubStatusCode(exception, HttpConstants.SubStatusCodes.NEGATIVE_TIMEOUT_PROVIDED);
 
         if (cosmosDiagnostics != null) {
