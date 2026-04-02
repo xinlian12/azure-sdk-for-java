@@ -60,7 +60,7 @@ public class JsonNodeStorePayload implements StorePayload<JsonNode> {
         byte[] bytes = new byte[readableBytes];
         try {
             bufferStream.read(bytes);
-            return Utils.getSimpleObjectMapper().readTree(bytes);
+            return Utils.getResponseObjectMapper().readTree(bytes);
         } catch (IOException e) {
             if (fallbackCharsetDecoder != null) {
                 logger.warn("Unable to parse JSON, fallback to use customized charset decoder.", e);
@@ -96,7 +96,7 @@ public class JsonNodeStorePayload implements StorePayload<JsonNode> {
         byte[] bytes = new byte[readableBytes];
         try {
             bufferStream.read(bytes);
-            return Utils.getSimpleObjectMapper().readTree(bytes);
+            return Utils.getResponseObjectMapper().readTree(bytes);
         } catch (IOException e) {
             // Build Map lazily only on error (extremely rare in production)
             Map<String, String> responseHeaders = buildHeaderMap(headerNames, headerValues);
@@ -135,7 +135,7 @@ public class JsonNodeStorePayload implements StorePayload<JsonNode> {
     private static JsonNode fromJsonWithFallbackCharsetDecoder(byte[] bytes, Map<String, String> responseHeaders) {
         try {
             String sanitizedJson = fallbackCharsetDecoder.decode(ByteBuffer.wrap(bytes)).toString();
-            return Utils.getSimpleObjectMapper().readTree(sanitizedJson);
+            return Utils.getResponseObjectMapper().readTree(sanitizedJson);
         } catch (IOException e) {
 
             String baseErrorMessage = "Failed to parse JSON document even after applying fallback charset decoder.";

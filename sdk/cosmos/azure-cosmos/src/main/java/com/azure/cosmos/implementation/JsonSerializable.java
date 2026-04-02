@@ -678,6 +678,9 @@ public class JsonSerializable {
         if (List.class.isAssignableFrom(c)) {
             Object o = this.get(Constants.Properties.VALUE);
             try {
+                if (o instanceof JsonNode) {
+                    return OBJECT_MAPPER.treeToValue((JsonNode) o, c);
+                }
                 return OBJECT_MAPPER.readValue(o.toString(), c);
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to convert to collection.", e);
@@ -732,7 +735,7 @@ public class JsonSerializable {
 
         if (List.class.isAssignableFrom(c)) {
             try {
-                return OBJECT_MAPPER.readValue(node.toString(), c);
+                return OBJECT_MAPPER.treeToValue(node, c);
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to convert to collection.", e);
             }

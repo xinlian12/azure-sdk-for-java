@@ -469,6 +469,13 @@ public class Utils {
         return Utils.simpleObjectMapperAllowingDuplicatedProperties;
     }
 
+    // Response-optimized mapper without STRICT_DUPLICATE_DETECTION.
+    // Cosmos DB server responses never contain duplicate JSON keys,
+    // so the per-property HashSet tracking is pure overhead on the read path.
+    public static ObjectMapper getResponseObjectMapper() {
+        return Utils.simpleObjectMapperAllowingDuplicatedProperties;
+    }
+
     public static ObjectMapper getDurationEnabledObjectMapper() {
         return durationEnabledObjectMapper;
     }
