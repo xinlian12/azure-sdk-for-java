@@ -7,7 +7,6 @@ import com.azure.cosmos.CosmosExcludedRegions;
 import com.azure.cosmos.DirectConnectionConfig;
 import com.azure.cosmos.implementation.ConnectionPolicy;
 import com.azure.cosmos.implementation.LifeCycleUtils;
-import com.azure.cosmos.implementation.apachecommons.collections.list.UnmodifiableList;
 import com.azure.cosmos.implementation.DatabaseAccount;
 import com.azure.cosmos.implementation.DatabaseAccountLocation;
 import com.azure.cosmos.implementation.Configs;
@@ -76,7 +75,7 @@ public class LocationCacheTest {
         }
     };
 
-    private UnmodifiableList<String> preferredLocations;
+    private List<String> preferredLocations;
     private DatabaseAccount databaseAccount;
     private LocationCache cache;
     private GlobalEndpointManager endpointManager;
@@ -589,8 +588,8 @@ public class LocationCacheTest {
         this.databaseAccount = LocationCacheTest.createDatabaseAccount(useMultipleWriteLocations);
 
         this.preferredLocations = isPreferredLocationsListEmpty ?
-            new UnmodifiableList<>(Collections.emptyList()) :
-            new UnmodifiableList<>(ImmutableList.of("location1", "location2", "location3"));
+            Collections.unmodifiableList(Collections.emptyList()) :
+            Collections.unmodifiableList(ImmutableList.of("location1", "location2", "location3"));
 
         connectionPolicy.setPreferredRegions(this.preferredLocations);
 
@@ -666,8 +665,8 @@ public class LocationCacheTest {
                         endpointDiscoveryEnabled,
                         isPreferredListEmpty);
 
-                UnmodifiableList<RegionalRoutingContext> currentWriteEndpoints = this.cache.getWriteEndpoints();
-                UnmodifiableList<RegionalRoutingContext> currentReadEndpoints = this.cache.getReadEndpoints();
+                List<RegionalRoutingContext> currentWriteEndpoints = this.cache.getWriteEndpoints();
+                List<RegionalRoutingContext> currentReadEndpoints = this.cache.getReadEndpoints();
                 for (int i = 0; i < readLocationIndex; i++) {
                     this.cache.markEndpointUnavailableForRead(createUrl(Iterables.get(this.databaseAccount.getReadableLocations(), i).getEndpoint()));
                     this.endpointManager.markEndpointUnavailableForRead(createUrl(Iterables.get(this.databaseAccount.getReadableLocations(), i).getEndpoint()));;
@@ -897,7 +896,7 @@ public class LocationCacheTest {
 
         // If current write endpoint is unavailable, write endpoints order doesn't change
         // ALL write requests flip-flop between current write and alternate write endpoint
-        UnmodifiableList<RegionalRoutingContext> writeEndpoints = this.cache.getWriteEndpoints();
+        List<RegionalRoutingContext> writeEndpoints = this.cache.getWriteEndpoints();
 
         assertThat(new RegionalRoutingContext(firstAvailableWriteEndpoint)).isEqualTo(writeEndpoints.get(0));
         assertThat(new RegionalRoutingContext(secondAvailableWriteEndpoint)).isEqualTo(this.resolveEndpointForWriteRequest(ResourceType.Document, true));

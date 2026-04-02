@@ -66,7 +66,7 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * @return this HttpHeaders
      */
     public HttpHeaders set(String name, String value) {
-        final String headerKey = name.toLowerCase(Locale.ROOT);
+        final String headerKey = isAsciiLowerCase(name) ? name : name.toLowerCase(Locale.ROOT);
         if (value == null) {
             headers.remove(headerKey);
         } else {
@@ -100,8 +100,18 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
     }
 
     private HttpHeader getHeader(String headerName) {
-        final String headerKey = headerName.toLowerCase(Locale.ROOT);
+        final String headerKey = isAsciiLowerCase(headerName) ? headerName : headerName.toLowerCase(Locale.ROOT);
         return headers.get(headerKey);
+    }
+
+    private static boolean isAsciiLowerCase(String s) {
+        for (int i = 0, len = s.length(); i < len; i++) {
+            char c = s.charAt(i);
+            if (c >= 'A' && c <= 'Z') {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
