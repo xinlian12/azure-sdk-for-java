@@ -44,7 +44,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
@@ -194,14 +193,14 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     }
 
     @Override
-    public HttpRequest wrapInHttpRequest(RxDocumentServiceRequest request, URI requestUri) throws Exception {
+    public HttpRequest wrapInHttpRequest(RxDocumentServiceRequest request, String requestUri, int port) throws Exception {
         HttpMethod method = getHttpMethod(request);
         HttpHeaders httpHeaders = this.getHttpRequestHeaders(request.getHeaders());
 
         Flux<byte[]> contentAsByteArray = request.getContentAsByteArrayFlux();
         return new HttpRequest(method,
             requestUri,
-            requestUri.getPort(),
+            port,
             httpHeaders,
             contentAsByteArray);
     }
@@ -279,14 +278,16 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 request.requestContext.cosmosDiagnostics = clientContext.createDiagnostics();
             }
 
-            URI uri = getUri(request);
-            request.requestContext.resourcePhysicalAddress = uri.toString();
+            URI rootUri = resolveRootUri(request);
+            int port = rootUri.getPort();
+            String uriString = buildRequestUriString(request, rootUri);
+            request.requestContext.resourcePhysicalAddress = uriString;
 
             if (this.throughputControlStore != null) {
-                return this.throughputControlStore.processRequest(request, Mono.defer(() -> this.performRequestInternal(request, uri)));
+                return this.throughputControlStore.processRequest(request, Mono.defer(() -> this.performRequestInternal(request, uriString, port)));
             }
 
-            return this.performRequestInternal(request, uri);
+            return this.performRequestInternal(request, uriString, port);
         } catch (Exception e) {
             return Mono.error(e);
         }
@@ -301,27 +302,28 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
      *
      * @param request
      * @param requestUri
+     * @param port
      * @return Flux<RxDocumentServiceResponse>
      */
-    public Mono<RxDocumentServiceResponse> performRequestInternal(RxDocumentServiceRequest request, URI requestUri) {
+    public Mono<RxDocumentServiceResponse> performRequestInternal(RxDocumentServiceRequest request, String requestUri, int port) {
         if (!partitionKeyRangeResolutionNeeded(request)) {
-            return this.performRequestInternalCore(request, requestUri);
+            return this.performRequestInternalCore(request, requestUri, port);
         }
 
         return this
             .resolvePartitionKeyRangeByPkRangeId(request)
             .flatMap((pkRange) -> {
                 request.requestContext.resolvedPartitionKeyRange = pkRange;
-                return this.performRequestInternalCore(request, requestUri);
+                return this.performRequestInternalCore(request, requestUri, port);
             });
     }
 
-    private Mono<RxDocumentServiceResponse> performRequestInternalCore(RxDocumentServiceRequest request, URI requestUri) {
+    private Mono<RxDocumentServiceResponse> performRequestInternalCore(RxDocumentServiceRequest request, String requestUri, int port) {
 
         try {
             HttpRequest httpRequest = request
                 .getEffectiveHttpTransportSerializer(this)
-                .wrapInHttpRequest(request, requestUri);
+                .wrapInHttpRequest(request, requestUri, port);
 
             // Capture the request record early so it's available on both success and error paths.
             // Each retry creates a new HttpRequest with a new record, so this is per-attempt.
@@ -378,7 +380,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
         return this.globalEndpointManager.resolveServiceEndpoint(request).getGatewayRegionalEndpoint();
     }
 
-    private URI getUri(RxDocumentServiceRequest request) throws URISyntaxException {
+    private URI resolveRootUri(RxDocumentServiceRequest request) {
         URI rootUri = request.getEndpointOverride();
         if (rootUri == null) {
             if (request.getIsMedia()) {
@@ -388,7 +390,10 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 rootUri = getRootUri(request);
             }
         }
+        return rootUri;
+    }
 
+    private String buildRequestUriString(RxDocumentServiceRequest request, URI rootUri) {
         String path = PathsHelper.generatePath(request.getResourceType(), request, request.isFeed);
         if (request.getResourceType().equals(ResourceType.DatabaseAccount)) {
             path = StringUtils.EMPTY;
@@ -396,14 +401,17 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
 
         // allow using http connections if customer opt in to use http for vnext emulator
         String scheme = HTTP_CONNECTION_WITHOUT_TLS_ALLOWED ? rootUri.getScheme() : "https";
+        String host = rootUri.getHost();
+        int port = rootUri.getPort();
+        String slashPath = ensureSlashPrefixed(path);
+        if (slashPath == null) {
+            slashPath = "";
+        }
 
-        return new URI(scheme,
-            null,
-            rootUri.getHost(),
-            rootUri.getPort(),
-            ensureSlashPrefixed(path),
-            null,  // Query string not used.
-            null);
+        if (port == -1) {
+            return scheme + "://" + host + slashPath;
+        }
+        return scheme + "://" + host + ":" + port + slashPath;
     }
 
     private String ensureSlashPrefixed(String path) {
@@ -503,7 +511,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                         }
                         StoreResponse rsp = request
                             .getEffectiveHttpTransportSerializer(this)
-                            .unwrapToStoreResponse(httpRequest.uri().toString(), request, httpResponseStatus, httpResponseHeaders, content);
+                            .unwrapToStoreResponse(httpRequest.uriString(), request, httpResponseStatus, httpResponseHeaders, content);
 
                         // Only clear retainedBufRef AFTER StoreResponse successfully takes ownership.
                         // If unwrapToStoreResponse throws, retainedBufRef remains set so doFinally
@@ -619,7 +627,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                 ImplementationBridgeHelpers
                     .CosmosExceptionHelper
                     .getCosmosExceptionAccessor()
-                    .setRequestUri(dce, Uri.create(httpRequest.uri().toString()));
+                    .setRequestUri(dce, Uri.create(httpRequest.uriString()));
 
                 if (request.requestContext.cosmosDiagnostics != null) {
                     if (httpRequest.reactorNettyRequestRecord() != null) {
@@ -671,7 +679,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
                     ImplementationBridgeHelpers
                         .CosmosExceptionHelper
                         .getCosmosExceptionAccessor()
-                        .setRequestUri(oce, Uri.create(httpRequest.uri().toString()));
+                        .setRequestUri(oce, Uri.create(httpRequest.uriString()));
 
                     if (request.requestContext.getCrossRegionAvailabilityContext() != null) {
 

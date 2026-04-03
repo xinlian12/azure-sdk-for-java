@@ -188,7 +188,7 @@ public class ThinClientStoreModel extends RxGatewayStoreModel {
     }
 
     @Override
-    public Mono<RxDocumentServiceResponse> performRequestInternal(RxDocumentServiceRequest request, URI requestUri) {
+    public Mono<RxDocumentServiceResponse> performRequestInternal(RxDocumentServiceRequest request, String requestUri, int port) {
         // Ensure partitionKeyDefinition is resolved from the collection cache before
         // reaching wrapInHttpRequest, which needs it for client-side EPK computation.
         // This handles cases where clone() or other code paths didn't propagate partitionKeyDefinition.
@@ -208,16 +208,16 @@ public class ThinClientStoreModel extends RxGatewayStoreModel {
                                     + request.getResourceAddress()
                                     + ". Cannot resolve partitionKeyDefinition for client-side EPK computation.");
                         }
-                        return super.performRequestInternal(request, requestUri);
+                        return super.performRequestInternal(request, requestUri, port);
                     });
             }
         }
 
-        return super.performRequestInternal(request, requestUri);
+        return super.performRequestInternal(request, requestUri, port);
     }
 
     @Override
-    public HttpRequest wrapInHttpRequest(RxDocumentServiceRequest request, URI requestUri) throws Exception {
+    public HttpRequest wrapInHttpRequest(RxDocumentServiceRequest request, String requestUri, int port) throws Exception {
         if (this.globalDatabaseAccountName == null) {
             this.globalDatabaseAccountName = this.globalEndpointManager.getLatestDatabaseAccount().getId();
         }
@@ -265,7 +265,7 @@ public class ThinClientStoreModel extends RxGatewayStoreModel {
             return new HttpRequest(
                 HttpMethod.POST,
                 requestUri,
-                requestUri.getPort(),
+                port,
                 headers,
                 Flux.just(contentAsByteArray))
                 .withThinClientRequest(true);

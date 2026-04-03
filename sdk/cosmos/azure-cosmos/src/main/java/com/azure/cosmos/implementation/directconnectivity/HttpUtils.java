@@ -22,18 +22,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 public class HttpUtils {
 
     private static Logger log = LoggerFactory.getLogger(HttpUtils.class);
 
-    private static final Pattern PLUS_SYMBOL_ESCAPE_PATTERN = Pattern.compile(UrlEncodingInfo.PLUS_SYMBOL_ESCAPED);
-
     public static String urlEncode(String url) {
         try {
-            return PLUS_SYMBOL_ESCAPE_PATTERN.matcher(URLEncoder.encode(url, UrlEncodingInfo.UTF_8))
-                .replaceAll(UrlEncodingInfo.SINGLE_SPACE_URI_ENCODING);
+            return URLEncoder.encode(url, UrlEncodingInfo.UTF_8)
+                .replace("+", UrlEncodingInfo.SINGLE_SPACE_URI_ENCODING);
         } catch (UnsupportedEncodingException e) {
             log.error("failed to encode {}", url, e);
             throw new IllegalArgumentException("failed to encode url " + url, e);
@@ -42,7 +39,7 @@ public class HttpUtils {
 
     public static String urlDecode(String url) {
         try {
-            return URLDecoder.decode(PLUS_SYMBOL_ESCAPE_PATTERN.matcher(url).replaceAll(UrlEncodingInfo.PLUS_SYMBOL_URI_ENCODING),
+            return URLDecoder.decode(url.replace("+", UrlEncodingInfo.PLUS_SYMBOL_URI_ENCODING),
                 UrlEncodingInfo.UTF_8);
         } catch (UnsupportedEncodingException e) {
             log.error("failed to decode {}", url, e);

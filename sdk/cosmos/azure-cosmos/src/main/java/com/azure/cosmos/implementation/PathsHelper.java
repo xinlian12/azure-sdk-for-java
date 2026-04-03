@@ -300,7 +300,7 @@ public class PathsHelper {
     }
 
     public static PathInfo parsePathSegments(String resourceUrl) {
-        String[] segments = StringUtils.strip(resourceUrl, "/").split("/");
+        String[] segments = StringUtils.split(StringUtils.strip(resourceUrl, "/"), '/');
         if (segments == null || segments.length < 1) {
             return null;
         }
