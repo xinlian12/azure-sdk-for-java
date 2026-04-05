@@ -69,7 +69,7 @@ public class StoreResponse {
         }
 
         this.status = status;
-        replicaStatusList = new HashMap<>(4);
+        replicaStatusList = new HashMap<>(6);
         if (contentStream != null) {
             try {
                 this.responsePayload = new JsonNodeStorePayload(contentStream, responsePayloadLength, headerMap);
@@ -120,7 +120,7 @@ public class StoreResponse {
         }
 
         this.status = status;
-        replicaStatusList = new HashMap<>(4);
+        replicaStatusList = new HashMap<>(6);
         if (contentStream != null) {
             try {
                 this.responsePayload = new JsonNodeStorePayload(
@@ -160,7 +160,7 @@ public class StoreResponse {
         }
 
         this.status = status;
-        replicaStatusList = new HashMap<>(4);
+        replicaStatusList = new HashMap<>(6);
         this.responsePayload = responsePayload;
     }
 

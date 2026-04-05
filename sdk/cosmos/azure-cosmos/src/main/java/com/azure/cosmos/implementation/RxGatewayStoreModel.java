@@ -343,7 +343,7 @@ public class RxGatewayStoreModel implements RxStoreModel, HttpTransportSerialize
     }
 
     private HttpHeaders getHttpRequestHeaders(Map<String, String> headers) {
-        HttpHeaders httpHeaders = new HttpHeaders(this.defaultHeaders.size() + (headers != null ? headers.size() : 0));
+        HttpHeaders httpHeaders = new HttpHeaders(this.defaultHeaders.size() + headers.size());
         // Add default headers.
         for (Entry<String, String> entry : this.defaultHeaders.entrySet()) {
             if (!headers.containsKey(entry.getKey())) {

@@ -24,7 +24,7 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * Create an empty HttpHeaders instance.
      */
     public HttpHeaders() {
-        this.headers = new HashMap<>(16);
+        this.headers = new HashMap<>();
     }
 
     /**

@@ -26,4 +26,43 @@ public class HttpHeadersTests {
         assertThat(caseSensitiveMap.get(headerName.toLowerCase())).isNull();
         assertThat(caseSensitiveMap.get(headerName)).isEqualTo(headerValue);
     }
+
+    @Test(groups = "unit")
+    public void populateLowerCaseHeadersProducesLowercaseNames() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Content-Type", "application/json");
+        headers.set("X-Ms-Request-Id", "abc-123");
+        headers.set("ETag", "\"v1\"");
+
+        String[] names = new String[headers.size()];
+        String[] values = new String[headers.size()];
+        headers.populateLowerCaseHeaders(names, values);
+
+        // All names should be lowercase
+        for (String name : names) {
+            assertThat(name).isEqualTo(name.toLowerCase());
+        }
+
+        // Verify values are present (order depends on HashMap iteration, so use containment)
+        Map<String, String> resultMap = new java.util.HashMap<>();
+        for (int i = 0; i < names.length; i++) {
+            resultMap.put(names[i], values[i]);
+        }
+
+        assertThat(resultMap).containsEntry("content-type", "application/json");
+        assertThat(resultMap).containsEntry("x-ms-request-id", "abc-123");
+        assertThat(resultMap).containsEntry("etag", "\"v1\"");
+    }
+
+    @Test(groups = "unit")
+    public void populateLowerCaseHeadersWithEmptyHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+
+        String[] names = new String[0];
+        String[] values = new String[0];
+        headers.populateLowerCaseHeaders(names, values);
+
+        assertThat(names).isEmpty();
+        assertThat(values).isEmpty();
+    }
 }

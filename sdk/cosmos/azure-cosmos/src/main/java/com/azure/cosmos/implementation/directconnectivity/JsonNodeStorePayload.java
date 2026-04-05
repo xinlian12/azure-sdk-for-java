@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public class JsonNodeStorePayload implements StorePayload<JsonNode> {
     private static final Logger logger = LoggerFactory.getLogger(JsonNodeStorePayload.class);
@@ -30,7 +31,7 @@ public class JsonNodeStorePayload implements StorePayload<JsonNode> {
     public JsonNodeStorePayload(ByteBufInputStream bufferStream, int readableBytes, Map<String, String> responseHeaders) {
         if (readableBytes > 0) {
             this.responsePayloadSize = readableBytes;
-            this.jsonValue = fromJson(bufferStream, readableBytes, responseHeaders);
+            this.jsonValue = parseJson(bufferStream, readableBytes, () -> responseHeaders);
         } else {
             this.responsePayloadSize = 0;
             this.jsonValue = null;
@@ -49,57 +50,24 @@ public class JsonNodeStorePayload implements StorePayload<JsonNode> {
 
         if (readableBytes > 0) {
             this.responsePayloadSize = readableBytes;
-            this.jsonValue = fromJsonWithArrayHeaders(bufferStream, readableBytes, headerNames, headerValues);
+            this.jsonValue = parseJson(bufferStream, readableBytes, () -> buildHeaderMap(headerNames, headerValues));
         } else {
             this.responsePayloadSize = 0;
             this.jsonValue = null;
         }
     }
 
-    private static JsonNode fromJson(ByteBufInputStream bufferStream, int readableBytes, Map<String, String> responseHeaders) {
-        byte[] bytes = new byte[readableBytes];
-        try {
-            bufferStream.read(bytes);
-            return Utils.getSimpleObjectMapper().readTree(bytes);
-        } catch (IOException e) {
-            if (fallbackCharsetDecoder != null) {
-                logger.warn("Unable to parse JSON, fallback to use customized charset decoder.", e);
-                return fromJsonWithFallbackCharsetDecoder(bytes, responseHeaders);
-            } else {
-
-                String baseErrorMessage = "Failed to parse JSON document. No fallback charset decoder configured.";
-
-                if (Configs.isNonParseableDocumentLoggingEnabled()) {
-                    String documentSample = Base64.getEncoder().encodeToString(bytes);
-                    logger.error(baseErrorMessage + " " + "Document in Base64 format: [" + documentSample + "]", e);
-                } else {
-                    logger.error(baseErrorMessage);
-                }
-
-                IllegalStateException innerException = new IllegalStateException("Unable to parse JSON.", e);
-
-                throw Utils.createCosmosException(
-                    HttpConstants.StatusCodes.BADREQUEST,
-                    HttpConstants.SubStatusCodes.FAILED_TO_PARSE_SERVER_RESPONSE,
-                    innerException,
-                    responseHeaders);
-            }
-        }
-    }
-
-    private static JsonNode fromJsonWithArrayHeaders(
+    private static JsonNode parseJson(
         ByteBufInputStream bufferStream,
         int readableBytes,
-        String[] headerNames,
-        String[] headerValues) {
+        Supplier<Map<String, String>> headersSupplier) {
 
         byte[] bytes = new byte[readableBytes];
         try {
             bufferStream.read(bytes);
             return Utils.getSimpleObjectMapper().readTree(bytes);
         } catch (IOException e) {
-            // Build Map lazily only on error (extremely rare in production)
-            Map<String, String> responseHeaders = buildHeaderMap(headerNames, headerValues);
+            Map<String, String> responseHeaders = headersSupplier.get();
             if (fallbackCharsetDecoder != null) {
                 logger.warn("Unable to parse JSON, fallback to use customized charset decoder.", e);
                 return fromJsonWithFallbackCharsetDecoder(bytes, responseHeaders);
