@@ -362,7 +362,7 @@ public class StoreResponse {
 
     public StoreResponse withRemappedStatusCode(int newStatusCode, double additionalRequestCharge) {
 
-        Map<String, String> headers = new HashMap<>(this.responseHeaderNames.length * 4 / 3 + 1);
+        Map<String, String> headers = new HashMap<>(HttpUtils.mapCapacityForSize(this.responseHeaderNames.length));
         for (int i = 0; i < this.responseHeaderNames.length; i++) {
             String headerName = this.responseHeaderNames[i];
             if (headerName.equalsIgnoreCase(HttpConstants.HttpHeaders.REQUEST_CHARGE)) {

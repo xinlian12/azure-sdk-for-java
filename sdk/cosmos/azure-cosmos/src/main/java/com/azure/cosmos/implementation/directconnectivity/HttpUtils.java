@@ -30,6 +30,14 @@ public class HttpUtils {
 
     private static final Pattern PLUS_SYMBOL_ESCAPE_PATTERN = Pattern.compile(UrlEncodingInfo.PLUS_SYMBOL_ESCAPED);
 
+    /**
+     * Returns the initial capacity for a HashMap that will hold {@code expectedSize} entries
+     * without resizing, accounting for the default load factor of 0.75.
+     */
+    static int mapCapacityForSize(int expectedSize) {
+        return expectedSize * 4 / 3 + 1;
+    }
+
     public static String urlEncode(String url) {
         try {
             return PLUS_SYMBOL_ESCAPE_PATTERN.matcher(URLEncoder.encode(url, UrlEncodingInfo.UTF_8))
@@ -54,7 +62,7 @@ public class HttpUtils {
         if (headers == null) {
             return new HashMap<>(4);
         }
-        HashMap<String, String> map = new HashMap<>(headers.size());
+        HashMap<String, String> map = new HashMap<>(mapCapacityForSize(headers.size()));
         for (HttpHeader header : headers) {
             if (header.name().equals(HttpConstants.HttpHeaders.OWNER_FULL_NAME)) {
                 map.put(header.name(), HttpUtils.urlDecode(header.value()));

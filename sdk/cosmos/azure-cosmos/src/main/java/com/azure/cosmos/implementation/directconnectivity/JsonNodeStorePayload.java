@@ -93,7 +93,7 @@ public class JsonNodeStorePayload implements StorePayload<JsonNode> {
     }
 
     private static Map<String, String> buildHeaderMap(String[] headerNames, String[] headerValues) {
-        Map<String, String> map = new HashMap<>(headerNames.length * 4 / 3 + 1);
+        Map<String, String> map = new HashMap<>(HttpUtils.mapCapacityForSize(headerNames.length));
         for (int i = 0; i < headerNames.length; i++) {
             map.put(headerNames[i], headerValues[i]);
         }
