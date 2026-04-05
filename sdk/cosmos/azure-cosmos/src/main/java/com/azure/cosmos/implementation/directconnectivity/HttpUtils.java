@@ -34,7 +34,7 @@ public class HttpUtils {
      * Returns the initial capacity for a HashMap that will hold {@code expectedSize} entries
      * without resizing, accounting for the default load factor of 0.75.
      */
-    static int mapCapacityForSize(int expectedSize) {
+    public static int mapCapacityForSize(int expectedSize) {
         return expectedSize * 4 / 3 + 1;
     }
 

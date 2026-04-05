@@ -134,6 +134,9 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * Populates the provided arrays with lowercased header names and their values
      * directly from the internal map, avoiding intermediate HashMap allocation.
      *
+     * <p>Keys are guaranteed lowercase because {@link #set(String, String)} stores them
+     * via {@code name.toLowerCase(Locale.ROOT)} as the map key.</p>
+     *
      * @param names  array to populate with lowercased header names (must be at least size() long)
      * @param values array to populate with header values (must be at least size() long)
      */
