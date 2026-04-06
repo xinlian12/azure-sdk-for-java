@@ -27,8 +27,11 @@ import java.util.Set;
  * Encapsulates options that can be specified for a request issued to cosmos Item.
  */
 public class CosmosItemRequestOptions {
-    private final static ImplementationBridgeHelpers.CosmosDiagnosticsThresholdsHelper.CosmosDiagnosticsThresholdsAccessor thresholdsAccessor =
-        ImplementationBridgeHelpers.CosmosDiagnosticsThresholdsHelper.getCosmosAsyncClientAccessor();
+    // Lazy accessor - must NOT be cached in a static field to avoid <clinit> deadlock.
+    // See https://github.com/Azure/azure-sdk-for-java/issues/48622
+    private static ImplementationBridgeHelpers.CosmosDiagnosticsThresholdsHelper.CosmosDiagnosticsThresholdsAccessor thresholdsAccessor() {
+        return ImplementationBridgeHelpers.CosmosDiagnosticsThresholdsHelper.getCosmosAsyncClientAccessor();
+    }
 
     private ConsistencyLevel consistencyLevel;
     private ReadConsistencyStrategy readConsistencyStrategy;
@@ -543,7 +546,7 @@ public class CosmosItemRequestOptions {
             return Duration.ofMillis(100);
         }
 
-        return thresholdsAccessor.getPointReadLatencyThreshold(this.thresholds);
+        return thresholdsAccessor().getPointReadLatencyThreshold(this.thresholds);
     }
 
     /**

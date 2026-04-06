@@ -18,10 +18,14 @@ import java.util.stream.Collectors;
  * Encapsulates the list of container identities and no. of proactive connection regions.
  * */
 public final class CosmosContainerProactiveInitConfig {
-    private final static ImplementationBridgeHelpers.CosmosContainerIdentityHelper.CosmosContainerIdentityAccessor
-        containerIdAccessor = ImplementationBridgeHelpers
+    // Lazy accessor - must NOT be cached in a static field to avoid <clinit> deadlock.
+    // See https://github.com/Azure/azure-sdk-for-java/issues/48622
+    private static ImplementationBridgeHelpers.CosmosContainerIdentityHelper.CosmosContainerIdentityAccessor
+        containerIdAccessor() {
+        return ImplementationBridgeHelpers
             .CosmosContainerIdentityHelper
             .getCosmosContainerIdentityAccessor();
+    }
     private final List<CosmosContainerIdentity> cosmosContainerIdentities;
     private final Map<CosmosContainerIdentity, ContainerDirectConnectionMetadata> containerDirectConnectionMetadataMap;
     private final int numProactiveConnectionRegions;
@@ -105,7 +109,7 @@ public final class CosmosContainerProactiveInitConfig {
                     .stream()
                     .map(ci -> String.join(
                         ".",
-                        containerIdAccessor.getContainerLink(ci)))
+                        containerIdAccessor().getContainerLink(ci)))
                     .collect(Collectors.joining(";")),
                 numProactiveConnectionRegions,
                 aggressiveWarmupDuration);
