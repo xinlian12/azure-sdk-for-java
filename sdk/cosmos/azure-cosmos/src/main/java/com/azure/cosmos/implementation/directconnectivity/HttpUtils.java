@@ -15,13 +15,8 @@ import org.slf4j.LoggerFactory;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
-import java.util.AbstractMap;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 public class HttpUtils {
@@ -86,25 +81,5 @@ public class HttpUtils {
         }
 
         return date != null ? date : StringUtils.EMPTY;
-    }
-
-    public static List<Entry<String, String>> unescape(Set<Entry<String, String>> headers) {
-        List<Entry<String, String>> result = new ArrayList<>(headers.size());
-        for (Entry<String, String> entry : headers) {
-            if (entry.getKey().equals(HttpConstants.HttpHeaders.OWNER_FULL_NAME)) {
-                String unescapedUrl = HttpUtils.urlDecode(entry.getValue());
-                entry = new AbstractMap.SimpleEntry<>(entry.getKey(), unescapedUrl);
-            }
-            result.add(entry);
-        }
-        return result;
-    }
-
-    public static Map<String, String> unescape(Map<String, String> headers) {
-        if (headers != null) {
-            headers.computeIfPresent(HttpConstants.HttpHeaders.OWNER_FULL_NAME,
-                (ownerKey, ownerValue) -> HttpUtils.urlDecode(ownerValue));
-        }
-        return headers;
     }
 }
