@@ -70,28 +70,14 @@ public class StoreResponse {
 
         this.status = status;
         replicaStatusList = new HashMap<>(6);
-        if (contentStream != null) {
-            try {
-                this.responsePayload = new JsonNodeStorePayload(contentStream, responsePayloadLength, headerMap);
-            } finally {
-                try {
-                    contentStream.close();
-                } catch (Throwable e) {
-                    if (!(e instanceof IllegalReferenceCountException)) {
-                        // Log as warning instead of debug to make ByteBuf leak issues more visible
-                        logger.warn("Failed to close content stream. This may cause a Netty ByteBuf leak.", e);
-                    }
-                }
-            }
-        } else {
-            this.responsePayload = null;
-        }
+        this.responsePayload = parseResponsePayload(
+            contentStream, responsePayloadLength, responseHeaderNames, responseHeaderValues);
     }
 
     /**
      * Creates a StoreResponse directly from HttpHeaders, avoiding intermediate HashMap allocation.
      * Header names are stored as lowercase keys (matching HttpHeaders internal representation).
-     * The OWNER_FULL_NAME header value is URL-decoded inline.
+     * The OWNER_FULL_NAME header value is URL-decoded inline (equivalent to HttpUtils.unescape).
      */
     public StoreResponse(
             String endpoint,
@@ -111,7 +97,9 @@ public class StoreResponse {
 
         httpHeaders.populateLowerCaseHeaders(responseHeaderNames, responseHeaderValues);
 
-        // URL-decode OWNER_FULL_NAME header value inline (replaces HttpUtils.unescape)
+        // URL-decode OWNER_FULL_NAME header value inline (replaces HttpUtils.unescape).
+        // This is kept separate from populateLowerCaseHeaders because HttpHeaders is a
+        // general-purpose HTTP class and should not contain Cosmos-specific URL-decoding logic.
         for (int i = 0; i < headerCount; i++) {
             if (HttpConstants.HttpHeaders.OWNER_FULL_NAME.equals(responseHeaderNames[i])) {
                 responseHeaderValues[i] = HttpUtils.urlDecode(responseHeaderValues[i]);
@@ -121,22 +109,8 @@ public class StoreResponse {
 
         this.status = status;
         replicaStatusList = new HashMap<>(6);
-        if (contentStream != null) {
-            try {
-                this.responsePayload = new JsonNodeStorePayload(
-                    contentStream, responsePayloadLength, responseHeaderNames, responseHeaderValues);
-            } finally {
-                try {
-                    contentStream.close();
-                } catch (Throwable e) {
-                    if (!(e instanceof IllegalReferenceCountException)) {
-                        logger.warn("Failed to close content stream. This may cause a Netty ByteBuf leak.", e);
-                    }
-                }
-            }
-        } else {
-            this.responsePayload = null;
-        }
+        this.responsePayload = parseResponsePayload(
+            contentStream, responsePayloadLength, responseHeaderNames, responseHeaderValues);
     }
 
     private StoreResponse(
@@ -162,6 +136,28 @@ public class StoreResponse {
         this.status = status;
         replicaStatusList = new HashMap<>(6);
         this.responsePayload = responsePayload;
+    }
+
+    private static JsonNodeStorePayload parseResponsePayload(
+        ByteBufInputStream contentStream,
+        int responsePayloadLength,
+        String[] headerNames,
+        String[] headerValues) {
+
+        if (contentStream == null) {
+            return null;
+        }
+        try {
+            return new JsonNodeStorePayload(contentStream, responsePayloadLength, headerNames, headerValues);
+        } finally {
+            try {
+                contentStream.close();
+            } catch (Throwable e) {
+                if (!(e instanceof IllegalReferenceCountException)) {
+                    logger.warn("Failed to close content stream. This may cause a Netty ByteBuf leak.", e);
+                }
+            }
+        }
     }
 
     public int getStatus() {
