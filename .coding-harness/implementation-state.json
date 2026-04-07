@@ -1,0 +1,60 @@
+{
+  "version": "1.0",
+  "spec_file": "spec.json",
+  "branch": "fix/issue-45521-custom-item-serializer",
+  "pr_number": null,
+  "pr_url": null,
+  "iteration": 2,
+  "status": "review_addressed",
+  "changes": [
+    {
+      "file": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/PipelinedDocumentQueryExecutionContext.java",
+      "action": "modified",
+      "summary": "Changed setCustomItemSerializer(null) to setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER) in all three internal pipeline paths (NonStreamingOrderBy, OrderBy, Parallel) and added the same protection for HybridSearch queries"
+    },
+    {
+      "file": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/models/SqlParameter.java",
+      "action": "modified",
+      "summary": "Added rawValue field to store original value before serialization, applySerializer() method to re-serialize with a custom serializer, and initialized rawValue in the ObjectNode constructor for defensive correctness"
+    },
+    {
+      "file": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/models/SqlQuerySpec.java",
+      "action": "modified",
+      "summary": "Added applySerializerToParameters() method that applies a custom serializer to all SqlParameter values"
+    },
+    {
+      "file": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/models/ModelBridgeInternal.java",
+      "action": "modified",
+      "summary": "Added applySerializerToParameters() bridge method to expose package-private SqlQuerySpec method to the implementation.query package"
+    },
+    {
+      "file": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/PipelinedQueryExecutionContextBase.java",
+      "action": "modified",
+      "summary": "Added call to apply effective custom serializer to SqlParameter values in createAsync(), the common entry point for all query execution paths"
+    }
+  ],
+  "commits": [
+    {
+      "sha": "3b9e343075e",
+      "message": "fix: ensure CustomItemSerializer is not applied to internal query pipeline structures and is applied to SqlParameter serialization"
+    },
+    {
+      "sha": "4416d2c7968",
+      "message": "fix: address review iteration 1 — initialize rawValue in ObjectNode constructor"
+    }
+  ],
+  "requirements_addressed": [
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6",
+    "R7",
+    "R8",
+    "R9",
+    "R10"
+  ],
+  "self_assessment": "Review iteration 1 addressed. F1 fixed: rawValue now initialized in SqlParameter(ObjectNode) constructor for defensive correctness. F2 skipped: pre-existing mutation pattern (populatePropertyBag already mutates without cloning). F3 skipped: null parameter values don't need custom serialization (serialize() returns Map, null→Map is undefined). F4 skipped: DEFAULT_SERIALIZER is confirmed static final singleton, reference equality is correct and idiomatic. Build compiles cleanly.",
+  "known_issues": []
+}

@@ -9,8 +9,12 @@ import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.query.hybridsearch.HybridSearchQueryInfo;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.ModelBridgeInternal;
+import com.azure.cosmos.models.SqlParameter;
+import com.azure.cosmos.models.SqlQuerySpec;
 import reactor.core.publisher.Flux;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.BiFunction;
 
 /**
@@ -62,8 +66,20 @@ public abstract class PipelinedQueryExecutionContextBase<T>
 
         // Apply the effective custom serializer to SqlParameter values so that
         // query parameters are serialized consistently with stored document values.
+        // Clone the SqlQuerySpec first to avoid mutating the caller's original object,
+        // which could race if the same instance is reused across concurrent queries.
         if (candidateSerializer != CosmosItemSerializer.DEFAULT_SERIALIZER) {
-            ModelBridgeInternal.applySerializerToParameters(initParams.getQuery(), candidateSerializer);
+            SqlQuerySpec original = initParams.getQuery();
+            List<SqlParameter> clonedParams = new ArrayList<>();
+            List<SqlParameter> originalParams = original.getParameters();
+            if (originalParams != null) {
+                for (SqlParameter p : originalParams) {
+                    clonedParams.add(new SqlParameter(p.getName(), p.getValue(Object.class)));
+                }
+            }
+            SqlQuerySpec clonedQuery = new SqlQuerySpec(original.getQueryText(), clonedParams);
+            ModelBridgeInternal.applySerializerToParameters(clonedQuery, candidateSerializer);
+            initParams.setQuery(clonedQuery);
         }
 
         if (hybridSearchQueryInfo != null) {
