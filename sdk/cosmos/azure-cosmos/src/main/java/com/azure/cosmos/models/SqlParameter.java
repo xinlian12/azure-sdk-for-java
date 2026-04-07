@@ -31,6 +31,7 @@ public final class SqlParameter {
     SqlParameter(ObjectNode objectNode) {
 
         this.jsonSerializable = new JsonSerializable(objectNode);
+        this.rawValue = this.jsonSerializable.getObject("value", Object.class);
     }
 
     /**
