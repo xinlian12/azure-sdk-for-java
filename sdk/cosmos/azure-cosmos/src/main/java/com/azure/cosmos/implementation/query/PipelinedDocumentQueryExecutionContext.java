@@ -65,12 +65,12 @@ public class PipelinedDocumentQueryExecutionContext<T>
                             HttpConstants.StatusCodes.BADREQUEST,
                             "Can not use a continuation token for a vector search query");
                     }
-                    qryOptAccessor.getImpl(orderByCosmosQueryRequestOptions).setCustomItemSerializer(null);
+                    qryOptAccessor.getImpl(orderByCosmosQueryRequestOptions).setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
                     documentQueryParams.setCosmosQueryRequestOptions(orderByCosmosQueryRequestOptions);
                     return NonStreamingOrderByDocumentQueryExecutionContext.createAsync(diagnosticsClientContext, client, documentQueryParams, collection);
                 } else {
                     ModelBridgeInternal.setQueryRequestOptionsContinuationToken(orderByCosmosQueryRequestOptions, continuationToken);
-                    qryOptAccessor.getImpl(orderByCosmosQueryRequestOptions).setCustomItemSerializer(null);
+                    qryOptAccessor.getImpl(orderByCosmosQueryRequestOptions).setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
                     documentQueryParams.setCosmosQueryRequestOptions(orderByCosmosQueryRequestOptions);
                     return OrderByDocumentQueryExecutionContext.createAsync(diagnosticsClientContext, client, documentQueryParams, collection);
                 }
@@ -80,7 +80,7 @@ public class PipelinedDocumentQueryExecutionContext<T>
             createBaseComponentFunction = (continuationToken, documentQueryParams) -> {
                 CosmosQueryRequestOptions parallelCosmosQueryRequestOptions =
                     qryOptAccessor.clone(requestOptions);
-                qryOptAccessor.getImpl(parallelCosmosQueryRequestOptions).setCustomItemSerializer(null);
+                qryOptAccessor.getImpl(parallelCosmosQueryRequestOptions).setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
                 ModelBridgeInternal.setQueryRequestOptionsContinuationToken(parallelCosmosQueryRequestOptions, continuationToken);
 
                 documentQueryParams.setCosmosQueryRequestOptions(parallelCosmosQueryRequestOptions);
@@ -119,6 +119,7 @@ public class PipelinedDocumentQueryExecutionContext<T>
             CosmosQueryRequestOptions orderByCosmosQueryRequestOptions =
                 qryOptAccessor.clone(requestOptions);
 
+            qryOptAccessor.getImpl(orderByCosmosQueryRequestOptions).setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
             documentQueryParams.setCosmosQueryRequestOptions(orderByCosmosQueryRequestOptions);
             return HybridSearchDocumentQueryExecutionContext.createAsync(diagnosticsClientContext, client, documentQueryParams, collection);
         };

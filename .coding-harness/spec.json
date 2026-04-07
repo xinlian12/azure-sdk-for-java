@@ -1,0 +1,212 @@
+{
+  "version": "1.0",
+  "issue": {
+    "number": 45521,
+    "title": "[BUG] Cosmos – CustomItemSerializer - not working in certain queries and not applied in SqlParameter",
+    "url": "https://github.com/Azure/azure-sdk-for-java/issues/45521",
+    "body": "Two bugs: (1) CustomItemSerializer is incorrectly applied to internal SDK structures during ORDER BY/GROUP BY/aggregate query deserialization, causing NullPointerException. (2) SqlParameter.setValue() always uses the internal default serializer instead of the configured customItemSerializer.",
+    "labels": ["bug", "Cosmos", "Client", "customer-reported"]
+  },
+  "analysis": {
+    "problem_statement": "CustomItemSerializer configured on CosmosClientBuilder leaks into the internal query pipeline for ORDER BY, GROUP BY, DISTINCT, aggregate, and DCount queries, causing deserialization failures when the custom serializer cannot handle internal SDK structures like OrderByRowResult and Document. Additionally, SqlParameter always serializes values via DefaultCosmosItemSerializer.INTERNAL_DEFAULT_SERIALIZER, ignoring any custom serializer, which causes query parameter mismatches (e.g., dates serialized differently in parameters vs. stored documents).",
+    "root_cause": "Bug 1: In PipelinedDocumentQueryExecutionContext.createBaseComponentFunction(), the code calls setCustomItemSerializer(null) on cloned CosmosQueryRequestOptions to prevent the custom serializer from being used in the internal pipeline. However, RxDocumentClientImpl.getEffectiveItemSerializer() falls back to the client-level defaultCustomSerializer when the request-level serializer is null. This means ParallelDocumentQueryExecutionContextBase still picks up the custom serializer (since candidateSerializer != DEFAULT_SERIALIZER) and uses it for internal structures. Bug 2: SqlParameter.setValue() delegates to JsonSerializable.set(propertyName, value) which hardcodes DefaultCosmosItemSerializer.INTERNAL_DEFAULT_SERIALIZER. There is no path to inject the effective custom serializer into SqlParameter serialization.",
+    "related_files": [
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/PipelinedDocumentQueryExecutionContext.java",
+        "relevance": "Core file where custom serializer is nullified for ORDER BY/parallel pipelines (lines 68, 73, 83) but the nullification is ineffective because getEffectiveItemSerializer falls back to client-level default"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/RxDocumentClientImpl.java",
+        "relevance": "Contains getEffectiveItemSerializer() (line 4554) which falls back to defaultCustomSerializer when request-level is null — the root cause of bug 1"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/ParallelDocumentQueryExecutionContextBase.java",
+        "relevance": "Constructor (line 53) calls getEffectiveItemSerializer and uses it if != DEFAULT_SERIALIZER. This is where the custom serializer leaks into the internal pipeline"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/orderbyquery/OrderByRowResult.java",
+        "relevance": "Internal SDK structure that extends Document. getPayload() fails when custom serializer is used to deserialize it instead of the default serializer"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/PipelinedQueryExecutionContextBase.java",
+        "relevance": "Base class where the effective serializer is resolved (line 61) and the decision between PipelinedDocumentQueryExecutionContext vs PipelinedQueryExecutionContext is made"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/DefaultDocumentQueryExecutionContext.java",
+        "relevance": "Simple query execution context — same pattern of getEffectiveItemSerializer fallback (line 84)"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/models/SqlParameter.java",
+        "relevance": "Bug 2 location: setValue() uses JsonSerializable.set() which hardcodes INTERNAL_DEFAULT_SERIALIZER"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/JsonSerializable.java",
+        "relevance": "set(propertyName, value) at line 250 delegates to set() with INTERNAL_DEFAULT_SERIALIZER. Also contains toObjectFromObjectNode() and instantiateFromObjectNodeAndType() used in internal deserialization"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/models/SqlQuerySpec.java",
+        "relevance": "Holds SqlParameter list; populatePropertyBag() serializes parameters before query execution"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/CosmosItemSerializer.java",
+        "relevance": "Abstract base class with serialize/deserialize methods and DEFAULT_SERIALIZER static field"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/DefaultCosmosItemSerializer.java",
+        "relevance": "Default implementation with DEFAULT_SERIALIZER and INTERNAL_DEFAULT_SERIALIZER static instances"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/ValueUnwrapCosmosItemSerializer.java",
+        "relevance": "Internal serializer used for VALUE queries; should be the one used in internal pipeline instead of custom serializer"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/GroupByDocumentQueryExecutionContext.java",
+        "relevance": "GROUP BY query execution — affected by same custom serializer leak"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/NonStreamingOrderByDocumentQueryExecutionContext.java",
+        "relevance": "Non-streaming ORDER BY (vector search) — affected by same custom serializer leak"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/AggregateDocumentQueryExecutionContext.java",
+        "relevance": "Aggregate query execution (COUNT, SUM, etc.) — affected by same custom serializer leak"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/DCountDocumentQueryExecutionContext.java",
+        "relevance": "DCount query execution — affected by same custom serializer leak"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/CosmosQueryRequestOptionsBase.java",
+        "relevance": "Contains setCustomItemSerializer/getCustomItemSerializer that stores the request-level serializer"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/CosmosClientBuilder.java",
+        "relevance": "Entry point where customItemSerializer is configured (line 1187)"
+      },
+      {
+        "path": "sdk/cosmos/azure-cosmos-tests/src/test/java/com/azure/cosmos/CosmosItemSerializerTest.java",
+        "relevance": "Existing test file for custom serializer — needs new test cases for ORDER BY/GROUP BY queries and SqlParameter serialization"
+      }
+    ],
+    "dependencies": [
+      "com.fasterxml.jackson.databind (Jackson ObjectMapper for internal serialization)",
+      "reactor.core (Reactor Flux/Mono for async query pipeline)"
+    ],
+    "existing_patterns": "The SDK already has a clear serializer resolution pattern: request-level serializer > client-level serializer > DEFAULT_SERIALIZER (in RxDocumentClientImpl.getEffectiveItemSerializer). For internal pipeline processing, PipelinedDocumentQueryExecutionContext nullifies the request-level serializer and the base contexts check if the resolved serializer != DEFAULT_SERIALIZER to decide whether to use a custom or ValueUnwrap serializer. The fix should work within this existing pattern by ensuring internal pipeline contexts always use the internal serializer regardless of client-level defaults."
+  },
+  "spec": {
+    "objective": "Fix two bugs with CustomItemSerializer: (1) Ensure custom serializer is ONLY applied to user-facing result deserialization, never to internal SDK structures in ORDER BY, GROUP BY, aggregate, DISTINCT, and DCount query pipelines. (2) Ensure SqlParameter.setValue() uses the effective custom serializer when serializing parameter values, so query parameters match the serialization format of stored documents.",
+    "requirements": [
+      {
+        "id": "R1",
+        "description": "Internal query pipeline components (OrderByDocumentQueryExecutionContext, NonStreamingOrderByDocumentQueryExecutionContext, ParallelDocumentQueryExecutionContext, GroupByDocumentQueryExecutionContext, AggregateDocumentQueryExecutionContext, DCountDocumentQueryExecutionContext) must use the internal default serializer (ValueUnwrapCosmosItemSerializer or DefaultCosmosItemSerializer) for deserializing internal SDK structures, even when a custom serializer is configured on CosmosClientBuilder.",
+        "priority": "must"
+      },
+      {
+        "id": "R2",
+        "description": "The user's custom serializer must still be applied in PipelinedDocumentQueryExecutionContext.executeAsync() for the final conversion from Document to the user's target type T. The existing two-phase deserialization (internal structures first, then user type) must continue to work.",
+        "priority": "must"
+      },
+      {
+        "id": "R3",
+        "description": "SqlParameter.setValue() must serialize values using the effective custom serializer (from request options or client builder) instead of always using DefaultCosmosItemSerializer.INTERNAL_DEFAULT_SERIALIZER. This requires either accepting the serializer as a parameter or deferring serialization to query execution time when the effective serializer is known.",
+        "priority": "must"
+      },
+      {
+        "id": "R4",
+        "description": "Queries with ORDER BY, GROUP BY, VALUE, COUNT, SUM, DISTINCT, and DCount clauses must work correctly when customItemSerializer is configured on CosmosClientBuilder, without throwing NullPointerException or producing incorrect deserialization results.",
+        "priority": "must"
+      },
+      {
+        "id": "R5",
+        "description": "Simple queries (SELECT * FROM c WHERE ...) must continue working correctly with customItemSerializer, both with and without SqlParameter values.",
+        "priority": "must"
+      },
+      {
+        "id": "R6",
+        "description": "The fix must be backward compatible: behavior when no custom serializer is configured must remain unchanged. DEFAULT_SERIALIZER and ValueUnwrapCosmosItemSerializer paths must not be affected.",
+        "priority": "must"
+      },
+      {
+        "id": "R7",
+        "description": "Custom serializer specified at the request level (CosmosQueryRequestOptions.setCustomItemSerializer) must still take precedence over the client-level default for user-facing deserialization.",
+        "priority": "must"
+      },
+      {
+        "id": "R8",
+        "description": "The fix for SqlParameter serialization should work for all value types including primitives, strings, dates, POJOs, and collections.",
+        "priority": "should"
+      },
+      {
+        "id": "R9",
+        "description": "Error handling: if the custom serializer throws during SqlParameter serialization, the error should be wrapped in a BadRequestException with the CUSTOM_SERIALIZER_EXCEPTION subStatusCode, consistent with existing serializeSafe behavior.",
+        "priority": "should"
+      },
+      {
+        "id": "R10",
+        "description": "HybridSearchDocumentQueryExecutionContext should also be verified to not leak the custom serializer into internal structures.",
+        "priority": "could"
+      }
+    ],
+    "acceptance_criteria": [
+      {
+        "id": "AC1",
+        "description": "A query with ORDER BY clause succeeds when customItemSerializer is configured on CosmosClientBuilder, returning correctly deserialized results of the user's POJO type.",
+        "testable": true
+      },
+      {
+        "id": "AC2",
+        "description": "A query with GROUP BY clause succeeds when customItemSerializer is configured on CosmosClientBuilder, returning correctly deserialized aggregate results.",
+        "testable": true
+      },
+      {
+        "id": "AC3",
+        "description": "A query with VALUE/COUNT/SUM aggregate functions succeeds when customItemSerializer is configured on CosmosClientBuilder.",
+        "testable": true
+      },
+      {
+        "id": "AC4",
+        "description": "A query with DISTINCT clause succeeds when customItemSerializer is configured on CosmosClientBuilder.",
+        "testable": true
+      },
+      {
+        "id": "AC5",
+        "description": "SqlParameter values are serialized using the effective custom serializer, so a query like 'SELECT * FROM c WHERE c.date = @date' with a Date parameter returns matching results when the custom serializer serializes dates as ISO strings.",
+        "testable": true
+      },
+      {
+        "id": "AC6",
+        "description": "Existing tests in CosmosItemSerializerTest continue to pass without modification, confirming backward compatibility.",
+        "testable": true
+      },
+      {
+        "id": "AC7",
+        "description": "When no custom serializer is configured, ORDER BY/GROUP BY/aggregate queries continue to work as before (regression test).",
+        "testable": true
+      },
+      {
+        "id": "AC8",
+        "description": "The custom serializer's serialize() method is called exactly once per SqlParameter value, and its deserialize() method is called exactly once per result item (not for internal SDK structures).",
+        "testable": true
+      }
+    ],
+    "technical_approach": "Bug 1 Fix: The root cause is that setCustomItemSerializer(null) on request options doesn't prevent getEffectiveItemSerializer() from falling back to the client-level defaultCustomSerializer. The fix should ensure that when the internal pipeline needs to bypass the custom serializer, it does so effectively. Two approaches: (A) Modify the internal pipeline contexts to explicitly force DEFAULT_SERIALIZER instead of relying on null propagation — e.g., pass an explicit 'useDefaultSerializer' flag or set the request-level serializer to DEFAULT_SERIALIZER instead of null, so getEffectiveItemSerializer returns DEFAULT_SERIALIZER (which is then replaced by ValueUnwrapCosmosItemSerializer). (B) Add a separate code path in getEffectiveItemSerializer or ParallelDocumentQueryExecutionContextBase that distinguishes between 'no custom serializer configured' and 'custom serializer deliberately suppressed for internal processing'. Approach (A) is simpler and less invasive — setting the request-level serializer to CosmosItemSerializer.DEFAULT_SERIALIZER instead of null would cause getEffectiveItemSerializer to return it immediately without falling through to the client default. Bug 2 Fix: SqlParameter needs access to the effective custom serializer. Since SqlParameter is created by user code before query execution, the serializer must be applied later. The approach is to re-serialize SqlParameter values using the effective custom serializer during query execution, either in SqlQuerySpec.populatePropertyBag() (if the serializer can be passed down) or in the query execution path where the effective serializer is known. This may require adding a new overload of SqlParameter.setValue() or JsonSerializable.set() that accepts a serializer, and calling it during query preparation.",
+    "files_to_modify": [
+      "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/PipelinedDocumentQueryExecutionContext.java",
+      "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/models/SqlParameter.java",
+      "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/JsonSerializable.java",
+      "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/ParallelDocumentQueryExecutionContextBase.java",
+      "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/implementation/query/DefaultDocumentQueryExecutionContext.java",
+      "sdk/cosmos/azure-cosmos/src/main/java/com/azure/cosmos/models/SqlQuerySpec.java"
+    ],
+    "files_to_create": [],
+    "test_strategy": "Add new test methods to CosmosItemSerializerTest covering: (1) ORDER BY queries with custom serializer on builder, (2) GROUP BY queries with custom serializer, (3) aggregate queries (COUNT, SUM) with custom serializer, (4) DISTINCT queries with custom serializer, (5) SqlParameter with date/custom-type values when custom serializer is configured — verify the parameter is serialized using the custom serializer and query results match. Use the existing EnvelopWrappingItemSerializer test helper pattern. Verify that the custom serializer's serialize/deserialize call counts match expected (once per parameter, once per result item). Also run the existing CosmosItemSerializerTest suite to confirm no regressions.",
+    "risks": [
+      "Changing serializer resolution in getEffectiveItemSerializer or the pipeline setup could affect other code paths that rely on the current fallback behavior (e.g., change feed, batch operations).",
+      "Re-serializing SqlParameter values at query execution time could have performance implications for queries with many parameters.",
+      "The fix for Bug 1 approach (A) — setting DEFAULT_SERIALIZER on request options instead of null — could have side effects if other code checks for null vs DEFAULT_SERIALIZER differently.",
+      "SqlParameter is a public API class; adding new methods or changing setValue() behavior could break existing user code that subclasses or mocks it (though it's final).",
+      "HybridSearch queries may have a similar custom serializer leak that is not addressed by the ORDER BY fix path."
+    ]
+  }
+}

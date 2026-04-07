@@ -3,6 +3,7 @@
 
 package com.azure.cosmos.models;
 
+import com.azure.cosmos.CosmosItemSerializer;
 import com.azure.cosmos.implementation.JsonSerializable;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -13,6 +14,7 @@ import java.util.Objects;
  */
 public final class SqlParameter {
     private JsonSerializable jsonSerializable;
+    private Object rawValue;
 
     /**
      * Initializes a new instance of the SqlParameter class.
@@ -84,11 +86,25 @@ public final class SqlParameter {
      * @return the SqlParameter.
      */
     public SqlParameter setValue(Object value) {
+        this.rawValue = value;
         this.jsonSerializable.set(
             "value",
             value
         );
         return this;
+    }
+
+    /**
+     * Re-serializes the parameter value using the given custom item serializer.
+     * This is called internally during query execution to ensure parameter values
+     * are serialized consistently with document values when a custom serializer is configured.
+     *
+     * @param serializer the custom item serializer to apply.
+     */
+    void applySerializer(CosmosItemSerializer serializer) {
+        if (this.rawValue != null && serializer != null) {
+            this.jsonSerializable.set("value", this.rawValue, serializer, false);
+        }
     }
 
     void populatePropertyBag() {

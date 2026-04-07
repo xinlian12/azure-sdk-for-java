@@ -60,6 +60,12 @@ public abstract class PipelinedQueryExecutionContextBase<T>
 
         CosmosItemSerializer candidateSerializer = client.getEffectiveItemSerializer(cosmosQueryRequestOptions);
 
+        // Apply the effective custom serializer to SqlParameter values so that
+        // query parameters are serialized consistently with stored document values.
+        if (candidateSerializer != CosmosItemSerializer.DEFAULT_SERIALIZER) {
+            ModelBridgeInternal.applySerializerToParameters(initParams.getQuery(), candidateSerializer);
+        }
+
         if (hybridSearchQueryInfo != null) {
             return PipelinedDocumentQueryExecutionContext.createHybridAsyncCore(
                 diagnosticsClientContext,
