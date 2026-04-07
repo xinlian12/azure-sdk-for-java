@@ -5,6 +5,7 @@ package com.azure.cosmos.implementation.query;
 import com.azure.cosmos.CosmosItemSerializer;
 import com.azure.cosmos.implementation.DiagnosticsClientContext;
 import com.azure.cosmos.implementation.DocumentCollection;
+import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
 import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.query.hybridsearch.HybridSearchQueryInfo;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
@@ -78,7 +79,10 @@ public abstract class PipelinedQueryExecutionContextBase<T>
                 }
             }
             SqlQuerySpec clonedQuery = new SqlQuerySpec(original.getQueryText(), clonedParams);
-            ModelBridgeInternal.applySerializerToParameters(clonedQuery, candidateSerializer);
+            ImplementationBridgeHelpers
+                .SqlQuerySpecHelper
+                .getSqlQuerySpecAccessor()
+                .applySerializerToParameters(clonedQuery, candidateSerializer);
             initParams.setQuery(clonedQuery);
         }
 

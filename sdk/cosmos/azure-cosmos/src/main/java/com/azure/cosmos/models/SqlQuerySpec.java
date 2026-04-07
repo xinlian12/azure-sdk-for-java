@@ -4,6 +4,7 @@
 package com.azure.cosmos.models;
 
 import com.azure.cosmos.CosmosItemSerializer;
+import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
 import com.azure.cosmos.implementation.JsonSerializable;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -152,4 +153,19 @@ public final class SqlQuerySpec {
     }
 
     JsonSerializable getJsonSerializable() { return this.jsonSerializable; }
+
+    static void initialize() {
+        ImplementationBridgeHelpers.SqlQuerySpecHelper.setSqlQuerySpecAccessor(
+            new ImplementationBridgeHelpers.SqlQuerySpecHelper.SqlQuerySpecAccessor() {
+                @Override
+                public void applySerializerToParameters(SqlQuerySpec sqlQuerySpec, CosmosItemSerializer serializer) {
+                    if (sqlQuerySpec != null) {
+                        sqlQuerySpec.applySerializerToParameters(serializer);
+                    }
+                }
+            }
+        );
+    }
+
+    static { initialize(); }
 }

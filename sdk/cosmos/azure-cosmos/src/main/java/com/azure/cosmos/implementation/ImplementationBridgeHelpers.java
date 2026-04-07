@@ -1933,4 +1933,38 @@ public class ImplementationBridgeHelpers {
                 ReadConsistencyStrategy clientLevelReadConsistencyStrategy);
         }
     }
+
+    public static final class SqlQuerySpecHelper {
+        private static final AtomicReference<SqlQuerySpecAccessor> accessor = new AtomicReference<>();
+        private static final AtomicBoolean sqlQuerySpecClassLoaded = new AtomicBoolean(false);
+
+        private SqlQuerySpecHelper() {}
+
+        public static void setSqlQuerySpecAccessor(final SqlQuerySpecAccessor newAccessor) {
+            if (!accessor.compareAndSet(null, newAccessor)) {
+                logger.debug("SqlQuerySpecAccessor already initialized!");
+            } else {
+                logger.debug("Setting SqlQuerySpecAccessor...");
+                sqlQuerySpecClassLoaded.set(true);
+            }
+        }
+
+        public static SqlQuerySpecAccessor getSqlQuerySpecAccessor() {
+            if (!sqlQuerySpecClassLoaded.get()) {
+                logger.debug("Initializing SqlQuerySpecAccessor...");
+                initializeAllAccessors();
+            }
+
+            SqlQuerySpecAccessor snapshot = accessor.get();
+            if (snapshot == null) {
+                logger.error("SqlQuerySpecAccessor is not initialized yet!");
+            }
+
+            return snapshot;
+        }
+
+        public interface SqlQuerySpecAccessor {
+            void applySerializerToParameters(SqlQuerySpec sqlQuerySpec, CosmosItemSerializer serializer);
+        }
+    }
 }

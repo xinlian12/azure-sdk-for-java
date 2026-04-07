@@ -412,13 +412,6 @@ public final class ModelBridgeInternal {
     }
 
     @Warning(value = INTERNAL_USE_ONLY_WARNING)
-    public static void applySerializerToParameters(SqlQuerySpec sqlQuerySpec, CosmosItemSerializer serializer) {
-        if (sqlQuerySpec != null) {
-            sqlQuerySpec.applySerializerToParameters(serializer);
-        }
-    }
-
-    @Warning(value = INTERNAL_USE_ONLY_WARNING)
     public static <T> T instantiateByObjectNode(ObjectNode objectNode, Class<T> c) {
         try {
             return c.getDeclaredConstructor(ObjectNode.class).newInstance(objectNode);
@@ -769,5 +762,6 @@ public final class ModelBridgeInternal {
         CosmosClientTelemetryConfig.initialize();
         CosmosContainerIdentity.initialize();
         PriorityLevel.initialize();
+        SqlQuerySpec.initialize();
     }
 }

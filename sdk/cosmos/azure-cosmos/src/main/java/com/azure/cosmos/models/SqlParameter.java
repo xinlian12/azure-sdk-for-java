@@ -104,7 +104,7 @@ public final class SqlParameter {
      */
     void applySerializer(CosmosItemSerializer serializer) {
         if (this.rawValue != null && serializer != null) {
-            this.jsonSerializable.set("value", this.rawValue, serializer, false);
+            this.jsonSerializable.set("value", this.rawValue, serializer, true);
         }
     }
 
