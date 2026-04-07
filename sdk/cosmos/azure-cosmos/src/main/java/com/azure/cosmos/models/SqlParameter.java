@@ -6,6 +6,8 @@ package com.azure.cosmos.models;
 import com.azure.cosmos.CosmosItemSerializer;
 import com.azure.cosmos.implementation.JsonSerializable;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 
@@ -13,6 +15,7 @@ import java.util.Objects;
  * Represents a SQL parameter in the SqlQuerySpec used for queries in the Azure Cosmos DB database service.
  */
 public final class SqlParameter {
+    private static final Logger LOGGER = LoggerFactory.getLogger(SqlParameter.class);
     private JsonSerializable jsonSerializable;
     private Object rawValue;
 
@@ -104,7 +107,18 @@ public final class SqlParameter {
      */
     void applySerializer(CosmosItemSerializer serializer) {
         if (this.rawValue != null && serializer != null) {
-            this.jsonSerializable.set("value", this.rawValue, serializer, true);
+            try {
+                this.jsonSerializable.set("value", this.rawValue, serializer, true);
+            } catch (Throwable t) {
+                // Some serializer implementations (e.g. Spark connector) only implement
+                // deserialize() and stub serialize() as unimplemented. Fall back to the
+                // default serialization that was already applied via setValue().
+                LOGGER.debug(
+                    "Custom serializer '{}' does not support serialize(); "
+                        + "falling back to default serialization for SqlParameter value.",
+                    serializer.getClass().getSimpleName(),
+                    t);
+            }
         }
     }
 
