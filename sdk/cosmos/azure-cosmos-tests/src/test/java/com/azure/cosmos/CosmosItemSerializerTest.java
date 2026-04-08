@@ -201,13 +201,15 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
             ? useTrackingIdForCreateAndReplace ? "WriteRetriesWithTrackingId|" : "WriteRetriesNoTrackingId|"
             : "NoWriteRetries|";
 
-        CosmosItemSerializer requestOptionsSerializer = (CosmosItemSerializer) row[0];
-        if (requestOptionsSerializer == CosmosItemSerializer.DEFAULT_SERIALIZER) {
-            prefix += "RequestOptions_DEFAULT";
-        } else if (requestOptionsSerializer == null) {
-            prefix += "RequestOptions_NULL";
-        } else {
-            prefix += "RequestOptions_" + requestOptionsSerializer.getClass().getSimpleName();
+        if (row != null && row.length > 0) {
+            CosmosItemSerializer requestOptionsSerializer = (CosmosItemSerializer) row[0];
+            if (requestOptionsSerializer == CosmosItemSerializer.DEFAULT_SERIALIZER) {
+                prefix += "RequestOptions_DEFAULT";
+            } else if (requestOptionsSerializer == null) {
+                prefix += "RequestOptions_NULL";
+            } else {
+                prefix += "RequestOptions_" + requestOptionsSerializer.getClass().getSimpleName();
+            }
         }
 
         if (this.getClientBuilder().getCustomItemSerializer() == null) {
