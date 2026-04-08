@@ -115,8 +115,6 @@ print("Finished preparation: ${formatter.format(Instant.now)}")
 // MAGIC 
 // MAGIC Throughput buckets provide server-side throughput control. Instead of using the SDK-based global throughput control
 // MAGIC (which requires a separate metadata container), you configure a `throughputBucket` value between 1 and 5.
-// MAGIC - Bucket **1** = lowest priority (least throughput share)
-// MAGIC - Bucket **5** = highest priority (most throughput share)
 // MAGIC 
 // MAGIC This is simpler to configure because it does not require a separate throughput control metadata container.
 // MAGIC For more information, see [Throughput Buckets](https://learn.microsoft.com/azure/cosmos-db/throughput-buckets?tabs=dotnet).
@@ -216,9 +214,6 @@ assert(count_source == count_changeFeed)
 
 // MAGIC %md
 // MAGIC **Sample - bulk deleting documents with throughput bucket and validating document count afterwards**
-// MAGIC 
-// MAGIC For the delete operation, we use a lower throughput bucket value (1) to give delete
-// MAGIC operations the lowest priority, preserving throughput for other workloads.
 
 // COMMAND ----------
 
