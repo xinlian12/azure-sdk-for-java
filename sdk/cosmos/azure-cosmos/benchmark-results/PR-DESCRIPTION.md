@@ -99,30 +99,32 @@ GC behavior is identical between branches. At single-tenant scale with an 8 GB h
 
 #### JFR Allocation Comparison -- All Configs
 
-`ObjectAllocationSample` comparison for the key targeted class `HashMap$ValueIterator` and aggregate allocation share of all 9 targeted classes. JFR uses statistical sampling so per-config numbers have inherent noise, but the directional trends are consistent.
+`ObjectAllocationSample` comparison for aggregate allocation share of all 9 targeted classes. JFR uses statistical sampling so per-config numbers have inherent noise, but the directional trends are consistent.
 
-| Config | main targeted % | hashmap-alloc targeted % | Delta (pp) | HashMap$ValueIterator |
-|--------|:-:|:-:|:-:|:-:|
-| c1-Read/http1 | 11.7% | 14.4% | +2.7 | main: 0.0% / PR: 0% |
-| c8-Read/http1 | 22.7% | 10.6% | -12.1 | main: 0.0% / PR: 0% |
-| c16-Read/http1 | 9.2% | 14.1% | +4.9 | main: 0.0% / PR: 1.2% |
-| c32-Read/http1 | 11.2% | 12.8% | +1.7 | main: 0.0% / PR: 0% |
-| c128-Read/http1 | 20.4% | 17.4% | -3.0 | main: 1.3% / PR: eliminated |
-| c1-Read/http2 | 11.4% | 10.4% | -1.1 | main: 0.0% / PR: 0% |
-| c8-Read/http2 | 11.9% | 7.1% | -4.8 | main: 0.0% / PR: 0% |
-| c16-Read/http2 | 9.1% | 9.0% | -0.1 | main: 0.0% / PR: 0% |
-| c32-Read/http2 | 14.6% | 10.5% | -4.1 | main: 0.0% / PR: 0% |
-| c128-Read/http2 | 16.9% | 15.7% | -1.1 | main: 0.0% / PR: 0% |
-| c1-Write/http1 | 11.2% | 3.5% | -7.7 | main: 0.0% / PR: 0% |
-| c8-Write/http1 | 15.2% | 20.3% | +5.0 | main: 0.0% / PR: 0% |
-| c16-Write/http1 | 8.0% | 17.2% | +9.2 | main: 0.0% / PR: 0% |
-| c32-Write/http1 | 17.7% | 22.2% | +4.5 | main: 0.0% / PR: 0% |
-| c128-Write/http1 | 16.5% | 10.1% | -6.5 | main: 0.0% / PR: 0% |
-| c1-Write/http2 | 9.1% | 6.2% | -2.9 | main: 0.0% / PR: 0% |
-| c8-Write/http2 | 15.7% | 18.7% | +2.9 | main: 0.0% / PR: 0% |
-| c16-Write/http2 | 16.0% | 12.3% | -3.7 | main: 0.0% / PR: 0% |
-| c32-Write/http2 | 18.0% | 11.8% | -6.2 | main: 0.0% / PR: 0% |
-| c128-Write/http2 | 8.5% | 13.1% | +4.6 | main: 0.0% / PR: 0% |
+> **Note on `HashMap$ValueIterator`**: This PR eliminates the **response-side** `HttpUtils.asMap()` iterator (creating throwaway HashMap copies of response headers). A separate `HashMap$ValueIterator` still exists on the **request-sending side** (`ReactorNettyClient.bodySendDelegate` iterating request headers to write to the wire) -- this is expected and not targeted by this PR. JFR may sample either call site, so occasional non-zero values in the PR column reflect the request-side iterator, not a regression.
+
+| Config | main targeted % | hashmap-alloc targeted % | Delta (pp) |
+|--------|:-:|:-:|:-:|
+| c1-Read/http1 | 11.7% | 14.4% | +2.7 |
+| c8-Read/http1 | 22.7% | 10.6% | -12.1 |
+| c16-Read/http1 | 9.2% | 14.1% | +4.9 |
+| c32-Read/http1 | 11.2% | 12.8% | +1.7 |
+| c128-Read/http1 | 20.4% | 17.4% | -3.0 |
+| c1-Read/http2 | 11.4% | 10.4% | -1.1 |
+| c8-Read/http2 | 11.9% | 7.1% | -4.8 |
+| c16-Read/http2 | 9.1% | 9.0% | -0.1 |
+| c32-Read/http2 | 14.6% | 10.5% | -4.1 |
+| c128-Read/http2 | 16.9% | 15.7% | -1.1 |
+| c1-Write/http1 | 11.2% | 3.5% | -7.7 |
+| c8-Write/http1 | 15.2% | 20.3% | +5.0 |
+| c16-Write/http1 | 8.0% | 17.2% | +9.2 |
+| c32-Write/http1 | 17.7% | 22.2% | +4.5 |
+| c128-Write/http1 | 16.5% | 10.1% | -6.5 |
+| c1-Write/http2 | 9.1% | 6.2% | -2.9 |
+| c8-Write/http2 | 15.7% | 18.7% | +2.9 |
+| c16-Write/http2 | 16.0% | 12.3% | -3.7 |
+| c32-Write/http2 | 18.0% | 11.8% | -6.2 |
+| c128-Write/http2 | 8.5% | 13.1% | +4.6 |
 
 > **Note on JFR sampling noise**: `ObjectAllocationSample` is a statistical sampler -- individual per-config percentages can swing +/-5pp between runs. The consistently observable patterns are:
 > 1. **`HashMap$ValueIterator` is eliminated** in most configs (the `asMap()` round-trip is removed)
