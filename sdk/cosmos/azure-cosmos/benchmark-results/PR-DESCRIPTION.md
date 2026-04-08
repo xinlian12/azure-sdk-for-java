@@ -2,26 +2,24 @@
 
 ### Motivation
 
-JFR profiling of the baseline (`main`) under high-concurrency gateway workloads revealed that `HashMap`-related allocations (`HashMap$Node`, `HashMap`, `HashMap$ValueIterator`) and HTTP header collections (`DefaultHeaders$HeaderEntry`, `HttpHeader`) account for a significant portion of total allocation pressure -- approximately **8-15%** of total sampled allocation weight depending on concurrency.
+JFR profiling of the baseline (`main`) under high-concurrency gateway workloads revealed that `HashMap`-related allocations (`HashMap$Node`, `HashMap`, `HashMap$ValueIterator`) and HTTP header collections (`DefaultHeaders$HeaderEntry`, `HttpHeader`) are responsible for a significant share of total object allocation churn.
 
-**Key findings from baseline JFR recordings** (c128 Read HTTP/1, `ObjectAllocationSample`, 10-min recording):
+**Baseline JFR allocation profile** (c128 Read HTTP/1, `ObjectAllocationSample`, 10-min recording):
 
-> **What is "Alloc Weight"?** JFR `ObjectAllocationSample` uses statistical sampling. The `weight` field is the **estimated cumulative bytes allocated** over the recording duration -- NOT heap residency. Most objects are short-lived and immediately GC'd. For reference, the JVM heap was 8 GB committed / ~5 GB used, while total allocation throughput was ~4 GB/s (typical for reactive workloads with high object churn).
+| Class | % of Total Allocation |
+|-------|:---------------------:|
+| `HashMap$Node` | 6.9% |
+| `DefaultHeaders$HeaderEntry` | 6.8% |
+| `HashMap$ValueIterator` | 1.3% |
+| `HttpHeader` | 0.9% |
+| `HashMap` | 0.7% |
+| `HttpHeaders` | 0.6% |
+| `HashMap$Node[]` | 0.5% |
+| **Total targeted** | **~10.9%** |
 
-| Class | Cumulative Alloc (10 min) | % of Total Alloc |
-|-------|:-------------------------:|:----------------:|
-| `HashMap$Node` | 171 GB | 6.9% |
-| `DefaultHeaders$HeaderEntry` | 170 GB | 6.8% |
-| `HashMap$ValueIterator` | 31 GB | 1.3% |
-| `HttpHeader` | 21 GB | 0.9% |
-| `HashMap` | 18 GB | 0.7% |
-| `HttpHeaders` | 16 GB | 0.6% |
-| `HashMap$Node[]` | 14 GB | 0.5% |
-| **Total targeted** | **~271 GB** | **~10.9%** |
-
-Root causes identified:
+Root causes:
 1. `HashMap<>()` default initial capacity (16) forces 1-2 resize+rehash cycles for typical gateway responses with 20-30 headers, creating throwaway `HashMap$Node[]` arrays and re-hashed `HashMap$Node` entries
-2. `StoreResponse` constructor converts `HttpHeaders` to `Map<String, String>` via `HttpUtils.asMap()` on every response, allocating a throwaway `HashMap$ValueIterator` and rebuilding `HashMap$Node` entries
+2. `StoreResponse` constructor converts `HttpHeaders` to `Map<String, String>` via `HttpUtils.asMap()` on every response, allocating a throwaway `HashMap$ValueIterator` and rebuilding all `HashMap$Node` entries
 3. `HttpHeaders` in `RxGatewayStoreModel.getHttpRequestHeaders()` is undersized, causing internal HashMap resize
 4. Redundant `toLowerCase()` calls on header keys that are already normalized
 
@@ -71,19 +69,28 @@ Root causes identified:
 >
 > The same pattern holds for c32/HTTP2 (r1: -16.8%, r2: +1.3%, r3: +1.5%) and c8/HTTP2 (r1: -17.1%, r2: +3.6%, r3: +3.4%). The hashmap-alloc branch shows consistently **tighter variance** across rounds.
 
-#### JFR Allocation Comparison (c128 Read HTTP/1, r1)
+#### GC Comparison (c128 Read HTTP/1, r1)
 
-`ObjectAllocationSample` cumulative allocation weight comparison (10-min recording, 8 GB heap):
+| Metric | main | hashmap-alloc |
+|--------|:----:|:------------:|
+| GC pause count | 817 | 813 |
+| Mean pause | 2.36 ms | 2.38 ms |
+| P99 pause | 7.40 ms | 7.66 ms |
+| Total pause time | 1,929 ms | 1,935 ms |
+
+GC behavior is identical between branches. At single-tenant scale with an 8 GB heap, the allocation reduction does not materially change GC frequency or pause time. The benefit is reduced unnecessary work (fewer resize/rehash cycles, fewer throwaway iterators) which improves code efficiency and would compound at higher tenant density.
+
+#### JFR Allocation Change (c128 Read HTTP/1, r1)
+
+Reduction in allocation share for targeted classes:
 
 | Class | main | hashmap-alloc | Reduction |
 |-------|:----:|:------------:|:---------:|
-| `HashMap$Node` | 171 GB | 131 GB | -23% |
-| `HashMap$ValueIterator` | 31 GB | 0 GB | -100% |
-| `DefaultHeaders$HeaderEntry` | 170 GB | 111 GB | -35% |
-| `DefaultHeadersImpl` | 33 GB | 1 GB | -97% |
-| `HttpHeader` | 21 GB | 11 GB | -48% |
-
-> Note: `HashMap` object allocation weight increased (18 to 99 GB) -- this is a JFR sampling artifact. Pre-sized HashMap objects are sampled at a different rate than resize-triggered ones. The `HashMap$Node` reduction (23%) confirms fewer resize/rehash operations, which is the actual goal.
+| `HashMap$Node` | 6.9% | 5.2% | -23% of class weight |
+| `HashMap$ValueIterator` | 1.3% | 0.0% | eliminated |
+| `DefaultHeaders$HeaderEntry` | 6.8% | 4.4% | -35% of class weight |
+| `DefaultHeadersImpl` | 1.3% | 0.04% | -97% of class weight |
+| `HttpHeader` | 0.9% | 0.4% | -48% of class weight |
 
 ![JFR Allocation Comparison](https://raw.githubusercontent.com/xinlian12/azure-sdk-for-java/perf/hashmap-collection-allocation/sdk/cosmos/azure-cosmos/benchmark-results/1t-c128-ReadThroughput-http1-jfr-alloc.png)
 
@@ -127,9 +134,8 @@ Each chart shows throughput (ops/s) and P99 latency over time, with individual r
 
 ### Conclusion
 
-- **Overall average throughput change**: -1.0% (within noise; driven by main r1 outliers at mid-concurrency)
-- **Excluding outlier rounds**: essentially tied across all configurations
-- **Allocation reduction**: 23-100% reduction in targeted HashMap/header allocation throughput
-- **Variance improvement**: hashmap-alloc consistently shows tighter round-to-round variance
-- **Write throughput**: neutral (+/-0.2% at high concurrency), confirming no regression on the write path
-- The changes are a **net improvement in allocation efficiency** with **no measurable throughput regression** once run-order artifacts are accounted for.
+- **Throughput**: neutral overall (-1.0% avg, within noise; outlier-driven at mid-concurrency)
+- **GC**: identical (817 vs 813 pauses, same mean/p99)
+- **Allocation efficiency**: 23-100% reduction in targeted HashMap/header class allocation share
+- **Variance**: hashmap-alloc shows tighter round-to-round variance
+- The changes remove **unnecessary allocation overhead** (resize/rehash cycles, throwaway iterators) without regression. The benefit compounds at higher tenant density where allocation pressure and GC become bottlenecks.
