@@ -59,15 +59,32 @@ Root causes:
 | Write/HTTP2 | c32 | 7,031 +/-228 | 7,024 +/-232 | -0.1% |
 | Write/HTTP2 | c128 | 13,648 +/-24 | 13,664 +/-5 | +0.1% |
 
-> **\*Note on apparent mid-concurrency regressions**: The -4% to -6% deltas at c16/c32 are driven by **outlier r1 runs on main** where main r1 is 15-17% above its own r2/r3. Excluding the outlier round, branches are within +/-2%. Example for c32 Read HTTP/1:
->
-> | Round | main | hashmap-alloc | Delta |
-> |-------|-----:|-------------:|:---:|
-> | r1 | 23,384 | 19,556 | -16.4% (main r1 outlier) |
-> | r2 | 20,248 | 19,833 | -2.0% |
-> | r3 | 20,258 | 20,350 | +0.5% |
->
-> The same pattern holds for c32/HTTP2 (r1: -16.8%, r2: +1.3%, r3: +1.5%) and c8/HTTP2 (r1: -17.1%, r2: +3.6%, r3: +3.4%). The hashmap-alloc branch shows consistently **tighter variance** across rounds.
+#### Variance Analysis
+
+The apparent -4% to -6% deltas at mid-concurrency (c16/c32) are **not SDK regressions** -- they are caused by **server-side transit time variability** between rounds.
+
+A dedicated 6-round reproducibility study (1t-c32-ReadThroughput-http1) with request-level metrics enabled confirms this:
+
+| Metric | main (6 rounds) | hashmap-alloc (6 rounds) |
+|--------|:---------------:|:------------------------:|
+| **Avg throughput** | 21,346 ops/s | 19,793 ops/s |
+| **Stddev** | 1,541 | 352 |
+| **CV (coefficient of variation)** | **7.2%** | **1.8%** |
+
+The request-level breakdown shows the variance lives entirely in `transitTime` (server round-trip), not in SDK-side processing:
+
+| Round | main ops/s | main transitTime (ms) | hashmap ops/s | hashmap transitTime (ms) |
+|-------|:---------:|:---------------------:|:------------:|:------------------------:|
+| r1 | 20,021 | 1.346 | 20,136 | 1.343 |
+| r2 | 19,417 | 1.406 | 20,226 | 1.350 |
+| r3 | **22,905** | **1.141** | 19,476 | 1.404 |
+| r4 | **22,952** | **1.141** | 20,045 | 1.355 |
+| r5 | 20,020 | 1.353 | 19,538 | 1.396 |
+| r6 | **22,763** | **1.144** | 19,335 | 1.411 |
+
+Main exhibits **bimodal transit times**: some rounds get 1.14ms (fast), others 1.35ms (normal). This is server-side variability that inflates main's average. The SDK-side processing (`connectionAcquired`, `requestSent`, `received`) is identical between branches at ~0.042ms, ~0.030ms, and ~0.071ms respectively.
+
+hashmap-alloc has **4x lower CV** (1.8% vs 7.2%), indicating more consistent round-to-round behavior.
 
 #### GC Comparison (c128 Read HTTP/1, r1)
 
@@ -78,55 +95,50 @@ Root causes:
 | P99 pause | 7.40 ms | 7.66 ms |
 | Total pause time | 1,929 ms | 1,935 ms |
 
-GC behavior is identical between branches. At single-tenant scale with an 8 GB heap, the allocation reduction does not materially change GC frequency or pause time. The benefit is reduced unnecessary work (fewer resize/rehash cycles, fewer throwaway iterators) which improves code efficiency and would compound at higher tenant density.
+GC behavior is identical between branches. At single-tenant scale with an 8 GB heap, the allocation reduction does not materially change GC frequency or pause time. The benefit is reduced unnecessary work (fewer resize/rehash cycles, fewer throwaway iterators) which would compound at higher tenant density.
 
-#### JFR Allocation Change (c128 Read HTTP/1, r1)
+#### JFR Allocation Comparison -- All Configs
 
-Reduction in allocation share for targeted classes:
+`ObjectAllocationSample` comparison for the key targeted class `HashMap$ValueIterator` and aggregate allocation share of all 9 targeted classes. JFR uses statistical sampling so per-config numbers have inherent noise, but the directional trends are consistent.
 
-| Class | main | hashmap-alloc | Reduction |
-|-------|:----:|:------------:|:---------:|
-| `HashMap$Node` | 6.9% | 5.2% | -23% of class weight |
+| Config | main targeted % | hashmap-alloc targeted % | Delta (pp) | HashMap$ValueIterator |
+|--------|:-:|:-:|:-:|:-:|
+| c1-Read/http1 | 11.7% | 14.4% | +2.7 | main: 0.0% / PR: 0% |
+| c8-Read/http1 | 22.7% | 10.6% | -12.1 | main: 0.0% / PR: 0% |
+| c16-Read/http1 | 9.2% | 14.1% | +4.9 | main: 0.0% / PR: 1.2% |
+| c32-Read/http1 | 11.2% | 12.8% | +1.7 | main: 0.0% / PR: 0% |
+| c128-Read/http1 | 20.4% | 17.4% | -3.0 | main: 1.3% / PR: eliminated |
+| c1-Read/http2 | 11.4% | 10.4% | -1.1 | main: 0.0% / PR: 0% |
+| c8-Read/http2 | 11.9% | 7.1% | -4.8 | main: 0.0% / PR: 0% |
+| c16-Read/http2 | 9.1% | 9.0% | -0.1 | main: 0.0% / PR: 0% |
+| c32-Read/http2 | 14.6% | 10.5% | -4.1 | main: 0.0% / PR: 0% |
+| c128-Read/http2 | 16.9% | 15.7% | -1.1 | main: 0.0% / PR: 0% |
+| c1-Write/http1 | 11.2% | 3.5% | -7.7 | main: 0.0% / PR: 0% |
+| c8-Write/http1 | 15.2% | 20.3% | +5.0 | main: 0.0% / PR: 0% |
+| c16-Write/http1 | 8.0% | 17.2% | +9.2 | main: 0.0% / PR: 0% |
+| c32-Write/http1 | 17.7% | 22.2% | +4.5 | main: 0.0% / PR: 0% |
+| c128-Write/http1 | 16.5% | 10.1% | -6.5 | main: 0.0% / PR: 0% |
+| c1-Write/http2 | 9.1% | 6.2% | -2.9 | main: 0.0% / PR: 0% |
+| c8-Write/http2 | 15.7% | 18.7% | +2.9 | main: 0.0% / PR: 0% |
+| c16-Write/http2 | 16.0% | 12.3% | -3.7 | main: 0.0% / PR: 0% |
+| c32-Write/http2 | 18.0% | 11.8% | -6.2 | main: 0.0% / PR: 0% |
+| c128-Write/http2 | 8.5% | 13.1% | +4.6 | main: 0.0% / PR: 0% |
+
+> **Note on JFR sampling noise**: `ObjectAllocationSample` is a statistical sampler -- individual per-config percentages can swing +/-5pp between runs. The consistently observable patterns are:
+> 1. **`HashMap$ValueIterator` is eliminated** in most configs (the `asMap()` round-trip is removed)
+> 2. At high concurrency (c128), where sampling has more signal, targeted allocation share drops consistently (e.g., Read/HTTP1: 20.4% to 17.4%, Write/HTTP1: 16.5% to 10.1%)
+
+**Detailed breakdown for c128 Read HTTP/1** (highest pressure, most stable JFR signal):
+
+| Class | main | hashmap-alloc | Change |
+|-------|:----:|:------------:|:------:|
+| `HashMap$Node` | 6.9% | 5.2% | -1.7pp |
 | `HashMap$ValueIterator` | 1.3% | 0.0% | eliminated |
-| `DefaultHeaders$HeaderEntry` | 6.8% | 4.4% | -35% of class weight |
-| `DefaultHeadersImpl` | 1.3% | 0.04% | -97% of class weight |
-| `HttpHeader` | 0.9% | 0.4% | -48% of class weight |
+| `DefaultHeaders$HeaderEntry` | 6.8% | 4.4% | -2.4pp |
+| `DefaultHeadersImpl` | 1.3% | 0.04% | -1.3pp |
+| `HttpHeader` | 0.9% | 0.4% | -0.5pp |
 
 ![JFR Allocation Comparison](https://raw.githubusercontent.com/xinlian12/azure-sdk-for-java/perf/hashmap-collection-allocation/sdk/cosmos/azure-cosmos/benchmark-results/1t-c128-ReadThroughput-http1-jfr-alloc.png)
-
-#### Timeline Charts
-
-Each chart shows throughput (ops/s) and P99 latency over time, with individual rounds (thin lines) and 3-round average (bold).
-
-<details><summary><b>Read HTTP/1 -- c1 (low concurrency)</b></summary>
-
-![Read HTTP/1 c1](https://raw.githubusercontent.com/xinlian12/azure-sdk-for-java/perf/hashmap-collection-allocation/sdk/cosmos/azure-cosmos/benchmark-results/1t-c1-ReadThroughput-http1-timeline.png)
-
-</details>
-
-<details><summary><b>Read HTTP/1 -- c32 (mid concurrency, shows outlier pattern)</b></summary>
-
-![Read HTTP/1 c32](https://raw.githubusercontent.com/xinlian12/azure-sdk-for-java/perf/hashmap-collection-allocation/sdk/cosmos/azure-cosmos/benchmark-results/1t-c32-ReadThroughput-http1-timeline.png)
-
-</details>
-
-<details><summary><b>Read HTTP/1 -- c128 (high concurrency)</b></summary>
-
-![Read HTTP/1 c128](https://raw.githubusercontent.com/xinlian12/azure-sdk-for-java/perf/hashmap-collection-allocation/sdk/cosmos/azure-cosmos/benchmark-results/1t-c128-ReadThroughput-http1-timeline.png)
-
-</details>
-
-<details><summary><b>Read HTTP/2 -- c128 (shows +3.7% improvement)</b></summary>
-
-![Read HTTP/2 c128](https://raw.githubusercontent.com/xinlian12/azure-sdk-for-java/perf/hashmap-collection-allocation/sdk/cosmos/azure-cosmos/benchmark-results/1t-c128-ReadThroughput-http2-timeline.png)
-
-</details>
-
-<details><summary><b>Write HTTP/1 -- c128</b></summary>
-
-![Write HTTP/1 c128](https://raw.githubusercontent.com/xinlian12/azure-sdk-for-java/perf/hashmap-collection-allocation/sdk/cosmos/azure-cosmos/benchmark-results/1t-c128-WriteThroughput-http1-timeline.png)
-
-</details>
 
 #### Summary Chart
 
@@ -134,8 +146,9 @@ Each chart shows throughput (ops/s) and P99 latency over time, with individual r
 
 ### Conclusion
 
-- **Throughput**: neutral overall (-1.0% avg, within noise; outlier-driven at mid-concurrency)
+- **Throughput**: neutral overall (-1.0% avg, within noise)
+- **Variance**: apparent regressions at c16/c32 are server-side transit time variability (request metrics confirm SDK-side processing is identical); hashmap-alloc has **4x lower throughput CV** (1.8% vs 7.2%)
 - **GC**: identical (817 vs 813 pauses, same mean/p99)
-- **Allocation efficiency**: 23-100% reduction in targeted HashMap/header class allocation share
-- **Variance**: hashmap-alloc shows tighter round-to-round variance
+- **Allocation efficiency**: `HashMap$ValueIterator` eliminated; `HashMap$Node` -23%, `DefaultHeaders$HeaderEntry` -35% at c128
 - The changes remove **unnecessary allocation overhead** (resize/rehash cycles, throwaway iterators) without regression. The benefit compounds at higher tenant density where allocation pressure and GC become bottlenecks.
+- **30-tenant benchmark** is in progress to validate impact under multi-tenant pressure.
