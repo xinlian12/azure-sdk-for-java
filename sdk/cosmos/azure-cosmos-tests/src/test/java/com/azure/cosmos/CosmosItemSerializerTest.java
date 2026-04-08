@@ -709,13 +709,13 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 String id = String.format("%s_%03d", pkValue, i);
                 TestDocument doc = TestDocument.create(id, pkValue);
                 CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions()
-                    .setCustomItemSerializer(EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION);
+                    .setCustomItemSerializer(clientSerializer);
                 container.createItem(doc, new PartitionKey(pkValue), requestOptions);
                 createdIds.add(id);
             }
 
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION);
+                .setCustomItemSerializer(clientSerializer);
 
             List<TestDocument> results = container
                 .queryItems(
@@ -753,13 +753,13 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 String id = UUID.randomUUID().toString();
                 TestDocument doc = TestDocument.create(id, pkValue);
                 CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions()
-                    .setCustomItemSerializer(EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION);
+                    .setCustomItemSerializer(clientSerializer);
                 container.createItem(doc, new PartitionKey(pkValue), requestOptions);
                 createdIds.add(id);
             }
 
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION);
+                .setCustomItemSerializer(clientSerializer);
 
             List<ObjectNode> results = container
                 .queryItems(
@@ -793,13 +793,13 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 String id = UUID.randomUUID().toString();
                 TestDocument doc = TestDocument.create(id, pkValue);
                 CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions()
-                    .setCustomItemSerializer(EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION);
+                    .setCustomItemSerializer(clientSerializer);
                 container.createItem(doc, new PartitionKey(pkValue), requestOptions);
                 createdIds.add(id);
             }
 
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION);
+                .setCustomItemSerializer(clientSerializer);
 
             List<ObjectNode> results = container
                 .queryItems(
@@ -834,13 +834,13 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 String id = UUID.randomUUID().toString();
                 TestDocument doc = TestDocument.create(id, pkValue);
                 CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions()
-                    .setCustomItemSerializer(EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION);
+                    .setCustomItemSerializer(clientSerializer);
                 container.createItem(doc, new PartitionKey(pkValue), requestOptions);
                 createdIds.add(id);
             }
 
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION);
+                .setCustomItemSerializer(clientSerializer);
 
             List<ObjectNode> results = container
                 .queryItems(
@@ -873,11 +873,11 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
         TestDocument doc = TestDocument.create(id);
         try {
             CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions()
-                .setCustomItemSerializer(EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION);
+                .setCustomItemSerializer(clientSerializer);
             container.createItem(doc, new PartitionKey(id), requestOptions);
 
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION);
+                .setCustomItemSerializer(clientSerializer);
 
             SqlQuerySpec querySpec = new SqlQuerySpec(
                 "SELECT * FROM c WHERE c.id = @id",
