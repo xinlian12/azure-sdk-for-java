@@ -8,6 +8,8 @@
 
 ### Bugs Fixed
 
+- Disabled MSAL's internal retry for Confidential Client, Managed Identity and Public Client Applications.
+
 ### Other Changes
 
 - Improved `AzureDeveloperCliCredential` error handling to extract meaningful messages from `azd auth token` JSON output, providing cleaner error messages to users.
