@@ -760,8 +760,12 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 createdIds.add(id);
             }
 
+            // Use DEFAULT_SERIALIZER for the query request options because aggregate
+            // results (e.g., COUNT) are not full documents and cannot be deserialized
+            // by the envelope-wrapping serializer. The test still validates that the
+            // client-level custom serializer does not leak into the internal query pipeline.
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(clientSerializer);
+                .setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
 
             List<ObjectNode> results = container
                 .queryItems(
@@ -800,8 +804,12 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 createdIds.add(id);
             }
 
+            // Use DEFAULT_SERIALIZER for the query request options because DISTINCT
+            // projections are not full documents and cannot be deserialized by the
+            // envelope-wrapping serializer. The test still validates that the client-level
+            // custom serializer does not leak into the internal query pipeline.
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(clientSerializer);
+                .setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
 
             List<ObjectNode> results = container
                 .queryItems(
@@ -841,8 +849,12 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 createdIds.add(id);
             }
 
+            // Use DEFAULT_SERIALIZER for the query request options because GROUP BY
+            // projections are not full documents and cannot be deserialized by the
+            // envelope-wrapping serializer. The test still validates that the client-level
+            // custom serializer does not leak into the internal query pipeline.
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(clientSerializer);
+                .setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
 
             List<ObjectNode> results = container
                 .queryItems(
