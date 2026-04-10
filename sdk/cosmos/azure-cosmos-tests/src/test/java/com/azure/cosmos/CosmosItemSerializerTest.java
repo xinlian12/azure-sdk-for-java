@@ -764,18 +764,20 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
             // results (e.g., COUNT) are not full documents and cannot be deserialized
             // by the envelope-wrapping serializer. The test still validates that the
             // client-level custom serializer does not leak into the internal query pipeline.
+            // SELECT VALUE COUNT(1) returns a scalar integer, so use Integer.class.
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
                 .setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
 
-            List<ObjectNode> results = container
+            List<Integer> results = container
                 .queryItems(
                     "SELECT VALUE COUNT(1) FROM c WHERE c.mypk = '" + pkValue + "'",
                     queryRequestOptions,
-                    ObjectNode.class)
+                    Integer.class)
                 .stream().collect(Collectors.toList());
 
             assertThat(results).isNotNull();
             assertThat(results).hasSize(1);
+            assertThat(results.get(0)).isEqualTo(3);
         } finally {
             for (String id : createdIds) {
                 try {
