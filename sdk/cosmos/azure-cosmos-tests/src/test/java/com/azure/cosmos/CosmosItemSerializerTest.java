@@ -36,7 +36,9 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.DataProvider;
@@ -93,7 +95,8 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
         CosmosItemSerializer[] itemSerializers = new CosmosItemSerializer[] {
             null,
             CosmosItemSerializer.DEFAULT_SERIALIZER,
-            EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION
+            EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION,
+            BasicCustomItemSerializer.INSTANCE
         };
 
         List<Object[]> providers = new ArrayList<>();
@@ -323,11 +326,11 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
         Class<T> classType) {
 
         boolean useEnvelopeWrapper =
-            requestLevelSerializer == EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION
+            requestLevelSerializer instanceof EnvelopWrappingItemSerializer
                 || (requestLevelSerializer == null
                 && this.getClientBuilder()
-                       .getCustomItemSerializer() == EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION);
-        if (requestLevelSerializer == EnvelopWrappingItemSerializer.INSTANCE_NO_TRACKING_ID_VALIDATION
+                       .getCustomItemSerializer() instanceof EnvelopWrappingItemSerializer);
+        if (requestLevelSerializer instanceof EnvelopWrappingItemSerializer
             && isContentOnWriteEnabled
             && nonIdempotentWriteRetriesEnabled
             && useTrackingIdForCreateAndReplace) {
@@ -704,6 +707,7 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
             return;
         }
 
+        boolean isEnvelopeWrapper = clientSerializer instanceof EnvelopWrappingItemSerializer;
         String pkValue = UUID.randomUUID().toString();
         List<String> createdIds = new ArrayList<>();
         try {
@@ -748,6 +752,7 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
             return;
         }
 
+        boolean isEnvelopeWrapper = clientSerializer instanceof EnvelopWrappingItemSerializer;
         String pkValue = UUID.randomUUID().toString();
         List<String> createdIds = new ArrayList<>();
         try {
@@ -760,14 +765,17 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 createdIds.add(id);
             }
 
-            // Use DEFAULT_SERIALIZER for the query request options because aggregate
+            // For envelope-wrapping serializer, use DEFAULT_SERIALIZER because aggregate
             // results (e.g., COUNT) are not full documents and cannot be deserialized
-            // by the envelope-wrapping serializer. The test still validates that the
-            // client-level custom serializer does not leak into the internal query pipeline.
-            // SELECT VALUE COUNT(1) returns a scalar integer, so use Integer.class.
+            // by the envelope-wrapping serializer.
+            // For BasicCustomItemSerializer, use the custom serializer directly since
+            // it does not transform document structure.
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
+                .setCustomItemSerializer(isEnvelopeWrapper
+                    ? CosmosItemSerializer.DEFAULT_SERIALIZER
+                    : clientSerializer);
 
+            // SELECT VALUE COUNT(1) returns a scalar integer, so use Integer.class.
             List<Integer> results = container
                 .queryItems(
                     "SELECT VALUE COUNT(1) FROM c WHERE c.mypk = '" + pkValue + "'",
@@ -794,6 +802,7 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
             return;
         }
 
+        boolean isEnvelopeWrapper = clientSerializer instanceof EnvelopWrappingItemSerializer;
         String pkValue = UUID.randomUUID().toString();
         List<String> createdIds = new ArrayList<>();
         try {
@@ -806,12 +815,14 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 createdIds.add(id);
             }
 
-            // Use DEFAULT_SERIALIZER for the query request options because DISTINCT
+            // For envelope-wrapping serializer, use DEFAULT_SERIALIZER because DISTINCT
             // projections are not full documents and cannot be deserialized by the
-            // envelope-wrapping serializer. The test still validates that the client-level
-            // custom serializer does not leak into the internal query pipeline.
+            // envelope-wrapping serializer.
+            // For BasicCustomItemSerializer, use the custom serializer directly.
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
+                .setCustomItemSerializer(isEnvelopeWrapper
+                    ? CosmosItemSerializer.DEFAULT_SERIALIZER
+                    : clientSerializer);
 
             List<ObjectNode> results = container
                 .queryItems(
@@ -839,6 +850,7 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
             return;
         }
 
+        boolean isEnvelopeWrapper = clientSerializer instanceof EnvelopWrappingItemSerializer;
         String pkValue = UUID.randomUUID().toString();
         List<String> createdIds = new ArrayList<>();
         try {
@@ -851,12 +863,14 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 createdIds.add(id);
             }
 
-            // Use DEFAULT_SERIALIZER for the query request options because GROUP BY
+            // For envelope-wrapping serializer, use DEFAULT_SERIALIZER because GROUP BY
             // projections are not full documents and cannot be deserialized by the
-            // envelope-wrapping serializer. The test still validates that the client-level
-            // custom serializer does not leak into the internal query pipeline.
+            // envelope-wrapping serializer.
+            // For BasicCustomItemSerializer, use the custom serializer directly.
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
+                .setCustomItemSerializer(isEnvelopeWrapper
+                    ? CosmosItemSerializer.DEFAULT_SERIALIZER
+                    : clientSerializer);
 
             List<ObjectNode> results = container
                 .queryItems(
@@ -1236,6 +1250,42 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                     CosmosItemSerializer.DEFAULT_SERIALIZER,
                     unwrappedContent,
                     classType);
+        }
+    }
+
+    /**
+     * A simple custom item serializer that mirrors the real-world use case from
+     * <a href="https://github.com/Azure/azure-sdk-for-java/issues/45521">issue #45521</a>.
+     * Uses a custom ObjectMapper with different settings (e.g., dates as ISO strings)
+     * without transforming the document structure (no wrapping/unwrapping).
+     */
+    @SuppressWarnings("unchecked")
+    private static class BasicCustomItemSerializer extends CosmosItemSerializer {
+        public static final BasicCustomItemSerializer INSTANCE = new BasicCustomItemSerializer();
+
+        private static final ObjectMapper customMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
+            .configure(DeserializationFeature.ADJUST_DATES_TO_CONTEXT_TIME_ZONE, false)
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+        private BasicCustomItemSerializer() {
+        }
+
+        @Override
+        public <T> Map<String, Object> serialize(T item) {
+            if (item == null) {
+                return null;
+            }
+            return customMapper.convertValue(item, Map.class);
+        }
+
+        @Override
+        public <T> T deserialize(Map<String, Object> jsonNodeMap, Class<T> classType) {
+            if (jsonNodeMap == null) {
+                return null;
+            }
+            return customMapper.convertValue(jsonNodeMap, classType);
         }
     }
 }
