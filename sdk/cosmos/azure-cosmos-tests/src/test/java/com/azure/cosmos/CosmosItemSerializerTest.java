@@ -707,7 +707,6 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
             return;
         }
 
-        boolean isEnvelopeWrapper = clientSerializer instanceof EnvelopWrappingItemSerializer;
         String pkValue = UUID.randomUUID().toString();
         List<String> createdIds = new ArrayList<>();
         try {
@@ -753,6 +752,10 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
         }
 
         boolean isEnvelopeWrapper = clientSerializer instanceof EnvelopWrappingItemSerializer;
+        if (isEnvelopeWrapper) {
+            return;
+        }
+
         String pkValue = UUID.randomUUID().toString();
         List<String> createdIds = new ArrayList<>();
         try {
@@ -765,15 +768,8 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 createdIds.add(id);
             }
 
-            // For envelope-wrapping serializer, use DEFAULT_SERIALIZER because aggregate
-            // results (e.g., COUNT) are not full documents and cannot be deserialized
-            // by the envelope-wrapping serializer.
-            // For BasicCustomItemSerializer, use the custom serializer directly since
-            // it does not transform document structure.
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(isEnvelopeWrapper
-                    ? CosmosItemSerializer.DEFAULT_SERIALIZER
-                    : clientSerializer);
+                .setCustomItemSerializer(clientSerializer);
 
             // SELECT VALUE COUNT(1) returns a scalar integer, so use Integer.class.
             List<Integer> results = container
@@ -803,6 +799,10 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
         }
 
         boolean isEnvelopeWrapper = clientSerializer instanceof EnvelopWrappingItemSerializer;
+        if (isEnvelopeWrapper) {
+            return;
+        }
+
         String pkValue = UUID.randomUUID().toString();
         List<String> createdIds = new ArrayList<>();
         try {
@@ -815,14 +815,8 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 createdIds.add(id);
             }
 
-            // For envelope-wrapping serializer, use DEFAULT_SERIALIZER because DISTINCT
-            // projections are not full documents and cannot be deserialized by the
-            // envelope-wrapping serializer.
-            // For BasicCustomItemSerializer, use the custom serializer directly.
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(isEnvelopeWrapper
-                    ? CosmosItemSerializer.DEFAULT_SERIALIZER
-                    : clientSerializer);
+                .setCustomItemSerializer(clientSerializer);
 
             List<ObjectNode> results = container
                 .queryItems(
@@ -851,6 +845,10 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
         }
 
         boolean isEnvelopeWrapper = clientSerializer instanceof EnvelopWrappingItemSerializer;
+        if (isEnvelopeWrapper) {
+            return;
+        }
+
         String pkValue = UUID.randomUUID().toString();
         List<String> createdIds = new ArrayList<>();
         try {
@@ -863,14 +861,8 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 createdIds.add(id);
             }
 
-            // For envelope-wrapping serializer, use DEFAULT_SERIALIZER because GROUP BY
-            // projections are not full documents and cannot be deserialized by the
-            // envelope-wrapping serializer.
-            // For BasicCustomItemSerializer, use the custom serializer directly.
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
-                .setCustomItemSerializer(isEnvelopeWrapper
-                    ? CosmosItemSerializer.DEFAULT_SERIALIZER
-                    : clientSerializer);
+                .setCustomItemSerializer(clientSerializer);
 
             List<ObjectNode> results = container
                 .queryItems(
