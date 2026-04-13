@@ -71,7 +71,8 @@ public abstract class PipelinedQueryExecutionContextBase<T>
         // query parameters are serialized consistently with stored document values.
         // Clone the SqlQuerySpec first to avoid mutating the caller's original object,
         // which could race if the same instance is reused across concurrent queries.
-        if (candidateSerializer != CosmosItemSerializer.DEFAULT_SERIALIZER) {
+        if (candidateSerializer != CosmosItemSerializer.DEFAULT_SERIALIZER
+            && cosmosItemSerializerAccessor().canSerialize(candidateSerializer)) {
             SqlQuerySpec original = initParams.getQuery();
             List<SqlParameter> originalParams = original.getParameters();
             if (originalParams != null && !originalParams.isEmpty()) {
@@ -222,5 +223,9 @@ public abstract class PipelinedQueryExecutionContextBase<T>
 
     private static SqlQuerySpecAccessor sqlQuerySpecAccessor() {
         return ImplementationBridgeHelpers.SqlQuerySpecHelper.getSqlQuerySpecAccessor();
+    }
+
+    private static CosmosItemSerializerAccessor cosmosItemSerializerAccessor() {
+        return ImplementationBridgeHelpers.CosmosItemSerializerHelper.getCosmosItemSerializerAccessor();
     }
 }
