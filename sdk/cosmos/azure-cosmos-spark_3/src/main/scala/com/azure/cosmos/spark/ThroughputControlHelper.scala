@@ -274,18 +274,18 @@ private object ThroughputControlHelper extends BasicLoggingTrait {
         // The query requires Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/throughputSettings/read
         // permission which AAD principals may not have, and it is unnecessary when the target is already known.
         if (throughputControlConfig.targetThroughput.isDefined) {
-            return None
-        }
-
-        val cosmosAuthConfig = CosmosAccountConfig.parseCosmosAccountConfig(userConfig).authConfig
-        cosmosAuthConfig match {
-            case _: CosmosMasterKeyAuthConfig => None
-            case _: CosmosServicePrincipalAuthConfig =>
-                Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
-            case _: CosmosManagedIdentityAuthConfig =>
-              Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
-            case _: CosmosAccessTokenAuthConfig =>
-              Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
+            None
+        } else {
+            val cosmosAuthConfig = CosmosAccountConfig.parseCosmosAccountConfig(userConfig).authConfig
+            cosmosAuthConfig match {
+                case _: CosmosMasterKeyAuthConfig => None
+                case _: CosmosServicePrincipalAuthConfig =>
+                    Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
+                case _: CosmosManagedIdentityAuthConfig =>
+                    Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
+                case _: CosmosAccessTokenAuthConfig =>
+                    Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
+            }
         }
     }
 }
