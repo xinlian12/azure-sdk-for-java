@@ -58,19 +58,17 @@ public class PipelinedDocumentQueryExecutionContext<T>
         if (queryInfo.hasOrderBy()) {
             createBaseComponentFunction = (continuationToken, documentQueryParams) -> {
                 CosmosQueryRequestOptions orderByCosmosQueryRequestOptions =
-                    qryOptAccessor.clone(requestOptions);
+                    cloneOptionsForInternalPipeline(requestOptions);
                 if (queryInfo.hasNonStreamingOrderBy()) {
                     if (continuationToken != null) {
                         throw new NonStreamingOrderByBadRequestException(
                             HttpConstants.StatusCodes.BADREQUEST,
                             "Can not use a continuation token for a vector search query");
                     }
-                    qryOptAccessor.getImpl(orderByCosmosQueryRequestOptions).setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
                     documentQueryParams.setCosmosQueryRequestOptions(orderByCosmosQueryRequestOptions);
                     return NonStreamingOrderByDocumentQueryExecutionContext.createAsync(diagnosticsClientContext, client, documentQueryParams, collection);
                 } else {
                     ModelBridgeInternal.setQueryRequestOptionsContinuationToken(orderByCosmosQueryRequestOptions, continuationToken);
-                    qryOptAccessor.getImpl(orderByCosmosQueryRequestOptions).setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
                     documentQueryParams.setCosmosQueryRequestOptions(orderByCosmosQueryRequestOptions);
                     return OrderByDocumentQueryExecutionContext.createAsync(diagnosticsClientContext, client, documentQueryParams, collection);
                 }
@@ -79,8 +77,7 @@ public class PipelinedDocumentQueryExecutionContext<T>
 
             createBaseComponentFunction = (continuationToken, documentQueryParams) -> {
                 CosmosQueryRequestOptions parallelCosmosQueryRequestOptions =
-                    qryOptAccessor.clone(requestOptions);
-                qryOptAccessor.getImpl(parallelCosmosQueryRequestOptions).setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
+                    cloneOptionsForInternalPipeline(requestOptions);
                 ModelBridgeInternal.setQueryRequestOptionsContinuationToken(parallelCosmosQueryRequestOptions, continuationToken);
 
                 documentQueryParams.setCosmosQueryRequestOptions(parallelCosmosQueryRequestOptions);
@@ -117,9 +114,8 @@ public class PipelinedDocumentQueryExecutionContext<T>
 
         createBaseComponentFunction = (continuationToken, documentQueryParams) -> {
             CosmosQueryRequestOptions orderByCosmosQueryRequestOptions =
-                qryOptAccessor.clone(requestOptions);
+                cloneOptionsForInternalPipeline(requestOptions);
 
-            qryOptAccessor.getImpl(orderByCosmosQueryRequestOptions).setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
             documentQueryParams.setCosmosQueryRequestOptions(orderByCosmosQueryRequestOptions);
             return HybridSearchDocumentQueryExecutionContext.createAsync(diagnosticsClientContext, client, documentQueryParams, collection);
         };
@@ -271,5 +267,19 @@ public class PipelinedDocumentQueryExecutionContext<T>
                         this.classOfT)
                 )
             );
+    }
+
+    /**
+     * Clones query request options and neutralizes the custom item serializer to
+     * DEFAULT_SERIALIZER. Internal pipeline stages must always use the default
+     * serializer; custom serialization is applied at the top-level pipeline boundary.
+     */
+    private static CosmosQueryRequestOptions cloneOptionsForInternalPipeline(
+        CosmosQueryRequestOptions source) {
+
+        CosmosQueryRequestOptions cloned = qryOptAccessor.clone(source);
+        qryOptAccessor.getImpl(cloned)
+            .setCustomItemSerializer(CosmosItemSerializer.DEFAULT_SERIALIZER);
+        return cloned;
     }
 }
