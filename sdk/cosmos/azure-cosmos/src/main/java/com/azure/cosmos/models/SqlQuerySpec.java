@@ -163,6 +163,11 @@ public final class SqlQuerySpec {
                         sqlQuerySpec.applySerializerToParameters(serializer);
                     }
                 }
+
+                @Override
+                public SqlParameter cloneSqlParameter(SqlParameter original) {
+                    return new SqlParameter(original.getName(), original.getRawValue());
+                }
             }
         );
     }

@@ -77,6 +77,7 @@ import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.models.PartitionKeyDefinition;
 import com.azure.cosmos.models.PriorityLevel;
 import com.azure.cosmos.models.ShowQueryMode;
+import com.azure.cosmos.models.SqlParameter;
 import com.azure.cosmos.models.SqlQuerySpec;
 import com.azure.cosmos.util.CosmosPagedFlux;
 import com.azure.cosmos.util.UtilBridgeInternal;
@@ -1892,6 +1893,9 @@ public class ImplementationBridgeHelpers {
 
             void setItemObjectMapper(CosmosItemSerializer serializer, ObjectMapper mapper);
             ObjectMapper getItemObjectMapper(CosmosItemSerializer serializer);
+
+            void setCanSerialize(CosmosItemSerializer serializer, boolean canSerialize);
+            boolean canSerialize(CosmosItemSerializer serializer);
         }
     }
 
@@ -1965,6 +1969,7 @@ public class ImplementationBridgeHelpers {
 
         public interface SqlQuerySpecAccessor {
             void applySerializerToParameters(SqlQuerySpec sqlQuerySpec, CosmosItemSerializer serializer);
+            SqlParameter cloneSqlParameter(SqlParameter original);
         }
     }
 }

@@ -6,6 +6,8 @@ import com.azure.cosmos.CosmosItemSerializer;
 import com.azure.cosmos.implementation.DiagnosticsClientContext;
 import com.azure.cosmos.implementation.DocumentCollection;
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
+import com.azure.cosmos.implementation.ImplementationBridgeHelpers.CosmosItemSerializerHelper.CosmosItemSerializerAccessor;
+import com.azure.cosmos.implementation.ImplementationBridgeHelpers.SqlQuerySpecHelper.SqlQuerySpecAccessor;
 import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.query.hybridsearch.HybridSearchQueryInfo;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
@@ -71,19 +73,16 @@ public abstract class PipelinedQueryExecutionContextBase<T>
         // which could race if the same instance is reused across concurrent queries.
         if (candidateSerializer != CosmosItemSerializer.DEFAULT_SERIALIZER) {
             SqlQuerySpec original = initParams.getQuery();
-            List<SqlParameter> clonedParams = new ArrayList<>();
             List<SqlParameter> originalParams = original.getParameters();
-            if (originalParams != null) {
+            if (originalParams != null && !originalParams.isEmpty()) {
+                List<SqlParameter> clonedParams = new ArrayList<>();
                 for (SqlParameter p : originalParams) {
-                    clonedParams.add(new SqlParameter(p.getName(), p.getValue(Object.class)));
+                    clonedParams.add(sqlQuerySpecAccessor().cloneSqlParameter(p));
                 }
+                SqlQuerySpec clonedQuery = new SqlQuerySpec(original.getQueryText(), clonedParams);
+                sqlQuerySpecAccessor().applySerializerToParameters(clonedQuery, candidateSerializer);
+                initParams.setQuery(clonedQuery);
             }
-            SqlQuerySpec clonedQuery = new SqlQuerySpec(original.getQueryText(), clonedParams);
-            ImplementationBridgeHelpers
-                .SqlQuerySpecHelper
-                .getSqlQuerySpecAccessor()
-                .applySerializerToParameters(clonedQuery, candidateSerializer);
-            initParams.setQuery(clonedQuery);
         }
 
         if (hybridSearchQueryInfo != null) {
@@ -219,5 +218,9 @@ public abstract class PipelinedQueryExecutionContextBase<T>
 
     public HybridSearchQueryInfo getHybridSearchQueryInfo() {
         return this.hybridSearchQueryInfo;
+    }
+
+    private static SqlQuerySpecAccessor sqlQuerySpecAccessor() {
+        return ImplementationBridgeHelpers.SqlQuerySpecHelper.getSqlQuerySpecAccessor();
     }
 }

@@ -4,10 +4,10 @@
 package com.azure.cosmos.models;
 
 import com.azure.cosmos.CosmosItemSerializer;
+import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
+import com.azure.cosmos.implementation.ImplementationBridgeHelpers.CosmosItemSerializerHelper.CosmosItemSerializerAccessor;
 import com.azure.cosmos.implementation.JsonSerializable;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 
@@ -15,7 +15,6 @@ import java.util.Objects;
  * Represents a SQL parameter in the SqlQuerySpec used for queries in the Azure Cosmos DB database service.
  */
 public final class SqlParameter {
-    private static final Logger LOGGER = LoggerFactory.getLogger(SqlParameter.class);
     private JsonSerializable jsonSerializable;
     private Object rawValue;
 
@@ -99,6 +98,16 @@ public final class SqlParameter {
     }
 
     /**
+     * Returns the original raw value before any serialization.
+     * Package-private — used internally to clone parameters while preserving the
+     * original Java type (e.g. Instant) that would otherwise be lost when reading
+     * from the JSON property bag.
+     */
+    Object getRawValue() {
+        return this.rawValue;
+    }
+
+    /**
      * Re-serializes the parameter value using the given custom item serializer.
      * This is called internally during query execution to ensure parameter values
      * are serialized consistently with document values when a custom serializer is configured.
@@ -106,19 +115,11 @@ public final class SqlParameter {
      * @param serializer the custom item serializer to apply.
      */
     void applySerializer(CosmosItemSerializer serializer) {
-        if (this.rawValue != null && serializer != null) {
-            try {
-                this.jsonSerializable.set("value", this.rawValue, serializer, true);
-            } catch (Throwable t) {
-                // Some serializer implementations (e.g. Spark connector) only implement
-                // deserialize() and stub serialize() as unimplemented. Fall back to the
-                // default serialization that was already applied via setValue().
-                LOGGER.debug(
-                    "Custom serializer '{}' does not support serialize(); "
-                        + "falling back to default serialization for SqlParameter value.",
-                    serializer.getClass().getSimpleName(),
-                    t);
-            }
+        if (this.rawValue != null
+            && serializer != null
+            && cosmosItemSerializerAccessor().canSerialize(serializer)) {
+
+            this.jsonSerializable.set("value", this.rawValue, serializer, true);
         }
     }
 
@@ -127,6 +128,10 @@ public final class SqlParameter {
     }
 
     JsonSerializable getJsonSerializable() { return this.jsonSerializable; }
+
+    private static CosmosItemSerializerAccessor cosmosItemSerializerAccessor() {
+        return ImplementationBridgeHelpers.CosmosItemSerializerHelper.getCosmosItemSerializerAccessor();
+    }
 
     @Override
     public boolean equals(Object o) {

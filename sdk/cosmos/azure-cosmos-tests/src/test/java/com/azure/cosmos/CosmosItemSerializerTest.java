@@ -35,6 +35,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -45,6 +46,7 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -771,17 +773,21 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
             CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
                 .setCustomItemSerializer(clientSerializer);
 
-            // SELECT VALUE COUNT(1) returns a scalar integer, so use Integer.class.
-            List<Integer> results = container
+            // SELECT COUNT(1) returns an object (e.g. {"$1": 3}) rather than a scalar.
+            // Custom serializers work with Map<String, Object> which is object-level
+            // deserialization - they cannot handle scalar VALUE queries like
+            // SELECT VALUE COUNT(1) because the aggregate pipeline wraps the scalar
+            // in a {"_value": N} Document that can't be deserialized as Integer.
+            List<ObjectNode> results = container
                 .queryItems(
-                    "SELECT VALUE COUNT(1) FROM c WHERE c.mypk = '" + pkValue + "'",
+                    "SELECT COUNT(1) FROM c WHERE c.mypk = '" + pkValue + "'",
                     queryRequestOptions,
-                    Integer.class)
+                    ObjectNode.class)
                 .stream().collect(Collectors.toList());
 
             assertThat(results).isNotNull();
             assertThat(results).hasSize(1);
-            assertThat(results.get(0)).isEqualTo(3);
+            assertThat(results.get(0).get("$1").asInt()).isEqualTo(3);
         } finally {
             for (String id : createdIds) {
                 try {
@@ -915,6 +921,62 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
         } finally {
             try {
                 container.deleteItem(id, new PartitionKey(id), new CosmosItemRequestOptions());
+            } catch (Exception ignored) { }
+        }
+    }
+
+    @Test(groups = { "fast", "emulator" }, timeOut = TIMEOUT * 1000000)
+    public void queryWithSqlParameterDateTimeAndCustomSerializer() {
+        CosmosItemSerializer clientSerializer = this.getClientBuilder().getCustomItemSerializer();
+        if (clientSerializer == null || clientSerializer == CosmosItemSerializer.DEFAULT_SERIALIZER) {
+            return;
+        }
+
+        boolean isEnvelopeWrapper = clientSerializer instanceof EnvelopWrappingItemSerializer;
+        if (isEnvelopeWrapper) {
+            return;
+        }
+
+        // This test validates that when a custom serializer changes how values are
+        // stored (e.g. Instant as ISO-8601 string instead of a timestamp number),
+        // SqlParameter correctly applies the same serializer so that query filters
+        // match the stored representation.
+        String id = UUID.randomUUID().toString();
+        String pkValue = id;
+        Instant createdAt = Instant.parse("2026-03-15T10:30:00Z");
+        TestDocumentWithTimestamp doc = new TestDocumentWithTimestamp();
+        doc.id = id;
+        doc.mypk = pkValue;
+        doc.createdAt = createdAt;
+        doc.description = "test-datetime-serialization";
+
+        try {
+            CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions()
+                .setCustomItemSerializer(clientSerializer);
+            container.createItem(doc, new PartitionKey(pkValue), requestOptions);
+
+            CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
+                .setCustomItemSerializer(clientSerializer);
+
+            // Query using SqlParameter with the same Instant value — the custom serializer
+            // must serialize the parameter the same way as the document field.
+            SqlQuerySpec querySpec = new SqlQuerySpec(
+                "SELECT * FROM c WHERE c.createdAt = @createdAt AND c.id = @id",
+                new SqlParameter("@createdAt", createdAt),
+                new SqlParameter("@id", id));
+
+            List<TestDocumentWithTimestamp> results = container
+                .queryItems(querySpec, queryRequestOptions, TestDocumentWithTimestamp.class)
+                .stream().collect(Collectors.toList());
+
+            assertThat(results).isNotNull();
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).id).isEqualTo(id);
+            assertThat(results.get(0).createdAt).isEqualTo(createdAt);
+            assertThat(results.get(0).description).isEqualTo("test-datetime-serialization");
+        } finally {
+            try {
+                container.deleteItem(id, new PartitionKey(pkValue), new CosmosItemRequestOptions());
             } catch (Exception ignored) { }
         }
     }
@@ -1149,6 +1211,13 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
         public String nullableField;
     }
 
+    private static class TestDocumentWithTimestamp {
+        public String id;
+        public String mypk;
+        public Instant createdAt;
+        public String description;
+    }
+
     private static class TestDocumentWrappedInEnvelope {
         public String id;
 
@@ -1269,7 +1338,22 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
             if (item == null) {
                 return null;
             }
-            return customMapper.convertValue(item, Map.class);
+
+            JsonNode jsonNode = customMapper.convertValue(item, JsonNode.class);
+            if (jsonNode == null) {
+                return null;
+            }
+
+            if (jsonNode.isObject()) {
+                return customMapper.convertValue(jsonNode, Map.class);
+            }
+
+            // For scalar values (e.g. Instant, String, numbers), return a single-entry
+            // map using the well-known primitive value key so the framework correctly
+            // sets it as a scalar in the JSON property bag.
+            Map<String, Object> primitiveMap = new HashMap<>();
+            primitiveMap.put("__primitive_json-node_value__", customMapper.convertValue(jsonNode, Object.class));
+            return primitiveMap;
         }
 
         @Override

@@ -38,6 +38,7 @@ public abstract class CosmosItemSerializer {
     public final static CosmosItemSerializer DEFAULT_SERIALIZER = DefaultCosmosItemSerializer.DEFAULT_SERIALIZER;
 
     private boolean shouldWrapSerializationExceptions;
+    private boolean canSerialize;
 
     private ObjectMapper mapper = Utils.getSimpleObjectMapper();
 
@@ -46,6 +47,7 @@ public abstract class CosmosItemSerializer {
      */
     protected CosmosItemSerializer() {
         this.shouldWrapSerializationExceptions = true;
+        this.canSerialize = true;
     }
 
     /**
@@ -130,6 +132,14 @@ public abstract class CosmosItemSerializer {
         this.shouldWrapSerializationExceptions = enabled;
     }
 
+    void setCanSerialize(boolean canSerialize) {
+        this.canSerialize = canSerialize;
+    }
+
+    boolean canSerialize() {
+        return this.canSerialize;
+    }
+
 
     ///////////////////////////////////////////////////////////////////////////////////////////
     // the following helper/accessor only helps to access this class outside of this package.//
@@ -160,6 +170,16 @@ public abstract class CosmosItemSerializer {
                 @Override
                 public ObjectMapper getItemObjectMapper(CosmosItemSerializer serializer) {
                     return serializer.getItemObjectMapper();
+                }
+
+                @Override
+                public boolean canSerialize(CosmosItemSerializer serializer) {
+                    return serializer.canSerialize();
+                }
+
+                @Override
+                public void setCanSerialize(CosmosItemSerializer serializer, boolean canSerialize) {
+                    serializer.setCanSerialize(canSerialize);
                 }
             });
     }
