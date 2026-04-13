@@ -1254,6 +1254,13 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
             }
 
             Map<String, Object> unwrappedJsonTree = CosmosItemSerializer.DEFAULT_SERIALIZER.serialize(item);
+
+            // Non-document values (e.g., SQL parameter values like strings or numbers)
+            // don't have "id" — pass them through without wrapping.
+            if (!unwrappedJsonTree.containsKey("id")) {
+                return unwrappedJsonTree;
+            }
+
             if (unwrappedJsonTree.containsKey("wrappedContent")) {
                 throw new IllegalStateException("Double wrapping");
             }
