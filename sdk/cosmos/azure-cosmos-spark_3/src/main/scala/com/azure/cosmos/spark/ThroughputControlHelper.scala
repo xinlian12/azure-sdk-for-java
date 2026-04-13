@@ -163,7 +163,7 @@ private object ThroughputControlHelper extends BasicLoggingTrait {
 
         // Currently CosmosDB data plane SDK does not support query database/container throughput by using AAD authentication
         // As a mitigation we are going to pass a throughput query mono which internally use management SDK to query throughput
-        val throughputQueryMonoOpt = getThroughputQueryMono(userConfig, cacheItem, cosmosContainerConfig, throughputControlConfig)
+        val throughputQueryMonoOpt = getThroughputQueryMono(userConfig, cacheItem, cosmosContainerConfig)
         throughputQueryMonoOpt match {
             case Some(throughputQueryMono) =>
                 ImplementationBridgeHelpers.CosmosAsyncContainerHelper.getCosmosAsyncContainerAccessor
@@ -213,7 +213,7 @@ private object ThroughputControlHelper extends BasicLoggingTrait {
 
         // Currently CosmosDB data plane SDK does not support query database/container throughput by using AAD authentication
         // As a mitigation we are going to pass a throughput query mono which internally use management SDK to query throughput
-        val throughputQueryMonoOpt = getThroughputQueryMono(userConfig, cacheItem, cosmosContainerConfig, throughputControlConfig)
+        val throughputQueryMonoOpt = getThroughputQueryMono(userConfig, cacheItem, cosmosContainerConfig)
         ImplementationBridgeHelpers
             .CosmosAsyncContainerHelper
             .getCosmosAsyncContainerAccessor
@@ -268,24 +268,16 @@ private object ThroughputControlHelper extends BasicLoggingTrait {
     private def getThroughputQueryMono(
                                           userConfig: Map[String, String],
                                           cacheItem: CosmosClientCacheItem,
-                                          cosmosContainerConfig: CosmosContainerConfig,
-                                          throughputControlConfig: CosmosSDKThroughputControlConfig): Option[SMono[Integer]] = {
-        // When targetThroughput is explicitly configured, skip the container throughput query.
-        // The query requires Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/throughputSettings/read
-        // permission which AAD principals may not have, and it is unnecessary when the target is already known.
-        if (throughputControlConfig.targetThroughput.isDefined) {
-            None
-        } else {
-            val cosmosAuthConfig = CosmosAccountConfig.parseCosmosAccountConfig(userConfig).authConfig
-            cosmosAuthConfig match {
-                case _: CosmosMasterKeyAuthConfig => None
-                case _: CosmosServicePrincipalAuthConfig =>
-                    Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
-                case _: CosmosManagedIdentityAuthConfig =>
-                    Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
-                case _: CosmosAccessTokenAuthConfig =>
-                    Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
-            }
+                                          cosmosContainerConfig: CosmosContainerConfig): Option[SMono[Integer]] = {
+        val cosmosAuthConfig = CosmosAccountConfig.parseCosmosAccountConfig(userConfig).authConfig
+        cosmosAuthConfig match {
+            case _: CosmosMasterKeyAuthConfig => None
+            case _: CosmosServicePrincipalAuthConfig =>
+                Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
+            case _: CosmosManagedIdentityAuthConfig =>
+              Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
+            case _: CosmosAccessTokenAuthConfig =>
+              Some(cacheItem.sparkCatalogClient.readContainerThroughput(cosmosContainerConfig.database, cosmosContainerConfig.container))
         }
     }
 }
