@@ -74,15 +74,18 @@ public abstract class PipelinedQueryExecutionContextBase<T>
         if (candidateSerializer != CosmosItemSerializer.DEFAULT_SERIALIZER
             && cosmosItemSerializerAccessor().canSerialize(candidateSerializer)) {
             SqlQuerySpec original = initParams.getQuery();
-            List<SqlParameter> originalParams = original.getParameters();
-            if (originalParams != null && !originalParams.isEmpty()) {
-                List<SqlParameter> clonedParams = new ArrayList<>();
-                for (SqlParameter p : originalParams) {
-                    clonedParams.add(sqlQuerySpecAccessor().cloneSqlParameter(p));
+            if (original != null) {
+                List<SqlParameter> originalParams = original.getParameters();
+                if (originalParams != null && !originalParams.isEmpty()) {
+                    SqlQuerySpecAccessor accessor = sqlQuerySpecAccessor();
+                    List<SqlParameter> clonedParams = new ArrayList<>(originalParams.size());
+                    for (SqlParameter p : originalParams) {
+                        clonedParams.add(accessor.cloneSqlParameter(p));
+                    }
+                    SqlQuerySpec clonedQuery = new SqlQuerySpec(original.getQueryText(), clonedParams);
+                    accessor.applySerializerToParameters(clonedQuery, candidateSerializer);
+                    initParams.setQuery(clonedQuery);
                 }
-                SqlQuerySpec clonedQuery = new SqlQuerySpec(original.getQueryText(), clonedParams);
-                sqlQuerySpecAccessor().applySerializerToParameters(clonedQuery, candidateSerializer);
-                initParams.setQuery(clonedQuery);
             }
         }
 

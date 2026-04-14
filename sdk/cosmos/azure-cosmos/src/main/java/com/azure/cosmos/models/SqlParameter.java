@@ -33,6 +33,8 @@ public final class SqlParameter {
     SqlParameter(ObjectNode objectNode) {
 
         this.jsonSerializable = new JsonSerializable(objectNode);
+        // Note: rawValue here may not preserve the original Java type (e.g. Instant)
+        // since it is read back from the JSON property bag after deserialization.
         this.rawValue = this.jsonSerializable.getObject("value", Object.class);
     }
 
@@ -98,10 +100,13 @@ public final class SqlParameter {
     }
 
     /**
-     * Returns the original raw value before any serialization.
+     * Returns the raw value captured before serialization, when available.
      * Package-private — used internally to clone parameters while preserving the
-     * original Java type (e.g. Instant) that would otherwise be lost when reading
-     * from the JSON property bag.
+     * original Java type (for example, {@code Instant}) when that value originated
+     * from direct Java assignment such as {@link #setValue(Object)}.
+     * <p>
+     * Values populated from the JSON property bag may already have lost their
+     * original Java type fidelity during JSON serialization/deserialization.
      */
     Object getRawValue() {
         return this.rawValue;
