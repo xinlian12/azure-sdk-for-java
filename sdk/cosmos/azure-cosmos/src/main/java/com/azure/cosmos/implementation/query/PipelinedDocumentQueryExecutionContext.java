@@ -275,6 +275,12 @@ public class PipelinedDocumentQueryExecutionContext<T>
      * Clones query request options and neutralizes the custom item serializer to
      * DEFAULT_SERIALIZER. Internal pipeline stages must always use the default
      * serializer; custom serialization is applied at the top-level pipeline boundary.
+     *
+     * All internal pipeline stages that work with Document/intermediate types MUST
+     * use this method rather than cloning options directly via
+     * {@code qryOptAccessor().clone(...)}. Bypassing this method would leave the
+     * custom serializer active in the inner pipeline, causing incorrect
+     * serialization of intermediate results. See PR #48811 for context.
      */
     private static CosmosQueryRequestOptions cloneOptionsForInternalPipeline(
         CosmosQueryRequestOptions source) {

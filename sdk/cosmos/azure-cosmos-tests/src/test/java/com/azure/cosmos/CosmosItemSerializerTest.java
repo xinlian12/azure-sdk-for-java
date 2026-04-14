@@ -981,6 +981,124 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
         }
     }
 
+    @Test(groups = { "fast", "emulator" }, timeOut = TIMEOUT * 1000000)
+    public void queryWithConcurrentSqlQuerySpecReuseAndCustomSerializer() {
+        CosmosItemSerializer clientSerializer = this.getClientBuilder().getCustomItemSerializer();
+        if (clientSerializer == null || clientSerializer == CosmosItemSerializer.DEFAULT_SERIALIZER) {
+            return;
+        }
+
+        boolean isEnvelopeWrapper = clientSerializer instanceof EnvelopWrappingItemSerializer;
+        if (isEnvelopeWrapper) {
+            return;
+        }
+
+        // Create multiple documents with Instant fields
+        String pkValue = UUID.randomUUID().toString();
+        int docCount = 5;
+        List<TestDocumentWithTimestamp> createdDocs = new ArrayList<>();
+        Instant createdAt = Instant.parse("2026-03-15T10:30:00Z");
+
+        try {
+            CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions()
+                .setCustomItemSerializer(clientSerializer);
+
+            for (int i = 0; i < docCount; i++) {
+                TestDocumentWithTimestamp doc = new TestDocumentWithTimestamp();
+                doc.id = UUID.randomUUID().toString();
+                doc.mypk = pkValue;
+                doc.createdAt = createdAt;
+                doc.description = "concurrent-test-" + i;
+                container.createItem(doc, new PartitionKey(pkValue), requestOptions);
+                createdDocs.add(doc);
+            }
+
+            // Build a single shared SqlQuerySpec — this is the scenario under test:
+            // the same instance is reused across concurrent queries.
+            SqlQuerySpec sharedQuerySpec = new SqlQuerySpec(
+                "SELECT * FROM c WHERE c.createdAt = @createdAt AND c.mypk = @pk",
+                new SqlParameter("@createdAt", createdAt),
+                new SqlParameter("@pk", pkValue));
+
+            // Capture original parameter values before concurrent execution
+            List<SqlParameter> originalParams = sharedQuerySpec.getParameters();
+            Object originalCreatedAtValue = originalParams.get(0).getValue(Object.class);
+            Object originalPkValue = originalParams.get(1).getValue(Object.class);
+
+            CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions()
+                .setCustomItemSerializer(clientSerializer);
+
+            int concurrentQueries = 10;
+            java.util.concurrent.ExecutorService executor =
+                java.util.concurrent.Executors.newFixedThreadPool(concurrentQueries);
+            java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.CountDownLatch doneLatch =
+                new java.util.concurrent.CountDownLatch(concurrentQueries);
+
+            List<List<TestDocumentWithTimestamp>> allResults =
+                java.util.Collections.synchronizedList(new ArrayList<>());
+            List<Throwable> errors =
+                java.util.Collections.synchronizedList(new ArrayList<>());
+
+            for (int i = 0; i < concurrentQueries; i++) {
+                executor.submit(() -> {
+                    try {
+                        startLatch.await();
+                        List<TestDocumentWithTimestamp> results = container
+                            .queryItems(sharedQuerySpec, queryRequestOptions, TestDocumentWithTimestamp.class)
+                            .stream().collect(Collectors.toList());
+                        allResults.add(results);
+                    } catch (Throwable t) {
+                        errors.add(t);
+                    } finally {
+                        doneLatch.countDown();
+                    }
+                });
+            }
+
+            // Release all threads at once to maximize contention
+            startLatch.countDown();
+            try {
+                assertThat(doneLatch.await(60, java.util.concurrent.TimeUnit.SECONDS))
+                    .as("All concurrent queries should complete within timeout")
+                    .isTrue();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                fail("Test interrupted while waiting for concurrent queries");
+            }
+
+            executor.shutdown();
+
+            // Verify no errors
+            assertThat(errors)
+                .as("No errors should occur during concurrent query execution")
+                .isEmpty();
+
+            // Verify all queries returned correct results
+            assertThat(allResults).hasSize(concurrentQueries);
+            for (List<TestDocumentWithTimestamp> results : allResults) {
+                assertThat(results).hasSize(docCount);
+                for (TestDocumentWithTimestamp result : results) {
+                    assertThat(result.createdAt).isEqualTo(createdAt);
+                    assertThat(result.mypk).isEqualTo(pkValue);
+                }
+            }
+
+            // Verify the original SqlQuerySpec parameters are unmodified
+            assertThat(sharedQuerySpec.getParameters()).hasSize(2);
+            assertThat(sharedQuerySpec.getParameters().get(0).getValue(Object.class))
+                .isEqualTo(originalCreatedAtValue);
+            assertThat(sharedQuerySpec.getParameters().get(1).getValue(Object.class))
+                .isEqualTo(originalPkValue);
+        } finally {
+            for (TestDocumentWithTimestamp doc : createdDocs) {
+                try {
+                    container.deleteItem(doc.id, new PartitionKey(pkValue), new CosmosItemRequestOptions());
+                } catch (Exception ignored) { }
+            }
+        }
+    }
+
     private <T> void runBatchAndChangeFeedTestCase(
         Function<String, T> docGenerator,
         CosmosItemSerializer requestLevelSerializer,
