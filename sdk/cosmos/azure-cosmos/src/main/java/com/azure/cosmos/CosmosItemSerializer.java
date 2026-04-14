@@ -3,26 +3,15 @@
 
 package com.azure.cosmos;
 
-import com.azure.cosmos.implementation.ApiType;
 import com.azure.cosmos.implementation.BadRequestException;
 import com.azure.cosmos.implementation.Configs;
-import com.azure.cosmos.implementation.ConnectionPolicy;
-import com.azure.cosmos.implementation.CosmosClientMetadataCachesSnapshot;
 import com.azure.cosmos.implementation.DefaultCosmosItemSerializer;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
-import com.azure.cosmos.implementation.JsonSerializable;
-import com.azure.cosmos.implementation.ObjectNodeMap;
-import com.azure.cosmos.implementation.PrimitiveJsonNodeMap;
 import com.azure.cosmos.implementation.Utils;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 
-import java.io.IOException;
 import java.util.Map;
-
-import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
 
 /**
  * The {@link CosmosItemSerializer} allows customizing the serialization of Cosmos Items - either to transform payload (for
@@ -30,12 +19,21 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
  */
 public abstract class CosmosItemSerializer {
 
+    static { initialize(); }
 
     /**
      * Gets the default Cosmos item serializer. This serializer is used by default when no custom serializer is
      * specified on request options or the {@link CosmosClientBuilder}
      */
-    public final static CosmosItemSerializer DEFAULT_SERIALIZER = DefaultCosmosItemSerializer.DEFAULT_SERIALIZER;
+    public final static CosmosItemSerializer DEFAULT_SERIALIZER =
+        new DefaultCosmosItemSerializer(Utils.getDocumentObjectMapper(Configs.getItemSerializationInclusionMode()));
+
+    // Moved from DefaultCosmosItemSerializer to eliminate concurrent <clinit> deadlock
+    // between parent (CosmosItemSerializer) and child (DefaultCosmosItemSerializer).
+    // Guaranteed to use serialization inclusion mode "Always".
+    // Accessed via CosmosItemSerializerAccessor.getInternalDefaultSerializer().
+    private static final CosmosItemSerializer INTERNAL_DEFAULT_SERIALIZER =
+        new DefaultCosmosItemSerializer(Utils.getSimpleObjectMapper());
 
     private boolean shouldWrapSerializationExceptions;
     private boolean canSerialize;
@@ -181,8 +179,10 @@ public abstract class CosmosItemSerializer {
                 public void setCanSerialize(CosmosItemSerializer serializer, boolean canSerialize) {
                     serializer.setCanSerialize(canSerialize);
                 }
+
+                public CosmosItemSerializer getInternalDefaultSerializer() {
+                    return INTERNAL_DEFAULT_SERIALIZER;
+                }
             });
     }
-
-    static { initialize(); }
 }
