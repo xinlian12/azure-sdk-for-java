@@ -35,7 +35,7 @@ public class SDKThroughputContainerControllerTests {
     @Test(groups = "unit")
     public void throughputQueryMonoNotSubscribedWhenOnlyTargetThroughputConfigured() {
         CosmosAsyncContainer containerMock = Mockito.mock(CosmosAsyncContainer.class);
-        CosmosAsyncDatabase databaseMock = Mockito.mock(CosmosAsyncDatabase.class);
+        CosmosAsyncDatabase databaseMock = Mockito.mock(CosmosAsyncDatabase.class, Mockito.RETURNS_DEEP_STUBS);
         Mockito.doReturn("FakeCollection").when(containerMock).getId();
         Mockito.doReturn(databaseMock).when(containerMock).getDatabase();
         Mockito.doReturn("FakeDatabase").when(databaseMock).getId();
@@ -85,7 +85,7 @@ public class SDKThroughputContainerControllerTests {
     @Test(groups = "unit")
     public void throughputQueryMonoWiredWhenThresholdConfigured() {
         CosmosAsyncContainer containerMock = Mockito.mock(CosmosAsyncContainer.class);
-        CosmosAsyncDatabase databaseMock = Mockito.mock(CosmosAsyncDatabase.class);
+        CosmosAsyncDatabase databaseMock = Mockito.mock(CosmosAsyncDatabase.class, Mockito.RETURNS_DEEP_STUBS);
         Mockito.doReturn("FakeCollection").when(containerMock).getId();
         Mockito.doReturn(databaseMock).when(containerMock).getDatabase();
         Mockito.doReturn("FakeDatabase").when(databaseMock).getId();
