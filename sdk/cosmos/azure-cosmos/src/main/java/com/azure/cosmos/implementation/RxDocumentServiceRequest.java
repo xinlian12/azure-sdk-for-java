@@ -37,6 +37,14 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
  */
 public class RxDocumentServiceRequest implements Cloneable {
 
+    private static ImplementationBridgeHelpers.CosmosQueryRequestOptionsHelper.CosmosQueryRequestOptionsAccessor queryOptionsAccessor() {
+        return ImplementationBridgeHelpers.CosmosQueryRequestOptionsHelper.getCosmosQueryRequestOptionsAccessor();
+    }
+
+    private static CosmosItemSerializer internalDefaultSerializer() {
+        return ImplementationBridgeHelpers.CosmosItemSerializerHelper.getCosmosItemSerializerAccessor().getInternalDefaultSerializer();
+    }
+
     private final DiagnosticsClientContext clientContext;
     public volatile boolean forcePartitionKeyRangeRefresh;
     public volatile boolean forceCollectionRoutingMapRefresh;
@@ -412,7 +420,7 @@ public class RxDocumentServiceRequest implements Cloneable {
         // only ever used for non Document operations
         RxDocumentServiceRequest request = new RxDocumentServiceRequest(clientContext, operation, resourceType, relativePath,
             resource.serializeJsonToByteBuffer(
-                DefaultCosmosItemSerializer.INTERNAL_DEFAULT_SERIALIZER,
+                internalDefaultSerializer(),
                 null,
                 resourceType == ResourceType.Document && (operation == OperationType.Create || operation == OperationType.Upsert)),
             headers,
@@ -604,7 +612,7 @@ public class RxDocumentServiceRequest implements Cloneable {
                                                   Map<String, String> headers,
                                                   AuthorizationTokenType authorizationTokenType) {
         ByteBuffer resourceContent = resource.serializeJsonToByteBuffer(
-            DefaultCosmosItemSerializer.INTERNAL_DEFAULT_SERIALIZER, // only used from test code
+            internalDefaultSerializer(), // only used from test code
             null,
             resourceType == ResourceType.Document && (operation == OperationType.Create || operation == OperationType.Upsert));
         return new RxDocumentServiceRequest(clientContext, operation, resourceType, relativePath, resourceContent, headers, authorizationTokenType);
@@ -743,7 +751,7 @@ public class RxDocumentServiceRequest implements Cloneable {
             String resourceFullName,
             ResourceType resourceType) {
         ByteBuffer resourceContent = resource.serializeJsonToByteBuffer(
-            DefaultCosmosItemSerializer.INTERNAL_DEFAULT_SERIALIZER, // only used from test code
+            internalDefaultSerializer(), // only used from test code
             null,
             resourceType == ResourceType.Document && (operationType == OperationType.Create || operationType == OperationType.Upsert));
         return new RxDocumentServiceRequest(clientContext,
@@ -1097,9 +1105,7 @@ public class RxDocumentServiceRequest implements Cloneable {
         } else if (options instanceof RequestOptions) {
             return ((RequestOptions) options).getProperties();
         } else if (options instanceof CosmosQueryRequestOptions) {
-            return ImplementationBridgeHelpers
-                .CosmosQueryRequestOptionsHelper
-                .getCosmosQueryRequestOptionsAccessor()
+            return queryOptionsAccessor()
                 .getProperties((CosmosQueryRequestOptions) options);
         } else if (options instanceof CosmosChangeFeedRequestOptions) {
             return ModelBridgeInternal.getPropertiesFromChangeFeedRequestOptions(
