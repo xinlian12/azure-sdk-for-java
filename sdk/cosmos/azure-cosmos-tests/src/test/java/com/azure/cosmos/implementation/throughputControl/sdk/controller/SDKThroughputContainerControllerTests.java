@@ -11,6 +11,8 @@ import com.azure.cosmos.implementation.caches.RxPartitionKeyRangeCache;
 import com.azure.cosmos.implementation.throughputControl.sdk.config.LocalThroughputControlGroup;
 import com.azure.cosmos.implementation.throughputControl.sdk.config.SDKThroughputControlGroupInternal;
 import com.azure.cosmos.implementation.throughputControl.sdk.controller.container.SDKThroughputContainerController;
+import com.azure.cosmos.models.CosmosContainerProperties;
+import com.azure.cosmos.models.CosmosContainerResponse;
 import com.azure.cosmos.models.PriorityLevel;
 import org.mockito.Mockito;
 import org.testng.annotations.Test;
@@ -25,13 +27,6 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 public class SDKThroughputContainerControllerTests {
 
-    /**
-     * Validates that when only targetThroughput is configured (no targetThroughputThreshold),
-     * the throughputQueryMono is NOT subscribed during resolveContainerMaxThroughput.
-     * This is the fix for issue #48799 — AAD principals may not have the
-     * throughputSettings/read permission required by the query, and the query is
-     * unnecessary when an absolute target throughput is specified.
-     */
     @Test(groups = "unit")
     public void throughputQueryMonoNotSubscribedWhenOnlyTargetThroughputConfigured() {
         CosmosAsyncContainer containerMock = Mockito.mock(CosmosAsyncContainer.class);
@@ -39,6 +34,13 @@ public class SDKThroughputContainerControllerTests {
         Mockito.doReturn("FakeCollection").when(containerMock).getId();
         Mockito.doReturn(databaseMock).when(containerMock).getDatabase();
         Mockito.doReturn("FakeDatabase").when(databaseMock).getId();
+
+        // Mock container.read() for resolveContainerResourceId()
+        CosmosContainerResponse containerResponseMock = Mockito.mock(CosmosContainerResponse.class);
+        CosmosContainerProperties containerPropertiesMock = Mockito.mock(CosmosContainerProperties.class);
+        Mockito.when(containerResponseMock.getProperties()).thenReturn(containerPropertiesMock);
+        Mockito.when(containerPropertiesMock.getResourceId()).thenReturn("fakeContainerRid");
+        Mockito.when(containerMock.read()).thenReturn(Mono.just(containerResponseMock));
 
         // Group with targetThroughput only (no threshold)
         LocalThroughputControlGroup group = new LocalThroughputControlGroup(
@@ -60,8 +62,6 @@ public class SDKThroughputContainerControllerTests {
         RxCollectionCache collectionCacheMock = Mockito.mock(RxCollectionCache.class);
         RxPartitionKeyRangeCache pkRangeCacheMock = Mockito.mock(RxPartitionKeyRangeCache.class);
 
-        // Constructing the controller wires the throughputQueryMono but should NOT subscribe
-        // when throughputProvisioningScope is NONE (no threshold configured)
         SDKThroughputContainerController controller = new SDKThroughputContainerController(
             collectionCacheMock,
             ConnectionMode.DIRECT,
@@ -70,25 +70,36 @@ public class SDKThroughputContainerControllerTests {
             null,
             trackingThroughputQueryMono);
 
-        // The constructor should NOT have subscribed to the throughput query mono
+        // Call init() which drives the full pipeline:
+        //   resolveContainerResourceId -> resolveContainerMaxThroughput -> createAndInitializeGroupControllers
+        // This exercises both getThroughputResolveLevel() (scope calculation) and
+        // the resolveContainerMaxThroughput() guard. The last step may fail due to
+        // insufficient mocking, but resolveContainerMaxThroughput has already completed by then.
+        try {
+            controller.<Object>init().block();
+        } catch (Exception ignored) {
+            // createAndInitializeGroupControllers may fail — acceptable for this test
+        }
+
         assertThat(throughputQuerySubscribed.get())
             .as("throughputQueryMono should not be subscribed when only targetThroughput is configured")
             .isFalse();
     }
 
-    /**
-     * Validates that when targetThroughputThreshold IS configured,
-     * the throughputQueryMono is still wired and available for subscription.
-     * (The actual subscription happens during init(), which requires a full
-     * integration setup — this test just verifies the constructor accepts it.)
-     */
     @Test(groups = "unit")
-    public void throughputQueryMonoWiredWhenThresholdConfigured() {
+    public void throughputQueryMonoSubscribedWhenThresholdConfigured() {
         CosmosAsyncContainer containerMock = Mockito.mock(CosmosAsyncContainer.class);
         CosmosAsyncDatabase databaseMock = Mockito.mock(CosmosAsyncDatabase.class, Mockito.RETURNS_DEEP_STUBS);
         Mockito.doReturn("FakeCollection").when(containerMock).getId();
         Mockito.doReturn(databaseMock).when(containerMock).getDatabase();
         Mockito.doReturn("FakeDatabase").when(databaseMock).getId();
+
+        // Mock container.read() for resolveContainerResourceId()
+        CosmosContainerResponse containerResponseMock = Mockito.mock(CosmosContainerResponse.class);
+        CosmosContainerProperties containerPropertiesMock = Mockito.mock(CosmosContainerProperties.class);
+        Mockito.when(containerResponseMock.getProperties()).thenReturn(containerPropertiesMock);
+        Mockito.when(containerPropertiesMock.getResourceId()).thenReturn("fakeContainerRid");
+        Mockito.when(containerMock.read()).thenReturn(Mono.just(containerResponseMock));
 
         // Group with targetThroughputThreshold set
         LocalThroughputControlGroup group = new LocalThroughputControlGroup(
@@ -110,7 +121,6 @@ public class SDKThroughputContainerControllerTests {
         RxCollectionCache collectionCacheMock = Mockito.mock(RxCollectionCache.class);
         RxPartitionKeyRangeCache pkRangeCacheMock = Mockito.mock(RxPartitionKeyRangeCache.class);
 
-        // Constructor should accept the throughput query mono (subscription happens during init)
         SDKThroughputContainerController controller = new SDKThroughputContainerController(
             collectionCacheMock,
             ConnectionMode.DIRECT,
@@ -119,8 +129,16 @@ public class SDKThroughputContainerControllerTests {
             null,
             trackingThroughputQueryMono);
 
-        // Constructor itself should not subscribe, but the mono should be wired for init()
-        // (We can't easily test init() without full integration setup)
-        assertThat(controller).isNotNull();
+        // Call init() — when targetThroughputThreshold is configured,
+        // resolveContainerMaxThroughput should subscribe to the throughput query mono.
+        try {
+            controller.<Object>init().block();
+        } catch (Exception ignored) {
+            // createAndInitializeGroupControllers may fail — acceptable for this test
+        }
+
+        assertThat(throughputQuerySubscribed.get())
+            .as("throughputQueryMono should be subscribed when targetThroughputThreshold is configured")
+            .isTrue();
     }
 }
