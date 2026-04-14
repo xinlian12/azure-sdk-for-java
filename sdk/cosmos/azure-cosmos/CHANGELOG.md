@@ -8,8 +8,8 @@
 
 #### Bugs Fixed
 * Fixed an issue where change feed with `startFrom` point-in-time returned `400` on merged partitions by enabling the `CHANGE_FEED_WITH_START_TIME_POST_MERGE` SDK capability.
-* Fixed an issue where `CustomItemSerializer` was incorrectly applied to internal SDK query pipeline structures (e.g., `OrderByRowResult`, `Document`), causing deserialization failures in ORDER BY, GROUP BY, aggregate, DISTINCT, and hybrid search queries. - See [PR 48702](https://github.com/Azure/azure-sdk-for-java/pull/48702)
-* Fixed an issue where `SqlParameter` ignored the configured `CustomItemSerializer`, always using the internal default serializer instead. - See [PR 48702](https://github.com/Azure/azure-sdk-for-java/pull/48702)
+* Fixed an issue where `CustomItemSerializer` was incorrectly applied to internal SDK query pipeline structures (e.g., `OrderByRowResult`, `Document`), causing deserialization failures in ORDER BY, GROUP BY, aggregate, DISTINCT, and hybrid search queries. - See [PR 48811](https://github.com/Azure/azure-sdk-for-java/pull/48811)
+* Fixed an issue where `SqlParameter` ignored the configured `CustomItemSerializer`, always using the internal default serializer instead. - See [PR 48811](https://github.com/Azure/azure-sdk-for-java/pull/48811)
 
 #### Other Changes
 
