@@ -111,5 +111,69 @@ df.filter(col("isAlive") === true)
 
 // COMMAND ----------
 
+// Change Feed - micro-batch structured streaming
+// This exercises the ChangeFeedInitialOffsetWriter and HDFSMetadataLog code paths
+// that can break on certain Spark distributions (e.g. Databricks Runtime 17.3+)
+
+import org.apache.spark.sql.streaming.Trigger
+
+val sinkContainerName = cosmosContainerName + "Sink"
+spark.sql(s"CREATE TABLE IF NOT EXISTS cosmosCatalog.${cosmosDatabaseName}.${sinkContainerName} using cosmos.oltp " +
+  s"TBLPROPERTIES(partitionKeyPath = '/id', manualThroughput = '400')")
+
+val changeFeedCfg = Map("spark.cosmos.accountEndpoint" -> cosmosEndpoint,
+  "spark.cosmos.accountKey" -> cosmosMasterKey,
+  "spark.cosmos.database" -> cosmosDatabaseName,
+  "spark.cosmos.container" -> cosmosContainerName,
+  "spark.cosmos.read.inferSchema.enabled" -> "false",
+  "spark.cosmos.changeFeed.startFrom" -> "Beginning",
+  "spark.cosmos.changeFeed.mode" -> "Incremental",
+  "spark.cosmos.enforceNativeTransport" -> "true"
+)
+
+val writeCfg = Map("spark.cosmos.accountEndpoint" -> cosmosEndpoint,
+  "spark.cosmos.accountKey" -> cosmosMasterKey,
+  "spark.cosmos.database" -> cosmosDatabaseName,
+  "spark.cosmos.container" -> sinkContainerName,
+  "spark.cosmos.write.strategy" -> "ItemOverwrite",
+  "spark.cosmos.write.bulk.enabled" -> "true",
+  "spark.cosmos.enforceNativeTransport" -> "true"
+)
+
+val testId = java.util.UUID.randomUUID().toString.replace("-", "")
+
+val changeFeedDF = spark
+  .readStream
+  .format("cosmos.oltp.changeFeed")
+  .options(changeFeedCfg)
+  .load()
+
+val microBatchQuery = changeFeedDF
+  .writeStream
+  .format("cosmos.oltp")
+  .queryName(testId)
+  .options(writeCfg)
+  .option("checkpointLocation", s"/tmp/$testId/")
+  .outputMode("append")
+  .start()
+
+microBatchQuery.processAllAvailable()
+
+val sinkCount = spark.read.format("cosmos.oltp").options(Map(
+  "spark.cosmos.accountEndpoint" -> cosmosEndpoint,
+  "spark.cosmos.accountKey" -> cosmosMasterKey,
+  "spark.cosmos.database" -> cosmosDatabaseName,
+  "spark.cosmos.container" -> sinkContainerName,
+  "spark.cosmos.enforceNativeTransport" -> "true"
+)).load().count()
+
+println(s"Change Feed micro-batch streaming: $sinkCount records copied to sink container")
+assert(sinkCount >= 2, s"Expected at least 2 records in sink container but found $sinkCount")
+
+microBatchQuery.stop()
+
+// COMMAND ----------
+
 // cleanup
+spark.sql(s"DROP TABLE cosmosCatalog.${cosmosDatabaseName}.${sinkContainerName};")
 spark.sql(s"DROP TABLE cosmosCatalog.${cosmosDatabaseName}.${cosmosContainerName};")
