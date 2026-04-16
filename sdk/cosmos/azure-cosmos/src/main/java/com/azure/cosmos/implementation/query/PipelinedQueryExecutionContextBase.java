@@ -77,13 +77,12 @@ public abstract class PipelinedQueryExecutionContextBase<T>
             if (original != null) {
                 List<SqlParameter> originalParams = original.getParameters();
                 if (originalParams != null && !originalParams.isEmpty()) {
-                    SqlQuerySpecAccessor accessor = sqlQuerySpecAccessor();
                     List<SqlParameter> clonedParams = new ArrayList<>(originalParams.size());
                     for (SqlParameter p : originalParams) {
-                        clonedParams.add(accessor.cloneSqlParameter(p));
+                        clonedParams.add(p.clone());
                     }
                     SqlQuerySpec clonedQuery = new SqlQuerySpec(original.getQueryText(), clonedParams);
-                    accessor.applySerializerToParameters(clonedQuery, candidateSerializer);
+                    sqlQuerySpecAccessor().applySerializerToParameters(clonedQuery, candidateSerializer);
                     initParams.setQuery(clonedQuery);
                 }
             }

@@ -1969,7 +1969,6 @@ public class ImplementationBridgeHelpers {
 
         public interface SqlQuerySpecAccessor {
             void applySerializerToParameters(SqlQuerySpec sqlQuerySpec, CosmosItemSerializer serializer);
-            SqlParameter cloneSqlParameter(SqlParameter original);
         }
     }
 }

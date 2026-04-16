@@ -128,6 +128,17 @@ public final class SqlParameter {
         }
     }
 
+    /**
+     * Creates a copy of this SqlParameter, preserving the original raw value
+     * so that custom serializers can be applied to the clone independently.
+     *
+     * @return a new SqlParameter with the same name and raw value.
+     */
+    @Override
+    public SqlParameter clone() {
+        return new SqlParameter(this.getName(), this.rawValue);
+    }
+
     void populatePropertyBag() {
         this.jsonSerializable.populatePropertyBag();
     }
