@@ -59,7 +59,7 @@ private class ChangeFeedInitialOffsetWriter
   }
 }
 
-private object ChangeFeedInitialOffsetWriter {
+private[spark] object ChangeFeedInitialOffsetWriter {
   /**
    * Validates the version string from the log file.
    * This is inlined to avoid a runtime dependency on MetadataVersionUtil,
