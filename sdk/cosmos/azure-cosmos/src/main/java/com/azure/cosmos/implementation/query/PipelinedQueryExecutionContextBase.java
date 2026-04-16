@@ -7,6 +7,7 @@ import com.azure.cosmos.implementation.DiagnosticsClientContext;
 import com.azure.cosmos.implementation.DocumentCollection;
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers;
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers.CosmosItemSerializerHelper.CosmosItemSerializerAccessor;
+import com.azure.cosmos.implementation.ImplementationBridgeHelpers.SqlParameterHelper.SqlParameterAccessor;
 import com.azure.cosmos.implementation.ImplementationBridgeHelpers.SqlQuerySpecHelper.SqlQuerySpecAccessor;
 import com.azure.cosmos.implementation.Utils;
 import com.azure.cosmos.implementation.query.hybridsearch.HybridSearchQueryInfo;
@@ -78,8 +79,9 @@ public abstract class PipelinedQueryExecutionContextBase<T>
                 List<SqlParameter> originalParams = original.getParameters();
                 if (originalParams != null && !originalParams.isEmpty()) {
                     List<SqlParameter> clonedParams = new ArrayList<>(originalParams.size());
+                    SqlParameterAccessor paramAccessor = sqlParameterAccessor();
                     for (SqlParameter p : originalParams) {
-                        clonedParams.add(p.clone());
+                        clonedParams.add(paramAccessor.createCopy(p));
                     }
                     SqlQuerySpec clonedQuery = new SqlQuerySpec(original.getQueryText(), clonedParams);
                     sqlQuerySpecAccessor().applySerializerToParameters(clonedQuery, candidateSerializer);
@@ -225,6 +227,10 @@ public abstract class PipelinedQueryExecutionContextBase<T>
 
     private static SqlQuerySpecAccessor sqlQuerySpecAccessor() {
         return ImplementationBridgeHelpers.SqlQuerySpecHelper.getSqlQuerySpecAccessor();
+    }
+
+    private static SqlParameterAccessor sqlParameterAccessor() {
+        return ImplementationBridgeHelpers.SqlParameterHelper.getSqlParameterAccessor();
     }
 
     private static CosmosItemSerializerAccessor cosmosItemSerializerAccessor() {

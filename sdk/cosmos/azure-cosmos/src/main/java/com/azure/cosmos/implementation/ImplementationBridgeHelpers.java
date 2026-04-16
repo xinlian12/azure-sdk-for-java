@@ -1971,4 +1971,38 @@ public class ImplementationBridgeHelpers {
             void applySerializerToParameters(SqlQuerySpec sqlQuerySpec, CosmosItemSerializer serializer);
         }
     }
+
+    public static final class SqlParameterHelper {
+        private static final AtomicReference<SqlParameterAccessor> accessor = new AtomicReference<>();
+        private static final AtomicBoolean sqlParameterClassLoaded = new AtomicBoolean(false);
+
+        private SqlParameterHelper() {}
+
+        public static void setSqlParameterAccessor(final SqlParameterAccessor newAccessor) {
+            if (!accessor.compareAndSet(null, newAccessor)) {
+                logger.debug("SqlParameterAccessor already initialized!");
+            } else {
+                logger.debug("Setting SqlParameterAccessor...");
+                sqlParameterClassLoaded.set(true);
+            }
+        }
+
+        public static SqlParameterAccessor getSqlParameterAccessor() {
+            if (!sqlParameterClassLoaded.get()) {
+                logger.debug("Initializing SqlParameterAccessor...");
+                initializeAllAccessors();
+            }
+
+            SqlParameterAccessor snapshot = accessor.get();
+            if (snapshot == null) {
+                logger.error("SqlParameterAccessor is not initialized yet!");
+            }
+
+            return snapshot;
+        }
+
+        public interface SqlParameterAccessor {
+            SqlParameter createCopy(SqlParameter original);
+        }
+    }
 }

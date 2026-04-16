@@ -134,8 +134,7 @@ public final class SqlParameter {
      *
      * @return a new SqlParameter with the same name and raw value.
      */
-    @Override
-    public SqlParameter clone() {
+    private SqlParameter createCopy() {
         return new SqlParameter(this.getName(), this.rawValue);
     }
 
@@ -148,6 +147,14 @@ public final class SqlParameter {
     private static CosmosItemSerializerAccessor cosmosItemSerializerAccessor() {
         return ImplementationBridgeHelpers.CosmosItemSerializerHelper.getCosmosItemSerializerAccessor();
     }
+
+    static void initialize() {
+        ImplementationBridgeHelpers.SqlParameterHelper.setSqlParameterAccessor(
+            SqlParameter::createCopy
+        );
+    }
+
+    static { initialize(); }
 
     @Override
     public boolean equals(Object o) {
