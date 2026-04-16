@@ -152,6 +152,21 @@ public final class SqlQuerySpec {
         }
     }
 
+    /**
+     * Creates a shallow copy of this SqlQuerySpec with its own internal property bag.
+     * The copy shares the same parameter instances but has an independent
+     * {@link JsonSerializable}, so concurrent {@code populatePropertyBag()} calls on the
+     * copy and the original do not interfere with each other.
+     *
+     * @return a new SqlQuerySpec copy.
+     */
+    @Override
+    protected SqlQuerySpec clone() {
+        List<SqlParameter> params = this.getParameters();
+        List<SqlParameter> copiedParams = params != null ? new ArrayList<>(params) : null;
+        return new SqlQuerySpec(this.getQueryText(), copiedParams);
+    }
+
     JsonSerializable getJsonSerializable() { return this.jsonSerializable; }
 
     static void initialize() {
@@ -167,6 +182,14 @@ public final class SqlQuerySpec {
                 @Override
                 public SqlParameter cloneSqlParameter(SqlParameter original) {
                     return new SqlParameter(original.getName(), original.getRawValue());
+                }
+
+                @Override
+                public SqlQuerySpec clone(SqlQuerySpec original) {
+                    if (original == null) {
+                        return null;
+                    }
+                    return original.clone();
                 }
             }
         );

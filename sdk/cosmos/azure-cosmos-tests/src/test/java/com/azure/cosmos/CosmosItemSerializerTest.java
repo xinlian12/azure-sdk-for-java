@@ -45,6 +45,7 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
+import reactor.core.publisher.Flux;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -993,6 +994,11 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
             return;
         }
 
+        CosmosAsyncClient asyncClient = client.asyncClient();
+        CosmosAsyncContainer asyncContainer = asyncClient
+            .getDatabase(container.asyncContainer.getDatabase().getId())
+            .getContainer(container.asyncContainer.getId());
+
         // Create multiple documents with Instant fields
         String pkValue = UUID.randomUUID().toString();
         int docCount = 5;
@@ -1009,7 +1015,7 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 doc.mypk = pkValue;
                 doc.createdAt = createdAt;
                 doc.description = "concurrent-test-" + i;
-                container.createItem(doc, new PartitionKey(pkValue), requestOptions);
+                asyncContainer.createItem(doc, new PartitionKey(pkValue), requestOptions).block();
                 createdDocs.add(doc);
             }
 
@@ -1029,52 +1035,20 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
                 .setCustomItemSerializer(clientSerializer);
 
             int concurrentQueries = 10;
-            java.util.concurrent.ExecutorService executor =
-                java.util.concurrent.Executors.newFixedThreadPool(concurrentQueries);
-            java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
-            java.util.concurrent.CountDownLatch doneLatch =
-                new java.util.concurrent.CountDownLatch(concurrentQueries);
 
             List<List<TestDocumentWithTimestamp>> allResults =
-                java.util.Collections.synchronizedList(new ArrayList<>());
-            List<Throwable> errors =
-                java.util.Collections.synchronizedList(new ArrayList<>());
-
-            for (int i = 0; i < concurrentQueries; i++) {
-                executor.submit(() -> {
-                    try {
-                        startLatch.await();
-                        List<TestDocumentWithTimestamp> results = container
+                Flux.range(0, concurrentQueries)
+                    .flatMap(i ->
+                        asyncContainer
                             .queryItems(sharedQuerySpec, queryRequestOptions, TestDocumentWithTimestamp.class)
-                            .stream().collect(Collectors.toList());
-                        allResults.add(results);
-                    } catch (Throwable t) {
-                        errors.add(t);
-                    } finally {
-                        doneLatch.countDown();
-                    }
-                });
-            }
+                            .byPage()
+                            .flatMapIterable(FeedResponse::getResults)
+                            .collectList(),
+                        concurrentQueries)
+                    .collectList()
+                    .block();
 
-            // Release all threads at once to maximize contention
-            startLatch.countDown();
-            try {
-                assertThat(doneLatch.await(60, java.util.concurrent.TimeUnit.SECONDS))
-                    .as("All concurrent queries should complete within timeout")
-                    .isTrue();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                fail("Test interrupted while waiting for concurrent queries");
-            }
-
-            executor.shutdown();
-
-            // Verify no errors
-            assertThat(errors)
-                .as("No errors should occur during concurrent query execution")
-                .isEmpty();
-
-            // Verify all queries returned correct results
+            assertThat(allResults).isNotNull();
             assertThat(allResults).hasSize(concurrentQueries);
             for (List<TestDocumentWithTimestamp> results : allResults) {
                 assertThat(results).hasSize(docCount);
@@ -1093,7 +1067,7 @@ public class CosmosItemSerializerTest extends TestSuiteBase {
         } finally {
             for (TestDocumentWithTimestamp doc : createdDocs) {
                 try {
-                    container.deleteItem(doc.id, new PartitionKey(pkValue), new CosmosItemRequestOptions());
+                    asyncContainer.deleteItem(doc.id, new PartitionKey(pkValue), new CosmosItemRequestOptions()).block();
                 } catch (Exception ignored) { }
             }
         }
