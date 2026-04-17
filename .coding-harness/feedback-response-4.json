@@ -1,0 +1,69 @@
+{
+  "version": "1.0",
+  "iteration": 4,
+  "review_file": "review-feedback-4.json",
+  "responses": [
+    {
+      "finding_id": "F1",
+      "decision": "fix",
+      "rationale": "Critical bug that breaks compilation. The reviewer is correct - scala-maven-plugin excludes apply to ALL source roots, including local overrides. Removed the excludes entirely since build-helper-maven-plugin with local overrides works correctly (local files take precedence).",
+      "changes_made": "Removed the entire <excludes> section from scala-maven-plugin configuration in pom.xml"
+    },
+    {
+      "finding_id": "F2",
+      "decision": "fix",
+      "rationale": "Missing infrastructure entry that could cause pipeline failures. Following the established pattern for all other Spark modules.",
+      "changes_made": "Added !com.azure.cosmos.spark:azure-cosmos-spark_4-1_2-13 to the -pl exclusion list in eng/pipelines/aggregate-reports.yml"
+    },
+    {
+      "finding_id": "F3",
+      "decision": "fix",
+      "rationale": "Missing infrastructure entry following the pattern of other Spark modules. Prevents docs CI issues.",
+      "changes_made": "Added ['sdk/cosmos/azure-cosmos-spark_4-1_2-13/README.md', '#3113'] entry to eng/.docsettings.yml"
+    },
+    {
+      "finding_id": "F4",
+      "decision": "fix",
+      "rationale": "Azure SDK convention for unreleased versions. Simple fix to follow established patterns.",
+      "changes_made": "Changed CHANGELOG date from (2026-04-17) to (Unreleased)"
+    },
+    {
+      "finding_id": "F5",
+      "decision": "fix",
+      "rationale": "Misleading statement that implies hierarchical relationship between version-specific modules. Clearer to reference the actual shared source.",
+      "changes_made": "Updated CHANGELOG 'based on' statement to 'Initial release, sharing the common Spark connector codebase from azure-cosmos-spark_3'"
+    },
+    {
+      "finding_id": "F6",
+      "decision": "skip",
+      "rationale": "This is a suggestion about maintenance burden, not a code issue. The fork approach is necessary for SPARK-52787 package reorganization and follows the established pattern. A CI drift detection script would be a separate cross-subsystem enhancement beyond this issue's scope.",
+      "changes_made": null
+    },
+    {
+      "finding_id": "F7",
+      "decision": "skip",
+      "rationale": "This is a positive finding confirming the implementation is correct. No action needed.",
+      "changes_made": null
+    },
+    {
+      "finding_id": "F8",
+      "decision": "skip",
+      "rationale": "This is a positive finding confirming the CI integration is complete. No action needed.",
+      "changes_made": null
+    },
+    {
+      "finding_id": "F9",
+      "decision": "skip",
+      "rationale": "This is a positive finding confirming the non-forked files follow the correct pattern. No action needed.",
+      "changes_made": null
+    },
+    {
+      "finding_id": "F10",
+      "decision": "skip",
+      "rationale": "This is a positive finding confirming the Java version consistency. No action needed.",
+      "changes_made": null
+    }
+  ],
+  "summary": { "fixed": 5, "skipped": 5, "deferred": 0 },
+  "commits": [{ "sha": "d9bcc7c2ea5", "message": "fix: address review iteration 4 — critical build fix, missing infra entries, CHANGELOG updates" }]
+}

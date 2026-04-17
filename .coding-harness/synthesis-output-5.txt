@@ -1,0 +1,121 @@
+Now let me look at the CI config and aggregate-reports changes:
+
+Here is my synthesis review:
+
+---
+
+## Synthesis Review: `azure-cosmos-spark_4-1_2-13` — Spark 4.1 Support
+
+### My Understanding
+
+This PR adds a new module to handle the SPARK-52787 package reorganization in Apache Spark 4.1, where `HDFSMetadataLog` moved from `o.a.s.sql.execution.streaming` to `o.a.s.sql.execution.streaming.checkpointing`. The approach forks only the 3 affected files (2 main, 1 test) with the corrected import, while sharing all remaining code from `azure-cosmos-spark_3` via `build-helper-maven-plugin`. Infrastructure entries (CI, versioning, aggregate-reports, docsettings, enforcer rules) are thorough and correctly follow established patterns.
+
+### Specialist Findings Validation
+
+I **reject** the correctness agent's claim that `azure-cosmos-spark_4-0_2-13` has a "critical bug" from missing these files — Spark 4.0 still uses the old import path; only 4.1 relocated `HDFSMetadataLog`. I **accept and merge** the duplicate-class compilation concern raised by the architecture, fresh-eyes, and correctness agents after independently verifying it through commit history analysis.
+
+---
+
+### Findings
+
+**🔴 Blocking — Duplicate class definitions will fail Scala compilation**
+**File:** `sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml`, lines 69–72
+**Description:** `build-helper-maven-plugin` adds both source directories:
+```xml
+<source>${basedir}/../azure-cosmos-spark_3/src/main/scala</source>
+<source>${basedir}/src/main/scala</source>
+```
+Three files (`CosmosCatalogBase.scala`, `ChangeFeedInitialOffsetWriter.scala`, `CosmosCatalogITestBase.scala`) define the same classes in the same package in both directories. The Scala compiler will receive both and fail with duplicate class errors. The commit history (`b5f9f58` → `d9bcc7c`) shows `<excludes>` were tried on `scala-maven-plugin` but removed because they exclude from *all* source roots, blocking both copies. No other Spark module in this repo has overlapping files with `spark_3` — this is unprecedented. Compilation was never verified (Spark 4.1.0 isn't in the Maven feed yet).
+**Suggested fix:** Use `maven-resources-plugin` to copy `spark_3/src/main/scala` into `${project.build.directory}/generated-sources/spark3` while excluding the 3 forked files, then point `build-helper` at that filtered copy. Alternatively, use the `copy-resources` + `filter` approach that SBT-based Spark projects use for similar version shims.
+
+---
+
+**🟡 Recommendation — Redundant `scala-maven-plugin` declaration**
+**File:** `sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml`, lines 103–120
+**Description:** The explicit `scala-maven-plugin` was added to host `<excludes>` (commit `b5f9f58`), but the excludes were later removed (commit `d9bcc7c`). The parent's `build-scala` profile (activated by `scalastyle_config.xml`) already provides an identical `scala-maven-plugin` configuration. No other child module (`4-0`, `3-5_2-13`, etc.) duplicates this declaration.
+**Suggested fix:** Remove lines 103–120 to match the 4-0 pattern. If it's retained to solve the duplicate-class issue, document why in a comment.
+
+---
+
+**🟡 Recommendation — `.gitignore` contains unrelated change**
+**File:** `.gitignore`, line 132
+**Description:** `.coding-harness/` was added — a leftover from the implementation tooling. This is unrelated to Spark 4.1 supportNow I have a thorough understanding of the changes. Let me write the synthesis review.
+
+---
+
+## Synthesis Review: `azure-cosmos-spark_4-1_2-13` Module
+
+### Specialist Validation
+
+I validated all specialist findings against the actual code. Key judgments:
+
+- **Context agent**: Thorough and accurate. I accept the version_client.txt and redundant plugin findings.
+- **Fresh-eyes agent**: Accurate. Correctly spotted the scala-maven-plugin inconsistency.
+- **Correctness agent**: Partially incorrect — the claim that the 4-0 module has a "CRITICAL bug" with missing forked files is **wrong**. Spark 4.0 uses the old `HDFSMetadataLog` import path; SPARK-52787 reorganization only affects Spark 4.1+. I reject this finding. However, the duplicate class compilation concern is valid.
+- **Test-coverage agent**: Sound analysis. The shared tests from `spark_3` are pulled in via `build-helper` and will exercise the forked code.
+- **Architecture agent**: The blocking finding about duplicate classes aligns with the commit history.
+
+---
+
+### Findings
+
+#### 🔴 Blocking — Duplicate class definitions will prevent compilation
+**Files:** `pom.xml:69-72`, `CosmosCatalogBase.scala`, `ChangeFeedInitialOffsetWriter.scala`, `CosmosCatalogITestBase.scala`
+
+The `build-helper-maven-plugin` adds **both** `spark_3/src/main/scala` and `src/main/scala` as source roots. Three files exist in both directories defining the same classes (`CosmosCatalogBase`, `ChangeFeedInitialOffsetWriter`, `CosmosCatalogITestBase`). The Scala compiler will fail with duplicate class definitions.
+
+The commit history confirms this was recognized: `b5f9f58` added `<excludes>` to `scala-maven-plugin`, but `d9bcc7c` **removed them** because they excluded the local versions too (the pattern applies across all source roots). No alternative deduplication mechanism was added. I could not verify by compiling because `spark-sql_2.13:4.1.0` is not available in the Maven feed.
+
+No other child module (`3-3`, `3-4`, `3-5`, `4-0`) has files overlapping with `spark_3`, so this is unprecedented.
+
+**Suggested fix:** Use `maven-resources-plugin` to copy `spark_3` sources to `${project.build.directory}/shared-sources` in `generate-sources` phase with `<excludes>` for the three forked files, then point `build-helper-maven-plugin` at the filtered copy instead of the raw `spark_3` directory. Alternatively, extract the `HDFSMetadataLog` import into a factory/type-alias in the version-specific layer so the shared code doesn't need forking.
+
+---
+
+#### 🟡 Recommendation — Remove redundant `scala-maven-plugin` declaration
+**File:** `pom.xml:103-120`
+
+This explicit `scala-maven-plugin` declaration was added in `b5f9f58` to host `<excludes>`, which were then removed in `d9bcc7c`. The declaration is now pure duplication of the parent's `build-scala` profile (activated by `scalastyle_config.xml`, which this module includes). No other child module (`3-3`, `3-4`, `3-5`, `4-0`) has this. Once the duplicate class issue is resolved, this should be removed for consistency.
+
+---
+
+#### 🟡 Recommendation — `.gitignore` change is unrelated to this feature
+**File:** `.gitignore:132`
+
+Adding `.coding-harness/` to `.gitignore` is a leftover from the implementation harness. This is unrelated to Spark 4.1 support and should be removed from this PR.
+
+---
+
+#### 🟢 Suggestion — `version_client.txt` GA version for new module
+**File:** `eng/versioning/version_client.txt`
+
+```
+com.azure.cosmos.spark:azure-cosmos-spark_4-1_2-13;4.46.0;4.47.0
+```
+
+The `4.46.0` GA version has never been published for this new module. Verify with the release tooling whether a never-released module should use `4.47.0;4.47.0` or if `4.46.0` is acceptable as a placeholder.
+
+---
+
+#### 🟢 Suggestion — CHANGELOG missing standard placeholder sections
+**File:** `CHANGELOG.md`
+
+Missing `#### Bugs Fixed` and `#### Breaking Changes` sections that other modules include. Minor, but aligns with Azure SDK CHANGELOG conventions.
+
+---
+
+#### 💬 Observation — Forked files are minimal and correct
+The three forked files differ from their `spark_3` counterparts by exactly one import line each (`streaming.HDFSMetadataLog` → `streaming.checkpointing.HDFSMetadataLog`) plus a documentation comment. Verified by normalizing diffs — zero other changes.
+
+#### 💬 Observation — All infrastructure registrations complete
+CI triggers, PR paths, pom.xml excludes, release parameters, artifact definitions, aggregate-reports exclusion, docsettings entries, external dependencies, parent enforcer rule — all correctly added following the established patterns from the 4-0 module.
+
+#### 💬 Observation — 12 files byte-identical between 4-0 and 4-1
+All shared override files (`SparkInternalsBridge`, `CosmosWriter`, metrics, scan, etc.) are identical. Future changes must be replicated to both. If more Spark 4.x versions are added, consider an intermediate `azure-cosmos-spark_4` parent module (similar to `azure-cosmos-spark_3-5`).
+
+---
+
+### Overall Assessment: **REQUEST_CHANGES**
+
+The module design is sound and infrastructure integration is thorough. However, the **duplicate class compilation issue** (🔴) must be resolved before merge — the current build configuration will fail when `spark-sql_2.13:4.1.0` becomes available. The unrelated `.gitignore` change should also be removed.
+

@@ -1,0 +1,6 @@
+158a09c1b43 fix: address review iteration 5 — build fixes, cleanup, and CHANGELOG improvements
+d9bcc7c2ea5 fix: address review iteration 4 — critical build fix, missing infra entries, CHANGELOG updates
+e06265ed47a fix: address review iteration 3 — remove .coding-harness, fix typos, add origin comments
+b5f9f58e264 fix: address review iteration 2 — exclude duplicates, add enforcer rule, fix CHANGELOG
+b40a42a3969 fix: address review iteration 1 — add missing files, CI config, and version entries
+b504f233781 feat: Add Spark 4.1 support with package reorganization handling

@@ -1,0 +1,81 @@
+Let me verify the critical duplicate-class concern raised by multiple specialist agents by checking the actual build configuration and file overlap.
+
+Confirmed — the shared files exist in both locations. Let me check if the 4-0 module has any overlapping files and look for any exclusion mechanism in the parent POM.
+
+Now let me check the remaining configuration files.
+
+Now let me check the CI config for release parameters and verify the `.gitignore` change:
+
+Now I have a complete understanding. Let me write the synthesized review.
+
+---
+
+## Synthesis Review: Add Spark 4.1 Support (`azure-cosmos-spark_4-1_2-13`)
+
+### 🔴 Blocking — Duplicate class definitions will fail Scala compilation
+
+**Files:**
+- `sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml` (lines 69–73)
+- `sdk/cosmos/azure-cosmos-spark_4-1_2-13/src/main/scala/.../ChangeFeedInitialOffsetWriter.scala`
+- `sdk/cosmos/azure-cosmos-spark_4-1_2-13/src/main/scala/.../CosmosCatalogBase.scala`
+- `sdk/cosmos/azure-cosmos-spark_4-1_2-13/src/test/scala/.../CosmosCatalogITestBase.scala`
+
+The `build-helper-maven-plugin` adds both `azure-cosmos-spark_3/src/main/scala` and the module's own `src/main/scala` as source roots. Three files (`ChangeFeedInitialOffsetWriter`, `CosmosCatalogBase`, `CosmosCatalogITestBase`) exist in **both** directories with identical package/class names. The Scala compiler will produce duplicate class errors. I confirmed the 4-0 module has **zero** overlapping files with `_3` — this problem is unique to 4-1.
+
+**Suggested fix:** Either (a) configure source exclusions in the `scala-maven-plugin` for these 3 files, (b) use a `maven-antrun-plugin` step to copy shared sources to `target/` with the 3 conflicting files excluded, or (c) extract `HDFSMetadataLog` usage into a small bridge/factory object (~20 lines per module) so the large base files can stay shared.
+
+---
+
+### 🔴 Blocking — Missing enforcer rule for `spark-sql_2.13:4.1.0`
+
+**File:** `sdk/cosmos/azure-cosmos-spark_3/pom.xml` (line 325)
+
+The parent POM's `bannedDependencies` whitelist includes `spark-sql_2.13:[4.0.0]` but has **no** entry for `[4.1.0]`. The Maven enforcer plugin will reject the 4-1 module's dependency.
+
+**Suggested fix:** Add after line 325:
+```xml
+<include>org.apache.spark:spark-sql_2.13:[4.1.0]</include><!-- {x-include-update;cosmos-spark_4-1_org.apache.spark:spark-sql_2.13;external_dependency} -->
+```
+
+---
+
+### 🟡 Recommendation — `.gitignore` change is unrelated to Spark 4.1
+
+**File:** `.gitignore` (lines 132–134)
+
+Adding `.coding-harness/` is infrastructure for the coding agent and unrelated to this feature. Should be a separate commit.
+
+---
+
+### 🟢 Suggestion — CHANGELOG mixes inherited fixes with initial release
+
+**File:** `sdk/cosmos/azure-cosmos-spark_4-1_2-13/CHANGELOG.md` (lines 7–12)
+
+The changelog lists bug fixes (deadlock PR 48689, MetadataVersionUtil PR 48837) that were originally for existing modules. Since this is a brand-new initial release, consider noting "Includes all fixes from azure-cosmos-spark_4-0_2-13 v4.47.0" rather than listing them as this module's fixes.
+
+---
+
+### 🟢 Suggestion — 1,792 lines of code duplicated for 1-line import changes
+
+**Files:** `ChangeFeedInitialOffsetWriter.scala` (92 lines), `CosmosCatalogBase.scala` (727 lines), `CosmosCatalogITestBase.scala` (973 lines)
+
+Each file differs from its shared counterpart by exactly one import line (`streaming.HDFSMetadataLog` → `streaming.checkpointing.HDFSMetadataLog`). This creates significant maintenance burden — any future change must be manually synced. Consider a bridge pattern to abstract the import.
+
+---
+
+### 💬 Observation — Pre-existing test file naming typo
+
+**File:** `RowSerializerPollTest.scala` — should be `RowSerializerPoolTest.scala`. Present in 4-0 too; not introduced here.
+
+### 💬 Observation — CI, versioning, and POM structure are correct
+
+CI triggers, release parameters, artifact entries, `version_client.txt`, `external_dependencies.txt`, and `sdk/cosmos/pom.xml` module listing all follow established patterns. The 12 non-overridden source files and 6 non-overridden test files are byte-identical to their 4-0 counterparts. ✅
+
+### 💬 Observation — Spark 4.1.0 availability
+
+Ensure `org.apache.spark:spark-sql_2.13:4.1.0` is published to Maven Central before CI runs. The test profile activation guard should prevent build failures in default builds.
+
+---
+
+**Overall: REQUEST_CHANGES** — Two blocking issues must be resolved: the duplicate class compilation failure and the missing enforcer rule. The core approach (import-path overrides for SPARK-52787) is correct.
+

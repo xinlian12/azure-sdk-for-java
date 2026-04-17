@@ -1,0 +1,96 @@
+{
+  "version": "1.0",
+  "iteration": 5,
+  "reviewer": "pr-review-pipeline",
+  "overall_assessment": "request_changes",
+  "summary": "The azure-cosmos-spark_4-1_2-13 module adds Spark 4.1 support by forking three files to handle the SPARK-52787 package reorganization. Infrastructure integration is thorough and correct. However, a critical duplicate class compilation issue must be resolved: build-helper-maven-plugin adds both spark_3 and local source directories, causing the Scala compiler to fail when it encounters the same classes defined in both locations. Two additional recommendations address redundant plugin configuration and an unrelated .gitignore change.",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "critical",
+      "category": "bug",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml",
+      "line_range": [69, 72],
+      "title": "Duplicate class definitions will prevent compilation",
+      "description": "build-helper-maven-plugin adds both spark_3/src/main/scala and src/main/scala as source roots. Three files (CosmosCatalogBase.scala, ChangeFeedInitialOffsetWriter.scala, CosmosCatalogITestBase.scala) exist in both directories defining the same classes. The Scala compiler will fail with duplicate class definitions. The commit history shows <excludes> were attempted but removed because they excluded both copies. No alternative deduplication mechanism was added.",
+      "suggestion": "Use maven-resources-plugin to copy spark_3 sources to ${project.build.directory}/shared-sources in generate-sources phase with <excludes> for the three forked files, then point build-helper-maven-plugin at the filtered copy. Alternatively, extract the HDFSMetadataLog import into a factory/type-alias in the version-specific layer."
+    },
+    {
+      "id": "F2",
+      "severity": "major",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml",
+      "line_range": [103, 120],
+      "title": "Remove redundant scala-maven-plugin declaration",
+      "description": "This explicit scala-maven-plugin declaration was added to host <excludes> (commit b5f9f58), which were then removed (commit d9bcc7c). The declaration now duplicates the parent's build-scala profile. No other child module (3-3, 3-4, 3-5, 4-0) has this declaration.",
+      "suggestion": "Remove lines 103-120 to match the 4-0 pattern and maintain consistency with other child modules."
+    },
+    {
+      "id": "F3",
+      "severity": "major",
+      "category": "design",
+      "file": ".gitignore",
+      "line_range": [132, 132],
+      "title": "Remove unrelated .gitignore change",
+      "description": "Adding .coding-harness/ to .gitignore is a leftover from the implementation harness and is unrelated to Spark 4.1 support.",
+      "suggestion": "Remove the .coding-harness/ entry from .gitignore."
+    },
+    {
+      "id": "F4",
+      "severity": "minor",
+      "category": "design",
+      "file": "eng/versioning/version_client.txt",
+      "line_range": [1, 1],
+      "title": "Verify GA version for new module",
+      "description": "The entry specifies 4.46.0 as the GA version for this new module, but 4.46.0 has never been published for azure-cosmos-spark_4-1_2-13. Verify with release tooling whether a never-released module should use 4.47.0;4.47.0 or if 4.46.0 is acceptable as a placeholder.",
+      "suggestion": "Confirm the correct GA and next version with the release tooling."
+    },
+    {
+      "id": "F5",
+      "severity": "minor",
+      "category": "design",
+      "file": "CHANGELOG.md",
+      "line_range": [1, 1],
+      "title": "Add missing CHANGELOG sections",
+      "description": "CHANGELOG is missing standard placeholder sections (Bugs Fixed and Breaking Changes) that other modules include.",
+      "suggestion": "Add 'Bugs Fixed' and 'Breaking Changes' sections to align with Azure SDK CHANGELOG conventions."
+    },
+    {
+      "id": "F6",
+      "severity": "suggestion",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/src/main/scala",
+      "line_range": [1, 1],
+      "title": "Forked files are minimal and correct",
+      "description": "The three forked files (CosmosCatalogBase.scala, ChangeFeedInitialOffsetWriter.scala, CosmosCatalogITestBase.scala) differ from their spark_3 counterparts by exactly one import line each (streaming.HDFSMetadataLog → streaming.checkpointing.HDFSMetadataLog) plus documentation comments. Zero other changes detected.",
+      "suggestion": ""
+    },
+    {
+      "id": "F7",
+      "severity": "suggestion",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml",
+      "line_range": [1, 1],
+      "title": "Infrastructure registrations are complete",
+      "description": "All infrastructure registrations are correctly added following established patterns: CI triggers, PR paths, pom.xml excludes, release parameters, artifact definitions, aggregate-reports exclusion, docsettings entries, external dependencies, and parent enforcer rules.",
+      "suggestion": ""
+    },
+    {
+      "id": "F8",
+      "severity": "suggestion",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13",
+      "line_range": [1, 1],
+      "title": "Shared files are identical to 4-0 module",
+      "description": "12 shared override files (SparkInternalsBridge, CosmosWriter, metrics, scan, etc.) are byte-identical between 4-0 and 4-1 modules. Future changes must be replicated to both.",
+      "suggestion": "If more Spark 4.x versions are added, consider an intermediate azure-cosmos-spark_4 parent module (similar to azure-cosmos-spark_3-5)."
+    }
+  ],
+  "stats": {
+    "critical": 1,
+    "major": 2,
+    "minor": 2,
+    "suggestion": 3,
+    "total": 8
+  }
+}

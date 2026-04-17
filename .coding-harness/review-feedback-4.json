@@ -1,0 +1,116 @@
+{
+  "version": "1.0",
+  "iteration": 4,
+  "reviewer": "pr-review-pipeline",
+  "overall_assessment": "request_changes",
+  "summary": "The module's design intent is sound — fork only the 3 files affected by SPARK-52787 and share everything else. However, the implementation mechanism (scala-maven-plugin <excludes>) is fundamentally broken: the glob patterns exclude files from ALL source roots, including the local overrides. Since Spark 4.1.0 isn't yet on Maven Central, this compilation failure has gone undetected. This must be fixed before merge, along with the two missing infrastructure entries.",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "critical",
+      "category": "bug",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml",
+      "line_range": [111, 115],
+      "title": "scala-maven-plugin <excludes> will exclude BOTH shared AND local copies, breaking compilation",
+      "description": "The <exclude>**/CosmosCatalogBase.scala</exclude> (and the other two patterns) use ** glob patterns that match in ALL source roots. Verified via bytecode decompilation of scala-maven-plugin 4.8.1: ScalaSourceMojoSupport.findSourceWithFilters() iterates over every registered source directory and applies the same excludes set via DirectoryScanner per root. This means both the shared source root (../azure-cosmos-spark_3/src/main/scala/) and the local source root (./src/main/scala/) have the files excluded, causing all 3 forked classes to vanish from compilation. Since CosmosCatalog extends CosmosCatalogBase, compilation fails.",
+      "suggestion": "Replace the exclude mechanism. Use maven-resources-plugin or maven-antrun-plugin to copy shared sources to ${project.build.directory}/generated-sources/shared-scala/, delete the 3 forked files from the copy, then register that filtered directory as the source root instead of the shared directory. Remove the <excludes> from scala-maven-plugin. Alternatively, refactor the HDFSMetadataLog dependency into a tiny adapter trait so forking entire files isn't needed."
+    },
+    {
+      "id": "F2",
+      "severity": "major",
+      "category": "design",
+      "file": "eng/pipelines/aggregate-reports.yml",
+      "line_range": [54, 54],
+      "title": "Missing aggregate-reports.yml exclusion for new Spark module",
+      "description": "The aggregate reports pipeline excludes Scala-based Spark modules from Java-centric tooling. All existing Spark modules (3-3, 3-4, 3-5, 4-0) are excluded, but azure-cosmos-spark_4-1_2-13 is missing. This may cause pipeline failure or spurious dependency reports when processing the Scala module with Java tools.",
+      "suggestion": "Append ,!com.azure.cosmos.spark:azure-cosmos-spark_4-1_2-13 to the -pl exclusion list."
+    },
+    {
+      "id": "F3",
+      "severity": "major",
+      "category": "design",
+      "file": "eng/.docsettings.yml",
+      "line_range": [82, 82],
+      "title": "Missing .docsettings.yml entry for new Spark module",
+      "description": "All other Spark modules have README link-check suppression entries (e.g., line 82 for azure-cosmos-spark_4-0_2-13). The new module is missing this entry. This may cause docs CI pipeline to fail or produce spurious warnings for the new module's README.",
+      "suggestion": "Add after line 82: ['sdk/cosmos/azure-cosmos-spark_4-1_2-13/README.md', '#3113']"
+    },
+    {
+      "id": "F4",
+      "severity": "minor",
+      "category": "style",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/CHANGELOG.md",
+      "line_range": [3, 3],
+      "title": "CHANGELOG date should be (Unreleased)",
+      "description": "\"### 4.47.0 (2026-04-17)\" uses today's date, but this version hasn't been published. Azure SDK convention is to use (Unreleased) until the actual release.",
+      "suggestion": "Change date to (Unreleased) in CHANGELOG.md"
+    },
+    {
+      "id": "F5",
+      "severity": "minor",
+      "category": "style",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/CHANGELOG.md",
+      "line_range": [11, 11],
+      "title": "CHANGELOG \"based on\" statement is misleading",
+      "description": "\"Based on azure-cosmos-spark_4-0_2-13 v4.47.0\" implies a parent-child relationship between the two version-specific modules. Both actually inherit shared code from azure-cosmos-spark_3.",
+      "suggestion": "Consider: \"Initial release, sharing the common Spark connector codebase from azure-cosmos-spark_3\"."
+    },
+    {
+      "id": "F6",
+      "severity": "minor",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/src/main/scala/com/azure/cosmos/spark/CosmosCatalogBase.scala",
+      "line_range": [1, 729],
+      "title": "Forked file maintenance burden (multiple large files)",
+      "description": "CosmosCatalogBase.scala (729 lines), CosmosCatalogITestBase.scala (975 lines), and ChangeFeedInitialOffsetWriter.scala (94 lines) are full copies differing by one import line. Future changes to the shared originals must be manually replicated, creating maintenance drift risk.",
+      "suggestion": "Consider adding a CI script that diffs forked files against their _3 originals (ignoring the import line) to catch drift and prevent divergence."
+    },
+    {
+      "id": "F7",
+      "severity": "suggestion",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/src/main/scala",
+      "line_range": [1, 1],
+      "title": "Import migration is correct and complete",
+      "description": "All 3 files that reference HDFSMetadataLog are properly forked with org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog. The MetadataVersionUtil dependency is correctly avoided via inlined validation logic (matching the existing shared source pattern). Fork comments are clear and document the SPARK-52787 issue.",
+      "suggestion": null
+    },
+    {
+      "id": "F8",
+      "severity": "suggestion",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml",
+      "line_range": [1, 1],
+      "title": "CI, versioning, and enforcer integration are complete",
+      "description": "ci.yml (trigger paths, artifact, release parameter), version_client.txt, external_dependencies.txt, sdk/cosmos/pom.xml module listing, and azure-cosmos-spark_3/pom.xml enforcer includes are all correctly wired, matching the established 4-0 module pattern.",
+      "suggestion": null
+    },
+    {
+      "id": "F9",
+      "severity": "suggestion",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/src/main/scala",
+      "line_range": [1, 1],
+      "title": "Non-forked files are byte-identical to 4-0",
+      "description": "All 12 shared override files (main) and 6 test files match 4-0 exactly. This is clean and consistent with the established pattern.",
+      "suggestion": null
+    },
+    {
+      "id": "F10",
+      "severity": "suggestion",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml",
+      "line_range": [1, 1],
+      "title": "source/target 1.8 is consistent",
+      "description": "The <source>1.8</source>/<target>1.8</target> in scala-maven-plugin matches all other modules, including 4-0. While Spark 4.1 requires Java 17+, this is an intentional cross-module consistency choice.",
+      "suggestion": null
+    }
+  ],
+  "stats": {
+    "critical": 1,
+    "major": 2,
+    "minor": 3,
+    "suggestion": 4,
+    "total": 10
+  }
+}

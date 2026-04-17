@@ -1,0 +1,259 @@
+I'll run all these git commands in parallel to check the status of `.I'll investigate this systematcoding-harness/` files.ically. Let me start by examining the pom.xml files and searching for scala-maven-plugin configurations.Now let me read the 4-1 pom.xml and the 3.xI'll check all these files in parallel pom.xml files:. Let me start by reading the CHANGELOG files and the CONTRIBUTING.md:Now let me check for the "(Unreleased)" pattern and search for other modules' CHANGELOG files:Good! Now let me search for any scala-maven-plugin exclude patterns in all cosmos spark pom.xml files:Let me check the specific modules that use "(Unreleased)":Perfect! I can see that the 4-1 module is the **only one** using scala-maven-plugin with file-level excludes (`**/*.scala`). Let me verify whether these files actually exist in both locations:Now let me search for the "Spark 4.0" reference in the CONTRIBUTING.md more carefully:Excellent! Both sets of files exist. Now let me check if the 4-1 module compiles successfully by looking at CI logs or the actual module:Perfect! Now let me verify the CHANGELOG.md date patterns across different modules:## Findings Report
+
+Based on my analysis of the Azure SDK for Java Cosmos Spark modules, here are the findings:
+
+### 1. **CHANGELOG.md Patterns (4-1 vs 4-0)**
+- **azure-cosmos-spark_4-1_2-13**: Uses actual dates (e.g., `### 4.47.0 (2026-04-17)`)
+- **azure-cosmos-spark_4-0_2-13**: Uses actual dates (same pattern, e.g., `### 4.47.0 (2026-04-17)`)
+- **azure-cosmos-spark_3-5_2-13**: First 30 lines show versions from 4.47.0 downward with actual dates
+
+**Pattern**: All Spark 4.x modules use specific release dates, NOT "(Unreleased)"
+
+### 2. **Notable Content Difference (4-1 CHANGELOG)**
+The 4-1 module's first release (v4.47.0) includes this additional context:
+- **Line 10**: "Initial release of Spark 4.1 connector with Scala 2.13 support **based on Spark 4.0 connector**"
+- **Lines 11-14**: References that it includes all features/fixes from 4-0 v4.47.0
+
+### 3. **CONTRIBUTING.md Issue Found ⚠️**
+**File**: `/Users/anniemac/dev/git/azure-sdk-for-java/sdk/cosmos/azure-cosmos-spark_4-1_2-13/CONTRIBUTING.md`
+- **Line 5**: `(Spark 4.0 requires Java 17+)` 
+- **Issue**: This should likely say **"Spark 4.1 requires Java 17+"** since this is the 4-1 module
+
+### 4. **"(Unreleased)" Usage Across Modules**
+Modules using "(Unreleased)":
+- ✓ `/sdk/cosmos/azure-cosmos/CHANGELOG.md` - Line 3: `4.80.0-beta.1 (Unreleased)` for beta versions
+- ✓ `/sdk/cosmos/azure-cosmos-spark_3-5/CHANGELOG.md` - Line 2: `0.0.1-beta.1 (Unreleased)` (never released, shared code)
+- ✓ `/sdk/cosmos/azure-cosmos-tests/CHANGELOG.md` - Line 3: `1.0.0-beta.1 (Unreleased)`
+
+**Pattern**: "(Unreleased)" is used only for **beta/unreleased versions**, not for GA releases. GA releases always have actual dates.The build system has authentication issues, but that's not relevant to our question. Let me look at the source code to understand what the files contain and verify the structure:Now let me check the 4-1 override file to see if it's different:Good! I can see the files are different - line 12 shows a version-specific import (`org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog` in 4-1 vs `org.apache.spark.sql.execution.streaming.HDFSMetadataLog` in 3.x). Now let me search for documentation about how scala-maven-plugin handles excludes with multiple source roots:The git log command is still running (waiting for pager). Let me stop it and check the gitignore diff separately:Perfect! Here's the complete status report:
+
+## Summary: `.coding-harness/` Git Status
+
+**Files are NOT fully committed/tracked.** Here's what I found:
+
+### 1. **Git Status** 
+- **Modified (tracked in git):**
+  - `.coding-harness/current-diff.txt`
+  - `.coding-harness/current-log.txt`
+  - `.coding-harness/current-stat.txt`
+  - `.coding-harness/implementation-state.json`
+
+- **Untracked (NOT in git):**
+  - `.coding-harness/feedback-response-2.json`
+
+### 2. **Recent Commits**
+```
+b5f9f58 (HEAD -> feat/issue-48849-spark-4.1-support) fix: address review iteration 2
+b40a42a fix: address review iteration 1
+b504f23 feat: Add Spark 4.1 support with package reorganization handling
+b46387f (upstream-main) Merge branch 'main'
+506208a (upstream/main) Release azure-cosmos-spark 4.47.0
+```
+
+### 3. **`.gitignore` Check**
+- `.coding-harness` is **NOT** in `.gitignore` (or any variant of that path)
+
+### 4. **`.gitignore` Changes**
+- No changes to `.gitignore` in the last 3 commits
+
+### 5. **Directory Contents**
+The `.coding-harness/` directory exists with 12 files total:
+- Some files appear to be tracked (the 4 modified ones)
+- Some files are development/feedback artifacts (feedback responses, review feedback, synthesis output, spec.json)
+
+**Conclusion:** The `.coding-harness/` directory contains tracked files that have uncommitted changes, plus untracked files. These are tool/harness-related files (likely for AI-assisted code generation feedback) that are partially committed to git but currently have uncommitted modifications.Let me check the scala-maven-plugin documentation by looking at similar patterns or checking if there's a build log:Let me verify the expected behavior by checking Git history to see if there are any related issues or commits about this:Let me verify the critical claim about exclude behavior by examining the parent POM's scala-maven-plugin configuration and checking if the module actually compiles.Perfect! Let me look at those commits to understand the context:
+
+Let me try getting the full commit hash:Great! The comment is very telling: "Exclude these files from shared source to avoid duplicate class definitions". Let me check the commit message to understand the actual issue better:Perfect! This shows the **exact fix** that was applied. Let me get the full diff to see what was changed:Excellent! Now let me understand the scala-maven-plugin behavior by checking its source code or documentation. Let me search for how excludes patterns work:Now let me verify this with a practical test. Let me check if there's a build in the repository's CI that actually compiled this successfully:Let me check if any other Spark modules use scala-maven-plugin excludes, and look at the parent profile structure.Let me look at the previous commit before the fix was added to understand the original problem:Perfect! So the **previous commit didn't have scala-maven-plugin configured at all**, and the **fix was to ADD the scala-maven-plugin with excludes**. This means the fix was addressing a **compilation error
+
+** that occurred. Let me check if I can find any CI logs or test results:Perfect! Now I have all the information I need. Let me create a comprehensive answer:
+
+## Investigation Summary: scala-maven-plugin excludes behavior with multiple source roots
+
+### ✅ **CONFIRMED: This is a REAL ISSUE (but it was FIXED)**
+
+Based on my investigation of the code, git history, and configuration:
+
+---
+
+### **Finding #1: The exclude pattern DOES apply to ALL source roots**
+
+Looking at the 4-1 module's configuration:
+- **Source Root 1 (shared):** `../azure-cosmos-spark_3/src/main/scala`
+- **Source Root 2 (local overrides):** `src/main/scala`
+
+The excludes patterns in scala-maven-plugin are ANT-style patterns that match against file paths across **ALL** source roots. The pattern `**/CosmosCatalogBase.scala` will exclude ANY file named `CosmosCatalogBase.scala` regardless of which source root it comes from.
+
+**Evidence:** At `/Users/anniemac/dev/git/azure-sdk-for-java/sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml` lines 111-116, the excludes section contains the comment:
+```xml
+<!-- Exclude these files from shared source to avoid duplicate class definitions -->
+<exclude>**/CosmosCatalogBase.scala</exclude>
+```
+
+The comment explicitly says "from shared source" — but the pattern would match files in BOTH roots.
+
+---
+
+### **Finding #2: The issue WAS discovered and fixed**
+
+According to commit `b5f9f58e264`:
+- The issue was discovered during code review
+- The fix added the scala-maven-plugin configuration with the exclude patterns
+- Commit message states: "Add scala-maven-plugin with excludes for duplicate class definitions"
+
+The 3 excluded files exist in BOTH locations:
+```
+../azure-cosmos-spark_3/src/main/scala/com/azure/cosmos/spark/CosmosCatalogBase.scala
+../azure-cosmos-spark_3/src/main/scala/com/azure/cosmos/spark/ChangeFeedInitialOffsetWriter.scala
+../azure-cosmos-spark_3/src/test/scala/com/azure/cosmos/spark/CosmosCatalogITestBase.scala
+
+src/main/scala/com/azure/cosmos/spark/CosmosCatalogBase.scala
+src/main/scala/com/azure/cosmos/spark/ChangeFeedInitialOffsetWriter.scala
+src/test/scala/com/azure/cosmos/spark/CosmosCatalogITestBase.scala
+```
+
+---
+
+### **Finding #3: How the fix actually works**
+
+The excludes pattern `**/FileName.scala` is **intentionally generic** to exclude the shared versions while keeping the local overrides. However, this works because:
+
+1. When Maven processes multiple source roots, it collects all files from both roots into a compilation source set
+2. The excludes filter removes matching files BEFORE compilation
+3. Since both the shared and local files have the same name, and the pattern matches both, this **COULD** exclude both
+
+**BUT THE FIX IS WORKING** because:
+- The **last matching file wins** in Maven's source collection (local overrides are added second)
+- By excluding `**/CosmosCatalogBase.scala` from the entire source set, Maven will actually be smart enough to use the version from the module-specific directory since it comes later in the source root list
+
+---
+
+### **Finding #4: The 3.x modules DON'T use these excludes**
+
+Comparison:
+- **3-3 module** (`/Users/anniemac/dev/git/azure-sdk-for-java/sdk/cosmos/azure-cosmos-spark_3-3_2-12/pom.xml`): Lines 95-100 only have `maven-enforcer-plugin`, NO scala-maven-plugin configuration
+- **3-4 module** (`/Users/anniemac/dev/git/azure-sdk-for-java/sdk/cosmos/azure-cosmos-spark_3-4_2-12/pom.xml`): Same - no scala-maven-plugin
+- **3-5 module** (`/Users/anniemac/dev/git/azure-sdk-for-java/sdk/cosmos/azure-cosmos-spark_3-5_2-12/pom.xml`): Same - no scala-maven-plugin
+- **4-1 module**: **ONLY ONE** to use scala-maven-plugin with file-level excludes
+
+---
+
+### **Conclusion**
+
+**This WAS a real issue** with potentially excluding BOTH the shared AND local files, but it appears to have been:
+
+1. **Discovered during review** of the Spark 4.1 implementation
+2. **Intentionally fixed** with the exclude configuration to prevent duplicate class compilation errors
+3. **Verified to work** since the module was successfully added to the codebase
+
+However, the solution is **fragile and potentially risky** because:
+- It relies on Maven's internal behavior of using the last matching source root entry
+- It's NOT the proper solution (which would be to exclude only from the shared root, not apply a global pattern)
+- The pattern `**/CosmosCatalogBase.scala` will technically match both files, so it COULD fail if Maven changes behavior
+
+**Better approaches would be:**
+1. Use Maven's native fileset with specific source root targeting
+2. Use separate `includes` instead of `excludes` to explicitly list what should compile
+3. Merge overrides earlier in the build process (pre-processing)Let me try to compile the module to empirically verify the excludes behavior, and check the CI configuration more.
+
+Now I have all the evidence needed. The module has **never been compiled** — Spark 4.1.0 isn't available as a Maven dependency yet. Let me finalize the review.
+
+---
+
+## Synthesis Review: Add Spark 4.1 Support (`azure-cosmos-spark_4-1_2-13`)
+
+### Summary
+
+This PR introduces a new `azure-cosmos-spark_4-1_2-13` module to handle the SPARK-52787 package reorganization where `HDFSMetadataLog` moved to `org.apache.spark.sql.execution.streaming.checkpointing`. The approach is sound: 3 files are forked from the shared base with a single import-line change each, while 12 other version-specific files and ~61 shared test files are inherited unchanged. The CI, versioning, and POM plumbing are correctly configured.
+
+**Critical gap:** The module has **never been compiled** — `spark-sql_2.13:4.1.0` does not resolve from Maven, so the entire build (including the novel `scala-maven-plugin` excludes mechanism) is untested.
+
+---
+
+### 🔴 Blocking
+
+**1. `.coding-harness/` files tracked in repository**
+- **Files:** `.coding-harness/current-diff.txt`, `current-log.txt`, `current-stat.txt`, `implementation-state.json`, `feedback-response-1.json`, `review-feedback-1.json`, `review-feedback-2.json`, `spec.json`, `synthesis-output-1.txt`, `synthesis-output-2.txt`
+- These are agent scaffolding artifacts containing internal diffs, review feedback JSON, and synthesis outputs (~5,500 lines). They are tracked in git and have uncommitted modifications. `.coding-harness` is NOT in `.gitignore`.
+- **Fix:** `git rm -r --cached .coding-harness/ && echo '.coding-harness/' >> .gitignore && git commit`
+
+*Raised by: architecture, fresh-eyes, context agents. Verified: confirmed tracked via `git status`.*
+
+---
+
+### 🟡 Recommendation
+
+**2. `scala-maven-plugin` excludes pattern may exclude BOTH shared AND local override files**
+- **File:** `sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml`, lines 111–116
+- The excludes `**/CosmosCatalogBase.scala`, `**/ChangeFeedInitialOffsetWriter.scala`, `**/CosmosCatalogITestBase.scala` are ANT-style glob patterns matching by filename. Since `build-helper-maven-plugin` registers two source roots (shared: `../azure-cosmos-spark_3/src/main/scala`, local: `./src/main/scala`), and both contain files at the same relative path (`com/azure/cosmos/spark/CosmosCatalogBase.scala`), the exclude pattern will match in **both** roots. The `scala-maven-plugin` applies excludes per-source-root via `DirectoryScanner`, so both the shared AND local copies would be excluded — meaning `CosmosCatalogBase` would never be compiled. Since `CosmosCatalog extends CosmosCatalogBase`, this would cause a compilation failure.
+- **Why unverified:** Spark 4.1.0 is not available on Maven Central. The module's `target/classes/` contains zero `.class` files. No other module in this repo uses this exclude pattern. This is a novel, untested approach.
+- **Suggested fix:** Verify by compiling once `spark-sql_2.13:4.1.0` is available. If it fails, alternatives include: (a) moving the 3 override files to a separate source directory (e.g., `src/main/scala-overrides/`) added as a third source root without excludes, or (b) removing the excludes and using a build pre-processing step to replace the shared files before compilation.
+
+*Raised by: correctness agent. Validated: I confirmed zero compiled classes and dependency unavailability.*
+
+**3. CONTRIBUTING.md references "Spark 4.0" instead of "Spark 4.1"**
+- **File:** `sdk/cosmos/azure-cosmos-spark_4-1_2-13/CONTRIBUTING.md`, line 5
+- Text: `JDK 17 or above (Spark 4.0 requires Java 17+)` — should say "Spark 4.1".
+- **Fix:** Change "Spark 4.0" to "Spark 4.1" on line 5.
+
+*Raised by: fresh-eyes, context agents. Verified: confirmed by reading the file.*
+
+---
+
+### 🟢 Suggestion
+
+**4. README documentation links point to `spark-3` URLs**
+- **File:** `sdk/cosmos/azure-cosmos-spark_4-1_2-13/README.md`, lines 14–16
+- Links use `azure-cosmos-spark-3-quickstart`, `azure-cosmos-spark-3-catalog-api`, `azure-cosmos-spark-3-config`. While these aka.ms redirects may work, they could confuse users working specifically with Spark 4.1.
+- **Fix:** Update to Spark 4.x–specific links when available, or add a note that documentation is shared across versions. This is consistent with the 4-0 module (which has the same links), so not a regression.
+
+*Raised by: fresh-eyes, context agents. Validated: same pattern in 4-0.*
+
+**5. CHANGELOG mixes initial-release content with inherited bug fixes**
+- **File:** `sdk/cosmos/azure-cosmos-spark_4-1_2-13/CHANGELOG.md`, lines 11–14
+- The "Other Changes" section lists specific inherited bug fixes (PRs #48837, #48689, #48752) from the shared codebase. For an initial release of a new module, consider simplifying to "Based on azure-cosmos-spark_4-0_2-13 v4.47.0" without enumerating individual fixes the user didn't experience.
+
+*Raised by: correctness agent. Validated: confirmed content.*
+
+**6. Override files would benefit from origin comments**
+- **Files:** `ChangeFeedInitialOffsetWriter.scala` (line 1), `CosmosCatalogBase.scala` (line 1), `CosmosCatalogITestBase.scala` (line 1)
+- Each is a full copy of the shared base with only 1 import line changed. If the shared base changes in the future, these copies will silently diverge. A header comment like `// Forked from azure-cosmos-spark_3 — only HDFSMetadataLog import differs (SPARK-52787)` would help future maintainers.
+
+*Raised by: architecture, context agents. My assessment: reasonable for maintainability.*
+
+---
+
+### 💬 Observation
+
+**7. All 12 common override files are byte-identical to 4-0** ✓
+- Verified by all specialist agents. This confirms the change is properly scoped to the 3 SPARK-52787–affected files only.
+
+**8. CI, versioning, and parent POM plumbing are complete** ✓
+- `ci.yml`: trigger/PR paths, pom.xml exclusion, release parameter, artifact config all correct.
+- `version_client.txt`: `4.46.0;4.47.0` entry present.
+- `external_dependencies.txt`: `spark-sql_2.13;4.1.0` present.
+- `sdk/cosmos/pom.xml`: module listed.
+- Parent `azure-cosmos-spark_3/pom.xml`: enforcer allows `spark-sql_2.13:[4.1.0]` (line 326).
+
+**9. Import changes are correct and minimal** ✓
+- Exactly 3 files, each differing by exactly 1 import line: `streaming.HDFSMetadataLog` → `streaming.checkpointing.HDFSMetadataLog`. The `validateVersion` inlining in `ChangeFeedInitialOffsetWriter` is well-documented (lines 63–67) and covered by the shared `ChangeFeedInitialOffsetWriterSpec` (10 test cases).
+
+**10. Test coverage is adequate** ✓
+- 7 module-specific test files + ~61 shared test files inherited via `build-helper`. The shared `ChangeFeedInitialOffsetWriterSpec` validates `validateVersion`, and the module-specific `CosmosCatalogITestBase` exercises `HDFSMetadataLog` from the new package (line 9 import, line ~749 usage).
+
+---
+
+### Specialist Findings I Rejected
+
+| Finding | Agent | Reason for rejection |
+|---------|-------|---------------------|
+| "Missing `spark-hive` dependency for 4.1" | correctness | Consistent with 4-0 module; tests explicitly use `skipHive=true`. Not a gap. |
+| "`source`/`target` set to `1.8` is misleading" | fresh-eyes | Pre-existing pattern inherited from parent POM; changing it only for 4-1 would create inconsistency. |
+| "4-0 module is missing scala-maven-plugin" (implying 4-0 is broken) | correctness | 4-0 has zero overlapping files between shared and local sources — excludes aren't needed. |
+| "CHANGELOG should use (Unreleased)" | fresh-eyes | Verified GA releases in this repo use actual dates, not "(Unreleased)". The pattern is consistent. |
+
+---
+
+### Overall Assessment: **REQUEST_CHANGES**
+
+The `.coding-harness/` files must be removed (blocking). The `scala-maven-plugin` excludes mechanism needs verification once `spark-sql_2.13:4.1.0` is available — it's a novel pattern in this repo and may prevent the override files from compiling. The CONTRIBUTING.md "Spark 4.0" typo should be fixed. The core approach (3 import-only overrides for SPARK-52787) is clean and correct.
+

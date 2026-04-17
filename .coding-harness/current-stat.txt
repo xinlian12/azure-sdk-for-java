@@ -1,0 +1,34 @@
+eng/.docsettings.yml                               |   1 +
+ eng/pipelines/aggregate-reports.yml                |   2 +-
+ eng/versioning/external_dependencies.txt           |   1 +
+ eng/versioning/version_client.txt                  |   1 +
+ sdk/cosmos/azure-cosmos-spark_3/pom.xml            |   1 +
+ .../azure-cosmos-spark_4-1_2-13/CHANGELOG.md       |  16 +
+ .../azure-cosmos-spark_4-1_2-13/CONTRIBUTING.md    |  84 ++
+ sdk/cosmos/azure-cosmos-spark_4-1_2-13/README.md   |  80 ++
+ sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml     | 263 ++++++
+ .../scalastyle_config.xml                          | 130 +++
+ .../spark/ChangeFeedInitialOffsetWriter.scala      |  94 ++
+ .../cosmos/spark/ChangeFeedMicroBatchStream.scala  | 271 ++++++
+ .../cosmos/spark/CosmosBytesWrittenMetric.scala    |  11 +
+ .../com/azure/cosmos/spark/CosmosCatalog.scala     |  59 ++
+ .../com/azure/cosmos/spark/CosmosCatalogBase.scala | 729 +++++++++++++++
+ .../cosmos/spark/CosmosRecordsWrittenMetric.scala  |  11 +
+ .../azure/cosmos/spark/CosmosRowConverter.scala    | 127 +++
+ .../com/azure/cosmos/spark/CosmosWriter.scala      | 109 +++
+ .../scala/com/azure/cosmos/spark/ItemsScan.scala   |  41 +
+ .../com/azure/cosmos/spark/ItemsScanBuilder.scala  | 137 +++
+ .../azure/cosmos/spark/ItemsWriterBuilder.scala    | 185 ++++
+ .../com/azure/cosmos/spark/RowSerializerPool.scala |  29 +
+ .../azure/cosmos/spark/SparkInternalsBridge.scala  | 107 +++
+ .../cosmos/spark/TotalRequestChargeMetric.scala    |  11 +
+ .../spark/ChangeFeedMetricsListenerITest.scala     | 157 ++++
+ .../azure/cosmos/spark/CosmosCatalogITest.scala    | 103 +++
+ .../cosmos/spark/CosmosCatalogITestBase.scala      | 975 +++++++++++++++++++++
+ .../cosmos/spark/CosmosRowConverterTest.scala      |  97 ++
+ .../com/azure/cosmos/spark/ItemsScanITest.scala    | 256 ++++++
+ .../azure/cosmos/spark/RowSerializerPollTest.scala |  27 +
+ .../azure/cosmos/spark/SparkE2EQueryITest.scala    |  70 ++
+ sdk/cosmos/ci.yml                                  |  15 +
+ sdk/cosmos/pom.xml                                 |   1 +
+ 33 files changed, 4200 insertions(+), 1 deletion(-)

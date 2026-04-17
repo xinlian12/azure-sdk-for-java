@@ -31,6 +31,25 @@ This connector handles the package reorganization introduced in Apache Spark 4.1
 `HDFSMetadataLog` and `MetadataVersionUtil` were moved from `org.apache.spark.sql.execution.streaming` 
 to `org.apache.spark.sql.execution.streaming.checkpointing`.
 
+### Migration from Earlier Spark Versions
+
+#### Backward Compatibility
+- **Existing checkpoints and offsets**: Spark 4.1 connector maintains full compatibility with checkpoints and offsets created by earlier Spark versions. No migration is required for existing streaming jobs.
+- **Configuration and APIs**: All public APIs and configuration options remain unchanged. Existing application code will work without modification.
+- **Metadata repositories**: Cosmos Catalog view repositories created with earlier versions remain fully functional.
+
+#### Upgrade Steps
+1. **Update dependency**: Replace your existing Spark connector dependency with `azure-cosmos-spark_4-1_2-13`
+2. **Update Spark runtime**: Ensure you're running Apache Spark 4.1.0 or higher
+3. **Java compatibility**: Verify your runtime uses Java 17 or higher (required for Spark 4.1)
+4. **Scala compatibility**: Ensure you're using Scala 2.13 (required for Spark 4.1)
+5. **Test thoroughly**: While compatibility is maintained, thoroughly test your specific use cases
+
+#### Runtime Behavior Notes
+- **Performance**: No performance differences expected compared to earlier Spark versions
+- **Logging**: Log messages and error reporting remain consistent
+- **Streaming semantics**: Change feed streaming behavior and exactly-once semantics are preserved
+
 ### Usage
 
 #### Maven

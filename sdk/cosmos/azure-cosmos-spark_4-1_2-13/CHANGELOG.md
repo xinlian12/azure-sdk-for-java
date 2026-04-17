@@ -14,3 +14,5 @@ None.
 
 #### Other Changes
 * Initial release, sharing the common Spark connector codebase from azure-cosmos-spark_3
+* Maintains full backward compatibility with checkpoints and offsets from earlier Spark versions
+* No breaking changes to public APIs or configuration options

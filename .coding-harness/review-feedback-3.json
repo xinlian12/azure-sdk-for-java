@@ -1,0 +1,116 @@
+{
+  "version": "1.0",
+  "iteration": 3,
+  "reviewer": "pr-review-pipeline",
+  "overall_assessment": "request_changes",
+  "summary": "Introduces new azure-cosmos-spark_4-1_2-13 module for Spark 4.1 support with SPARK-52787 package reorganization handling. Core approach is sound with 3 forked files, but .coding-harness/ artifacts must be removed, scala-maven-plugin excludes pattern needs verification, and CONTRIBUTING.md typo should be fixed.",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "critical",
+      "category": "design",
+      "file": ".coding-harness/",
+      "line_range": null,
+      "title": ".coding-harness/ files tracked in repository",
+      "description": "The .coding-harness/ directory contains agent scaffolding artifacts (current-diff.txt, current-log.txt, current-stat.txt, implementation-state.json, feedback-response-*.json, review-feedback-*.json, spec.json, synthesis-output-*.txt) that are tracked in git with uncommitted modifications. .coding-harness is NOT in .gitignore. These are internal development artifacts that should not be part of the repository.",
+      "suggestion": "Remove the directory from git tracking: git rm -r --cached .coding-harness/ && echo '.coding-harness/' >> .gitignore && git commit"
+    },
+    {
+      "id": "F2",
+      "severity": "major",
+      "category": "bug",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml",
+      "line_range": [111, 116],
+      "title": "scala-maven-plugin excludes pattern may exclude BOTH shared AND local override files",
+      "description": "The excludes patterns (e.g., **/CosmosCatalogBase.scala) are ANT-style glob patterns that match by filename. Since build-helper-maven-plugin registers two source roots (shared: ../azure-cosmos-spark_3/src/main/scala and local: ./src/main/scala), and both contain files at the same relative path, the exclude pattern will match in both roots. This means both the shared AND local copies would be excluded, preventing CosmosCatalogBase from being compiled. This is a novel, untested pattern in this repo. Spark 4.1.0 is not available on Maven Central yet, so the build has never been verified.",
+      "suggestion": "Verify compilation once spark-sql_2.13:4.1.0 is available. If it fails, consider alternatives: (a) move the 3 override files to a separate source directory (src/main/scala-overrides/) added as a third source root without excludes, or (b) remove excludes and use build pre-processing to replace shared files before compilation."
+    },
+    {
+      "id": "F3",
+      "severity": "major",
+      "category": "style",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/CONTRIBUTING.md",
+      "line_range": [5, 5],
+      "title": "CONTRIBUTING.md references Spark 4.0 instead of Spark 4.1",
+      "description": "Line 5 states 'JDK 17 or above (Spark 4.0 requires Java 17+)' but this is the 4-1 module, not 4-0. The version reference is incorrect.",
+      "suggestion": "Change 'Spark 4.0' to 'Spark 4.1' on line 5."
+    },
+    {
+      "id": "F4",
+      "severity": "minor",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/README.md",
+      "line_range": [14, 16],
+      "title": "README documentation links point to spark-3 URLs",
+      "description": "Lines 14-16 contain links using spark-3 quickstart URLs (azure-cosmos-spark-3-quickstart, azure-cosmos-spark-3-catalog-api, azure-cosmos-spark-3-config). While these redirects may work, they could confuse users working specifically with Spark 4.1.",
+      "suggestion": "Update to Spark 4.x-specific links when available, or add a note that documentation is shared across versions. Note: This pattern is consistent with the 4-0 module."
+    },
+    {
+      "id": "F5",
+      "severity": "minor",
+      "category": "style",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/CHANGELOG.md",
+      "line_range": [11, 14],
+      "title": "CHANGELOG mixes initial-release content with inherited bug fixes",
+      "description": "The 'Other Changes' section lists specific inherited bug fixes (PRs #48837, #48689, #48752) from the shared codebase. For an initial release of a new module, this may be unnecessary detail.",
+      "suggestion": "Consider simplifying to 'Based on azure-cosmos-spark_4-0_2-13 v4.47.0' without enumerating individual fixes users didn't experience."
+    },
+    {
+      "id": "F6",
+      "severity": "minor",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/src/main/scala/com/azure/cosmos/spark/",
+      "line_range": null,
+      "title": "Override files would benefit from origin comments",
+      "description": "Files ChangeFeedInitialOffsetWriter.scala, CosmosCatalogBase.scala, and CosmosCatalogITestBase.scala are full copies of the shared base with only 1 import line changed (SPARK-52787 package reorganization). If the shared base changes in the future, these copies will silently diverge. This is a maintainability concern.",
+      "suggestion": "Add header comments like '// Forked from azure-cosmos-spark_3 — only HDFSMetadataLog import differs (SPARK-52787)' to help future maintainers."
+    },
+    {
+      "id": "F7",
+      "severity": "suggestion",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/",
+      "line_range": null,
+      "title": "All 12 common override files are byte-identical to 4-0",
+      "description": "Verification confirms that all 12 common override files match the 4-0 module exactly, demonstrating that changes are properly scoped to only the 3 SPARK-52787-affected files.",
+      "suggestion": null
+    },
+    {
+      "id": "F8",
+      "severity": "suggestion",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/",
+      "line_range": null,
+      "title": "CI, versioning, and parent POM plumbing are complete",
+      "description": "CI configuration, version_client.txt entry, external_dependencies.txt entry, module listing in parent POM, and parent enforcer rules are all correctly configured.",
+      "suggestion": null
+    },
+    {
+      "id": "F9",
+      "severity": "suggestion",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/",
+      "line_range": null,
+      "title": "Import changes are correct and minimal",
+      "description": "Exactly 3 files differ by exactly 1 import line each (streaming.HDFSMetadataLog → streaming.checkpointing.HDFSMetadataLog). The validateVersion inlining in ChangeFeedInitialOffsetWriter is well-documented and covered by shared tests.",
+      "suggestion": null
+    },
+    {
+      "id": "F10",
+      "severity": "suggestion",
+      "category": "design",
+      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/",
+      "line_range": null,
+      "title": "Test coverage is adequate",
+      "description": "7 module-specific test files plus ~61 shared test files inherited via build-helper provide comprehensive coverage. The shared ChangeFeedInitialOffsetWriterSpec validates validateVersion, and module-specific tests exercise HDFSMetadataLog from the new package.",
+      "suggestion": null
+    }
+  ],
+  "stats": {
+    "critical": 1,
+    "major": 2,
+    "minor": 4,
+    "suggestion": 3,
+    "total": 10
+  }
+}
