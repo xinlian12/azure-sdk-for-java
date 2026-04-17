@@ -20,7 +20,7 @@ https://github.com/Azure/azure-sdk-for-java/issues/new
 #### azure-cosmos-spark_4-1_2-13
 | Connector | Supported Spark Versions | Minimum Java Version | Supported Scala Versions  | Supported Databricks Runtimes | Supported Fabric Runtimes |
 |-----------|--------------------------|----------------------|---------------------------|-------------------------------|---------------------------|
-| 4.47.0    | 4.1.0, 4.1.1            | [17, 21]             | 2.13                      | TBD                           | TBD                       |
+| 4.47.0    | 4.1.0                    | [17, 21]             | 2.13                      | TBD                           | TBD                       |
 
 Note: Spark 4.1 requires Scala 2.13 and Java 17 or higher. When using the Scala API, it is necessary for applications
 to use Scala 2.13 that Spark 4.1 was compiled for.
