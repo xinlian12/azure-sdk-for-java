@@ -39,7 +39,7 @@ private class ChangeFeedInitialOffsetWriter
 
   private def readerToString(reader: java.io.Reader): String = {
     val writer = new StringBuilderWriter
-    val buffer = new Array[Char](4096)
+    val buffer = new Array[Char](4096) // scalastyle:ignore magic.number
     Stream.continually(reader.read(buffer)).takeWhile(_ != -1).foreach(writer.write(buffer, 0, _))
     writer.toString
   }
@@ -76,7 +76,7 @@ private[spark] object ChangeFeedInitialOffsetWriter {
               s"Log file was malformed: failed to read correct log version from $versionText.")
         }
       if (version > 0 && version <= maxSupportedVersion) {
-        return version
+        return version // scalastyle:ignore return
       }
       if (version > maxSupportedVersion) {
         throw new IllegalStateException(

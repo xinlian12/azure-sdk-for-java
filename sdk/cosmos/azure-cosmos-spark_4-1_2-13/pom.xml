@@ -67,6 +67,8 @@
             </goals>
             <configuration>
               <sources>
+                <!-- scala-hdfs intentionally omitted: Spark 4.1 SPARK-52787 moved HDFSMetadataLog
+                     to streaming.checkpointing package; overrides provided in ./src/main/scala -->
                 <source>${basedir}/../azure-cosmos-spark_3/src/main/scala</source>
                 <source>${basedir}/../azure-cosmos-spark_4/src/main/scala</source>
                 <source>${basedir}/src/main/scala</source>
@@ -81,6 +83,7 @@
             </goals>
             <configuration>
               <sources>
+                <!-- test/scala-hdfs intentionally omitted: see add-sources comment above -->
                 <source>${basedir}/../azure-cosmos-spark_3/src/test/scala</source>
                 <source>${basedir}/../azure-cosmos-spark_4/src/test/scala</source>
                 <source>${basedir}/src/test/scala</source>
@@ -206,16 +209,6 @@
         </exclusion>
       </exclusions>
       <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-databind</artifactId>
-      <version>2.18.6</version> <!-- {x-version-update;com.fasterxml.jackson.core:jackson-databind;external_dependency} -->
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.module</groupId>
-      <artifactId>jackson-module-scala_2.13</artifactId>
-      <version>2.18.6</version> <!-- {x-version-update;com.fasterxml.jackson.module:jackson-module-scala_2.13;external_dependency} -->
     </dependency>
   </dependencies>
 </project>
