@@ -71,8 +71,12 @@ private[spark] object ChangeFeedInitialOffsetWriter {
    * Databricks Runtime versions like 17.3+).
    * 
    * Technical Debt: This creates maintenance overhead as Spark's validation logic evolves.
-   * Consider consolidating when older Spark versions are deprecated or create a thin abstraction
-   * layer to handle version-specific differences.
+   * 
+   * Migration Plan:
+   * - Target: Consolidate when Spark 3.x support is dropped (estimated 2025-2026)
+   * - Trigger: When minimum supported Spark version >= 4.1 across all Azure SDK for Java releases
+   * - Alternative: Create thin abstraction layer if differences become significant before consolidation
+   * - Monitor: Track Spark validation logic changes in each release to ensure compatibility
    * 
    * @param versionText the version string to validate (e.g., "v1")
    * @param maxSupportedVersion maximum supported version number

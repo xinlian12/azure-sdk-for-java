@@ -47,6 +47,86 @@ class Spark41PackageReorganizationITest extends UnitSpec {
     }
   }
 
+  it should "validate inlined version validation logic produces correct results" in {
+    val spark = SparkSession.builder()
+      .appName("Spark41VersionValidationTest")
+      .master("local[*]")
+      .config("spark.sql.warehouse.dir", "/tmp/spark-warehouse")
+      .getOrCreate()
+
+    try {
+      // Test valid version strings
+      val writer = new ChangeFeedInitialOffsetWriter(
+        spark.sparkContext,
+        "/tmp/test-metadata",
+        "test-stream"
+      )
+
+      // Test valid version formats
+      writer.validateVersion("v1", 2) shouldEqual 1
+      writer.validateVersion("v2", 2) shouldEqual 2
+      writer.validateVersion("v0", 2) shouldEqual 0
+
+      // Test error cases
+      assertThrows[IllegalStateException] {
+        writer.validateVersion("invalid", 2)
+      }
+
+      assertThrows[IllegalStateException] {
+        writer.validateVersion("v3", 2) // exceeds max supported
+      }
+
+      assertThrows[IllegalStateException] {
+        writer.validateVersion("v-1", 2) // negative version
+      }
+
+      assertThrows[IllegalStateException] {
+        writer.validateVersion("", 2) // empty string
+      }
+
+      assertThrows[IllegalStateException] {
+        writer.validateVersion("vabc", 2) // non-numeric version
+      }
+    } finally {
+      spark.stop()
+    }
+  }
+
+  it should "ensure error messages match expected format for backward compatibility" in {
+    val spark = SparkSession.builder()
+      .appName("Spark41ErrorFormatTest")
+      .master("local[*]")
+      .config("spark.sql.warehouse.dir", "/tmp/spark-warehouse")
+      .getOrCreate()
+
+    try {
+      val writer = new ChangeFeedInitialOffsetWriter(
+        spark.sparkContext,
+        "/tmp/test-metadata",
+        "test-stream"
+      )
+
+      // Test that error messages contain expected elements for debugging
+      val exception1 = intercept[IllegalStateException] {
+        writer.validateVersion("v3", 2)
+      }
+      exception1.getMessage should include("version")
+      exception1.getMessage should include("supported")
+
+      val exception2 = intercept[IllegalStateException] {
+        writer.validateVersion("invalid", 2)
+      }
+      exception2.getMessage should include("version")
+
+      val exception3 = intercept[IllegalStateException] {
+        writer.validateVersion("v-1", 2)
+      }
+      exception3.getMessage should include("version")
+    } finally {
+      spark.stop()
+    }
+  }
+
   it should "successfully instantiate CosmosCatalogBase with new HDFSMetadataLog package" in {
     val spark = SparkSession.builder()
       .appName("Spark41CatalogTest")

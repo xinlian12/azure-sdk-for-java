@@ -3,93 +3,93 @@
   "iteration": 2,
   "reviewer": "pr-review-pipeline",
   "overall_assessment": "request_changes",
-  "summary": "The Spark 4.1 support PR has two blocking issues: duplicate class compilation failure in the new module due to overlapping source files with the base shared code, and a missing enforcer rule for spark-sql_2.13:4.1.0 in the parent POM. Additionally, the .gitignore change should be in a separate commit. The core approach for import-path overrides is correct but these issues must be resolved.",
+  "summary": "Well-executed implementation of Apache Spark 4.1 support with excellent architectural discipline. However, critical test coverage gaps and version management issues must be addressed. The approach properly handles SPARK-52787 package reorganization with minimal code duplication and maintains backward compatibility.",
   "findings": [
     {
       "id": "F1",
       "severity": "critical",
-      "category": "bug",
-      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/pom.xml",
-      "line_range": [69, 73],
-      "title": "Duplicate class definitions will fail Scala compilation",
-      "description": "The build-helper-maven-plugin adds both azure-cosmos-spark_3/src/main/scala and the module's own src/main/scala as source roots. Three files (ChangeFeedInitialOffsetWriter, CosmosCatalogBase, CosmosCatalogITestBase) exist in both directories with identical package/class names. The Scala compiler will produce duplicate class errors.",
-      "suggestion": "Either (a) configure source exclusions in the scala-maven-plugin for these 3 files, (b) use a maven-antrun-plugin step to copy shared sources to target/ with the 3 conflicting files excluded, or (c) extract HDFSMetadataLog usage into a small bridge/factory object so the large base files can stay shared."
+      "category": "design",
+      "file": "ChangeFeedInitialOffsetWriter.scala",
+      "line_range": [21, 60],
+      "title": "Missing Critical Test Coverage",
+      "description": "The serialize() and deserialize() methods that extend HDFSMetadataLog[String] lack direct unit tests. Package reorganization could introduce subtle serialization behavior differences between Spark 3 and 4.1, potentially breaking checkpoint compatibility.",
+      "suggestion": "Add unit tests covering serialization round-trip, backward compatibility with existing checkpoint data, and malformed input handling."
     },
     {
       "id": "F2",
-      "severity": "critical",
-      "category": "bug",
-      "file": "sdk/cosmos/azure-cosmos-spark_3/pom.xml",
-      "line_range": [325, 325],
-      "title": "Missing enforcer rule for spark-sql_2.13:4.1.0",
-      "description": "The parent POM's bannedDependencies whitelist includes spark-sql_2.13:[4.0.0] but has no entry for [4.1.0]. The Maven enforcer plugin will reject the 4-1 module's dependency.",
-      "suggestion": "Add the following line after line 325: <include>org.apache.spark:spark-sql_2.13:[4.1.0]</include><!-- {x-include-update;cosmos-spark_4-1_org.apache.spark:spark-sql_2.13;external_dependency} -->"
+      "severity": "major",
+      "category": "design",
+      "file": "pom.xml",
+      "line_range": [8, 9],
+      "title": "Parent Module Version Mismatch",
+      "description": "New module inherits from azure-cosmos-spark_3 version 0.0.1-beta.1 but has its own version 4.47.0. Creates confusion in version inheritance chain and potential build issues.",
+      "suggestion": "Consider creating a common parent module or document the intentional version divergence clearly."
     },
     {
       "id": "F3",
       "severity": "major",
       "category": "design",
-      "file": ".gitignore",
-      "line_range": [132, 134],
-      "title": ".gitignore change is unrelated to Spark 4.1",
-      "description": "Adding .coding-harness/ is infrastructure for the coding agent and unrelated to this feature. Should be a separate commit.",
-      "suggestion": "Move the .gitignore change to a separate commit."
+      "file": "ChangeFeedInitialOffsetWriter.scala",
+      "line_range": [64, 94],
+      "title": "Inlined Validation Logic Increases Maintenance Burden",
+      "description": "The validateVersion method duplicates logic from Spark's MetadataVersionUtil to avoid runtime dependency issues. Creates technical debt and maintenance overhead when Spark updates its validation logic.",
+      "suggestion": "Document this as technical debt with a plan to consolidate when older Spark versions are deprecated, or create a thin abstraction layer."
     },
     {
       "id": "F4",
-      "severity": "minor",
-      "category": "style",
-      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/CHANGELOG.md",
-      "line_range": [7, 12],
-      "title": "CHANGELOG mixes inherited fixes with initial release",
-      "description": "The changelog lists bug fixes (deadlock PR 48689, MetadataVersionUtil PR 48837) that were originally for existing modules. Since this is a brand-new initial release, consider noting inherited fixes differently.",
-      "suggestion": "Note 'Includes all fixes from azure-cosmos-spark_4-0_2-13 v4.47.0' rather than listing them as this module's fixes."
+      "severity": "major",
+      "category": "design",
+      "file": "src/test/scala",
+      "line_range": [0, 0],
+      "title": "Missing Integration Test for Package Reorganization",
+      "description": "No dedicated test validates that SPARK-52787 fix works in real Spark 4.1 environment. Runtime failures could occur if class loading fails in actual Spark 4.1 clusters.",
+      "suggestion": "Create Spark41PackageReorganizationITest.scala that instantiates classes using new package paths and verifies no ClassNotFoundException occurs."
     },
     {
       "id": "F5",
       "severity": "minor",
-      "category": "design",
-      "file": "sdk/cosmos/azure-cosmos-spark_4-1_2-13/src/main/scala",
-      "line_range": [1, 1],
-      "title": "1,792 lines of code duplicated for 1-line import changes",
-      "description": "Three files (ChangeFeedInitialOffsetWriter.scala: 92 lines, CosmosCatalogBase.scala: 727 lines, CosmosCatalogITestBase.scala: 973 lines) differ from shared counterparts by exactly one import line (streaming.HDFSMetadataLog → streaming.checkpointing.HDFSMetadataLog). This creates significant maintenance burden.",
-      "suggestion": "Consider a bridge pattern to abstract the import difference."
+      "category": "style",
+      "file": "README.md",
+      "line_range": [14, 18],
+      "title": "Documentation References Need Update",
+      "description": "Documentation references 'Spark 3 documentation' but these links should be verified for Spark 4.1 relevance. Could mislead users about applicable documentation.",
+      "suggestion": "Update note to clarify which aspects of Spark 3 documentation apply to Spark 4.1, or create Spark 4.1-specific documentation."
     },
     {
       "id": "F6",
       "severity": "suggestion",
-      "category": "style",
-      "file": "RowSerializerPollTest.scala",
-      "line_range": [1, 1],
-      "title": "Pre-existing test file naming typo",
-      "description": "Test file should be named RowSerializerPoolTest.scala. Present in 4-0 too; not introduced here.",
-      "suggestion": "Not a blocker for this PR, but worth fixing in a future cleanup commit."
+      "category": "design",
+      "file": "pom.xml",
+      "line_range": [72, 95],
+      "title": "Excellent Source Sharing Architecture",
+      "description": "The Maven resource copying strategy minimizes code duplication while maintaining clear separation of version-specific concerns.",
+      "suggestion": "Consider documenting this pattern as a reusable template for future version-specific modules."
     },
     {
       "id": "F7",
       "severity": "suggestion",
       "category": "design",
-      "file": "Multiple POM files",
-      "line_range": [1, 1],
-      "title": "CI, versioning, and POM structure are correct",
-      "description": "CI triggers, release parameters, artifact entries, version_client.txt, external_dependencies.txt, and sdk/cosmos/pom.xml module listing all follow established patterns. The 12 non-overridden source files and 6 non-overridden test files are byte-identical to their 4-0 counterparts.",
-      "suggestion": "No action needed."
+      "file": "pom.xml",
+      "line_range": [1, 200],
+      "title": "Proper Infrastructure Integration",
+      "description": "Version management, CI configuration, and build profiles are correctly updated across all infrastructure components.",
+      "suggestion": "Maintain this pattern for future upstream dependency upgrades."
     },
     {
       "id": "F8",
       "severity": "suggestion",
       "category": "design",
-      "file": "pom.xml",
-      "line_range": [1, 1],
-      "title": "Spark 4.1.0 availability",
-      "description": "Ensure org.apache.spark:spark-sql_2.13:4.1.0 is published to Maven Central before CI runs. The test profile activation guard should prevent build failures in default builds.",
-      "suggestion": "Verify Maven Central availability before merging."
+      "file": "src/main/scala",
+      "line_range": [1, 100],
+      "title": "Backward Compatibility Preserved",
+      "description": "Documentation clearly states existing checkpoints, offsets, and APIs remain fully compatible.",
+      "suggestion": "Continue emphasizing backward compatibility guarantees in release notes."
     }
   ],
   "stats": {
-    "critical": 2,
-    "major": 1,
-    "minor": 2,
+    "critical": 1,
+    "major": 3,
+    "minor": 1,
     "suggestion": 3,
     "total": 8
   }
