@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+// Forked from azure-cosmos-spark_3 — only HDFSMetadataLog import differs (SPARK-52787)
+
 package com.azure.cosmos.spark
 
 import com.azure.cosmos.spark.catalog.{CosmosCatalogConflictException, CosmosCatalogException, CosmosCatalogNotFoundException, CosmosThroughputProperties}

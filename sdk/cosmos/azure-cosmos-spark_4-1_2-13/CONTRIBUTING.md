@@ -2,7 +2,7 @@
 This instruction is guideline for building and code contribution.
 
 ## Prerequisites
-- JDK 17 or above (Spark 4.0 requires Java 17+)
+- JDK 17 or above (Spark 4.1 requires Java 17+)
 - [Maven](https://maven.apache.org/) 3.0 and above
 
 ## Build from source

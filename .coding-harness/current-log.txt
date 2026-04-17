@@ -1,2 +1,0 @@
-b40a42a3969 fix: address review iteration 1 — add missing files, CI config, and version entries
-b504f233781 feat: Add Spark 4.1 support with package reorganization handling

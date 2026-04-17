@@ -11,6 +11,8 @@ https://github.com/Azure/azure-sdk-for-java/issues/new
 
 ### Documentation
 
+> **Note:** Documentation is shared across Spark 4.x versions. Links below reference Spark 3 documentation but apply to Spark 4.1.
+
 - [Getting started](https://aka.ms/azure-cosmos-spark-3-quickstart)
 - [Catalog API](https://aka.ms/azure-cosmos-spark-3-catalog-api)
 - [Configuration Parameter Reference](https://aka.ms/azure-cosmos-spark-3-config)

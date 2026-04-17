@@ -7,8 +7,5 @@
 * Handled package reorganization in Apache Spark 4.1 where HDFSMetadataLog and MetadataVersionUtil moved from `org.apache.spark.sql.execution.streaming` to `org.apache.spark.sql.execution.streaming.checkpointing`.
 
 #### Other Changes
-* Initial release of Spark 4.1 connector with Scala 2.13 support based on Spark 4.0 connector
-* Includes all features and fixes from azure-cosmos-spark_4-0_2-13 v4.47.0, including:
-  - Support for change feed with `startFrom` point-in-time on merged partitions
-  - Fix for `NoClassDefFoundError` for `MetadataVersionUtil` when using change feed on Databricks Runtime 17.3+  
-  - Fix for JVM `<clinit>` deadlock during concurrent Cosmos SDK class loading
+* Initial release of Spark 4.1 connector with Scala 2.13 support
+* Based on azure-cosmos-spark_4-0_2-13 v4.47.0 with all existing features and bug fixes
