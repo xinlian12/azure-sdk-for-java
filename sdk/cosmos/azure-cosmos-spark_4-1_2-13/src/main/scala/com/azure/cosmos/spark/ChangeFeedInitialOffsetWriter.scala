@@ -64,8 +64,20 @@ private class ChangeFeedInitialOffsetWriter
 private[spark] object ChangeFeedInitialOffsetWriter {
   /**
    * Validates the version string from the log file.
-   * This is inlined to avoid a runtime dependency on MetadataVersionUtil,
-   * which has been relocated in some Spark distributions (e.g. Databricks Runtime 17.3+).
+   * 
+   * This logic is deliberately inlined rather than using Spark's MetadataVersionUtil to avoid
+   * runtime dependency issues. MetadataVersionUtil has been relocated across different Spark
+   * distributions (e.g., moved to checkpointing package in SPARK-52787, unavailable in some
+   * Databricks Runtime versions like 17.3+).
+   * 
+   * Technical Debt: This creates maintenance overhead as Spark's validation logic evolves.
+   * Consider consolidating when older Spark versions are deprecated or create a thin abstraction
+   * layer to handle version-specific differences.
+   * 
+   * @param versionText the version string to validate (e.g., "v1")
+   * @param maxSupportedVersion maximum supported version number
+   * @return parsed version number if valid
+   * @throws IllegalStateException if version is invalid, unsupported, or malformed
    */
   def validateVersion(versionText: String, maxSupportedVersion: Int): Int = {
     if (versionText.nonEmpty && versionText(0) == 'v') {
