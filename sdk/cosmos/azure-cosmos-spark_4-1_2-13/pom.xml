@@ -50,8 +50,6 @@
     <scalactic.version>3.2.3</scalactic.version> <!-- {x-version-update;cosmos-scala213_org.scalactic:scalactic_2.13;external_dependency} -->
     <scalamock.version>5.0.0</scalamock.version> <!-- {x-version-update;cosmos-scala213_org.scalamock:scalamock_2.13;external_dependency} -->
     <spotless.skip>true</spotless.skip>
-    <maven.compiler.source>17</maven.compiler.source>
-    <maven.compiler.target>17</maven.compiler.target>
   </properties>
 
   <build>

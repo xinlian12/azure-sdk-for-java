@@ -23,11 +23,15 @@
     <cosmos.spark.skip>true</cosmos.spark.skip>
     <maven.main.skip>${cosmos.spark.skip}</maven.main.skip>
     <maven.test.skip>${cosmos.spark.skip}</maven.test.skip>
-    <cosmos-spark-version>4.0</cosmos-spark-version>
+    <cosmos-spark-version>4</cosmos-spark-version>
     <scala.binary.version>2.13</scala.binary.version>
     <scala-jackson.version>2.18.6</scala-jackson.version> <!-- {x-version-update;com.fasterxml.jackson.module:jackson-module-scala_2.13;external_dependency} -->
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
   </properties>
   <profiles>
+    <!-- build-scala profile: serves as template for child modules (spark_4-0, spark_4-1).
+         Does not activate in this POM module (no scalastyle_config.xml here). -->
     <profile>
       <id>build-scala</id>
       <activation>
