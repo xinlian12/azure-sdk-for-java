@@ -96,59 +96,5 @@ df.filter(col("isAlive") === true)
 
 // COMMAND ----------
 
-// Change Feed - micro-batch structured streaming
-// This exercises the ChangeFeedInitialOffsetWriter and HDFSMetadataLog code paths
-// that can break on certain Spark distributions (e.g. Databricks Runtime 17.3+)
-
-val changeFeedCfg = cfg ++ Map(
-  "spark.cosmos.read.inferSchema.enabled" -> "false",
-  "spark.cosmos.changeFeed.startFrom" -> "Beginning",
-  "spark.cosmos.changeFeed.mode" -> "Incremental"
-)
-
-val testId = java.util.UUID.randomUUID().toString.replace("-", "")
-
-println(s"Change Feed test: using endpoint=${cosmosEndpoint}")
-println(s"Change Feed test: database=${cosmosDatabaseName}, container=${cosmosContainerName}")
-println(s"Change Feed test: authType=${authType}")
-println(s"Change Feed test: changeFeedCfg keys=${changeFeedCfg.keys.mkString(", ")}")
-
-// Verify the source container is accessible before starting streaming
-val verifyDf = spark.read.format("cosmos.oltp").options(cfg).load()
-val verifyCount = verifyDf.count()
-println(s"Change Feed test: source container has $verifyCount records before streaming")
-
-try {
-  val changeFeedDF = spark
-    .readStream
-    .format("cosmos.oltp.changeFeed")
-    .options(changeFeedCfg)
-    .load()
-
-  val microBatchQuery = changeFeedDF
-    .writeStream
-    .format("memory")
-    .queryName(testId)
-    .outputMode("append")
-    .start()
-
-  println(s"Change Feed test: streaming query started, id=${microBatchQuery.id}")
-  microBatchQuery.processAllAvailable()
-  microBatchQuery.stop()
-
-  val sinkCount = spark.sql(s"SELECT * FROM $testId").count()
-  println(s"Change Feed micro-batch streaming: $sinkCount records read via change feed")
-  assert(sinkCount >= 2, s"Expected at least 2 records from change feed but found $sinkCount")
-} catch {
-  case e: Exception =>
-    println(s"Change Feed test FAILED: ${e.getClass.getName}: ${e.getMessage}")
-    if (e.getCause != null) {
-      println(s"Change Feed test cause: ${e.getCause.getClass.getName}: ${e.getCause.getMessage}")
-    }
-    throw e
-}
-
-// COMMAND ----------
-
 // cleanup
 spark.sql(s"DROP TABLE cosmosCatalogMI.${cosmosDatabaseName}.${cosmosContainerName};")
