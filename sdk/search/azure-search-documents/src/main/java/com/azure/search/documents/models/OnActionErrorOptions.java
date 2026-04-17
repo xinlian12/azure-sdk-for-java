@@ -1,16 +1,13 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package com.azure.search.documents.options;
+package com.azure.search.documents.models;
 
-import com.azure.search.documents.SearchClientBuilder;
-import com.azure.search.documents.models.IndexAction;
-import com.azure.search.documents.models.IndexingResult;
-
+import com.azure.search.documents.SearchIndexingBufferedSenderBuilder;
 import java.util.function.Consumer;
 
 /**
- * Options passed when {@link SearchClientBuilder.SearchIndexingBufferedSenderBuilder#onActionError(Consumer)} is
+ * Options passed when {@link SearchIndexingBufferedSenderBuilder#onActionError(Consumer)} is
  * called.
  */
 public final class OnActionErrorOptions {

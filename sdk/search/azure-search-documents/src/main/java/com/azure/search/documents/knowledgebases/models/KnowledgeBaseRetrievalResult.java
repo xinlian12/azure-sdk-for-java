@@ -16,7 +16,7 @@ import java.util.List;
  * The output contract for the retrieval response.
  */
 @Immutable
-public final class KnowledgeBaseRetrievalResponse implements JsonSerializable<KnowledgeBaseRetrievalResponse> {
+public final class KnowledgeBaseRetrievalResult implements JsonSerializable<KnowledgeBaseRetrievalResult> {
 
     /*
      * The response messages.
@@ -37,10 +37,10 @@ public final class KnowledgeBaseRetrievalResponse implements JsonSerializable<Kn
     private List<KnowledgeBaseReference> references;
 
     /**
-     * Creates an instance of KnowledgeBaseRetrievalResponse class.
+     * Creates an instance of KnowledgeBaseRetrievalResult class.
      */
     @Generated
-    private KnowledgeBaseRetrievalResponse() {
+    private KnowledgeBaseRetrievalResult() {
     }
 
     /**
@@ -87,38 +87,37 @@ public final class KnowledgeBaseRetrievalResponse implements JsonSerializable<Kn
     }
 
     /**
-     * Reads an instance of KnowledgeBaseRetrievalResponse from the JsonReader.
+     * Reads an instance of KnowledgeBaseRetrievalResult from the JsonReader.
      *
      * @param jsonReader The JsonReader being read.
-     * @return An instance of KnowledgeBaseRetrievalResponse if the JsonReader was pointing to an instance of it, or
-     * null if it was pointing to JSON null.
-     * @throws IOException If an error occurs while reading the KnowledgeBaseRetrievalResponse.
+     * @return An instance of KnowledgeBaseRetrievalResult if the JsonReader was pointing to an instance of it, or null
+     * if it was pointing to JSON null.
+     * @throws IOException If an error occurs while reading the KnowledgeBaseRetrievalResult.
      */
     @Generated
-    public static KnowledgeBaseRetrievalResponse fromJson(JsonReader jsonReader) throws IOException {
+    public static KnowledgeBaseRetrievalResult fromJson(JsonReader jsonReader) throws IOException {
         return jsonReader.readObject(reader -> {
-            KnowledgeBaseRetrievalResponse deserializedKnowledgeBaseRetrievalResponse
-                = new KnowledgeBaseRetrievalResponse();
+            KnowledgeBaseRetrievalResult deserializedKnowledgeBaseRetrievalResult = new KnowledgeBaseRetrievalResult();
             while (reader.nextToken() != JsonToken.END_OBJECT) {
                 String fieldName = reader.getFieldName();
                 reader.nextToken();
                 if ("response".equals(fieldName)) {
                     List<KnowledgeBaseMessage> response
                         = reader.readArray(reader1 -> KnowledgeBaseMessage.fromJson(reader1));
-                    deserializedKnowledgeBaseRetrievalResponse.response = response;
+                    deserializedKnowledgeBaseRetrievalResult.response = response;
                 } else if ("activity".equals(fieldName)) {
                     List<KnowledgeBaseActivityRecord> activity
                         = reader.readArray(reader1 -> KnowledgeBaseActivityRecord.fromJson(reader1));
-                    deserializedKnowledgeBaseRetrievalResponse.activity = activity;
+                    deserializedKnowledgeBaseRetrievalResult.activity = activity;
                 } else if ("references".equals(fieldName)) {
                     List<KnowledgeBaseReference> references
                         = reader.readArray(reader1 -> KnowledgeBaseReference.fromJson(reader1));
-                    deserializedKnowledgeBaseRetrievalResponse.references = references;
+                    deserializedKnowledgeBaseRetrievalResult.references = references;
                 } else {
                     reader.skipChildren();
                 }
             }
-            return deserializedKnowledgeBaseRetrievalResponse;
+            return deserializedKnowledgeBaseRetrievalResult;
         });
     }
 }
