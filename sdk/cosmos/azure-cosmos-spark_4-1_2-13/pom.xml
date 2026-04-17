@@ -55,6 +55,50 @@
   <build>
     <plugins>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>3.3.1</version> <!-- {x-version-update;org.apache.maven.plugins:maven-resources-plugin;external_dependency} -->
+        <executions>
+          <execution>
+            <id>copy-shared-sources</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}/shared-sources</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${basedir}/../azure-cosmos-spark_3/src/main/scala</directory>
+                  <excludes>
+                    <exclude>**/CosmosCatalogBase.scala</exclude>
+                    <exclude>**/ChangeFeedInitialOffsetWriter.scala</exclude>
+                  </excludes>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-shared-test-sources</id>
+            <phase>generate-test-sources</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}/shared-test-sources</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${basedir}/../azure-cosmos-spark_3/src/test/scala</directory>
+                  <excludes>
+                    <exclude>**/CosmosCatalogITestBase.scala</exclude>
+                  </excludes>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>
         <version>3.6.1</version> <!-- {x-version-update;org.codehaus.mojo:build-helper-maven-plugin;external_dependency} -->
@@ -67,7 +111,7 @@
             </goals>
             <configuration>
               <sources>
-                <source>${basedir}/../azure-cosmos-spark_3/src/main/scala</source>
+                <source>${project.build.directory}/shared-sources</source>
                 <source>${basedir}/src/main/scala</source>
               </sources>
             </configuration>
@@ -80,7 +124,7 @@
             </goals>
             <configuration>
               <sources>
-                <source>${basedir}/../azure-cosmos-spark_3/src/test/scala</source>
+                <source>${project.build.directory}/shared-test-sources</source>
                 <source>${basedir}/src/test/scala</source>
               </sources>
             </configuration>
@@ -100,24 +144,7 @@
           </execution>
         </executions>
       </plugin>
-      <plugin>
-        <groupId>net.alchim31.maven</groupId>
-        <artifactId>scala-maven-plugin</artifactId>
-        <version>4.8.1</version> <!-- {x-version-update;cosmos_net.alchim31.maven:scala-maven-plugin;external_dependency} -->
-        <configuration>
-          <source>1.8</source>
-          <target>1.8</target>
-          <scalaVersion>${scala.version}</scalaVersion>
-        </configuration>
-        <executions>
-          <execution>
-            <goals>
-              <goal>compile</goal>
-              <goal>testCompile</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
