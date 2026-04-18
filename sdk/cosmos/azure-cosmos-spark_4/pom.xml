@@ -83,7 +83,6 @@
                 <configuration>
                   <resources>
                     <resource><directory>${basedir}/../azure-cosmos-spark_3/src/main/resources</directory></resource>
-                    <resource><directory>${basedir}/../azure-cosmos-spark_4/src/main/resources</directory></resource>
                   </resources>
                 </configuration>
               </execution>
