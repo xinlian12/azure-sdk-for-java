@@ -172,13 +172,13 @@
       </build>
     </profile>
     <profile>
-      <!-- Disable unit tests for Java < 17 - Spark 4.0 dependencies require Java 17+ to run -->
-      <id>spark-4-0-disable-tests-java-lt-17</id>
+      <!-- Skip build and tests for Java < 17 - Spark 4.0 dependencies require Java 17+ -->
+      <id>spark-4-0-skip-java-lt-17</id>
       <activation>
         <jdk>(,17)</jdk>
       </activation>
       <properties>
-        <skipTests>true</skipTests>
+        <cosmos.spark.skip>true</cosmos.spark.skip>
       </properties>
     </profile>
     <profile>
