@@ -147,6 +147,7 @@ stages:
   # TODO: Re-enable the Spark 4.1 Databricks stage once the
   # oltp-ci-spark41-2workers-d4dsv5-18.1 cluster and SAS URI index 3
   # have been provisioned.  See https://github.com/Azure/azure-sdk-for-java/issues/48849
+  # IMPORTANT: This must be re-enabled before azure-cosmos-spark_4-1_2-13 GA release.
   # - template: /sdk/cosmos/spark.databricks.yml
   #   parameters:
   #     CosmosEndpointMsi: $(spark-databricks-cosmos-endpoint-msi)

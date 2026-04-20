@@ -25,13 +25,23 @@
     <maven.test.skip>${cosmos.spark.skip}</maven.test.skip>
     <cosmos-spark-version>4.x</cosmos-spark-version>
     <scala.binary.version>2.13</scala.binary.version>
+    <scala.version>2.13.17</scala.version> <!-- {x-version-update;cosmos-scala213_org.scala-lang:scala-library;external_dependency} -->
+    <scala-java8-compat.version>0.9.1</scala-java8-compat.version> <!-- {x-version-update;cosmos-scala213_org.scala-lang.modules:scala-java8-compat_2.13;external_dependency} -->
+    <reactor-scala-extensions.version>0.8.0</reactor-scala-extensions.version> <!-- {x-version-update;cosmos-scala213_io.projectreactor:reactor-scala-extensions_2.13;external_dependency} -->
+    <scalatest.version>3.2.2</scalatest.version> <!-- {x-version-update;cosmos-scala213_org.scalatest:scalatest_2.13;external_dependency} -->
+    <scalatest-flatspec.version>3.2.3</scalatest-flatspec.version> <!-- {x-version-update;cosmos-scala213_org.scalatest:scalatest-flatspec_2.13;external_dependency} -->
+    <scalactic.version>3.2.3</scalactic.version> <!-- {x-version-update;cosmos-scala213_org.scalactic:scalactic_2.13;external_dependency} -->
+    <scalamock.version>5.0.0</scalamock.version> <!-- {x-version-update;cosmos-scala213_org.scalamock:scalamock_2.13;external_dependency} -->
     <scala-jackson.version>2.18.6</scala-jackson.version> <!-- {x-version-update;com.fasterxml.jackson.module:jackson-module-scala_2.13;external_dependency} -->
     <maven.compiler.source>17</maven.compiler.source>
     <maven.compiler.target>17</maven.compiler.target>
   </properties>
   <profiles>
     <!-- build-scala profile: serves as template for child modules (spark_4-0, spark_4-1).
-         Does not activate in this POM module (no scalastyle_config.xml here). -->
+         Does not activate in this POM module (no scalastyle_config.xml here).
+         WARNING: Any new build-helper execution added here MUST have a corresponding
+         combine.self="override" in leaf modules (spark_4-0, spark_4-1) or the parent
+         execution will silently leak through and may cause duplicate source paths. -->
     <profile>
       <id>build-scala</id>
       <activation>

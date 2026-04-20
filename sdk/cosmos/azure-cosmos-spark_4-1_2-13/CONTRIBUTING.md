@@ -82,3 +82,14 @@ Developing version naming convention is like `0.1.2-beta.1`. Release version nam
 ## Contribute to code
 Contribution is welcome. Please follow
 [this instruction](https://github.com/Azure/azure-sdk-for-java/blob/main/CONTRIBUTING.md) to contribute code.
+
+## HDFS override file sync
+This module provides 3 override files for `HDFSMetadataLog` (SPARK-52787). When modifying
+the original files in `azure-cosmos-spark_3/src/{main,test}/scala-hdfs/`, you **must** also
+update the corresponding overrides here and run the drift guard script:
+
+```bash
+bash sdk/cosmos/validate-hdfs-file-sync.sh
+```
+
+See [validate-hdfs-file-sync.sh](../validate-hdfs-file-sync.sh) for details.
