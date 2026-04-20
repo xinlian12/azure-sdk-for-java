@@ -65,7 +65,7 @@
             <goals>
               <goal>add-source</goal>
             </goals>
-            <configuration>
+            <configuration combine.self="override">
               <sources>
                 <source>${basedir}/../azure-cosmos-spark_3/src/main/scala</source>
                 <source>${basedir}/../azure-cosmos-spark_3/src/main/scala-hdfs</source>
@@ -80,7 +80,7 @@
             <goals>
               <goal>add-test-source</goal>
             </goals>
-            <configuration>
+            <configuration combine.self="override">
               <sources>
                 <source>${basedir}/../azure-cosmos-spark_3/src/test/scala</source>
                 <source>${basedir}/../azure-cosmos-spark_3/src/test/scala-hdfs</source>
