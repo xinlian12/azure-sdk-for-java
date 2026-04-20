@@ -103,4 +103,4 @@ update the corresponding overrides here and run the drift guard script:
 bash sdk/cosmos/validate-hdfs-file-sync.sh
 ```
 
-See [validate-hdfs-file-sync.sh](../validate-hdfs-file-sync.sh) for details.
+See [validate-hdfs-file-sync.sh](https://github.com/Azure/azure-sdk-for-java/blob/main/sdk/cosmos/validate-hdfs-file-sync.sh) for details.

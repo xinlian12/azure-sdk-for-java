@@ -92,4 +92,4 @@ the drift guard script to verify they stay in sync:
 bash sdk/cosmos/validate-hdfs-file-sync.sh
 ```
 
-See [validate-hdfs-file-sync.sh](../validate-hdfs-file-sync.sh) for details.
+See [validate-hdfs-file-sync.sh](https://github.com/Azure/azure-sdk-for-java/blob/main/sdk/cosmos/validate-hdfs-file-sync.sh) for details.
