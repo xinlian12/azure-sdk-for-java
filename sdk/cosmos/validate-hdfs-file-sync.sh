@@ -33,11 +33,12 @@ FILE_PAIRS=(
   "azure-cosmos-spark_3/src/test/scala-hdfs/com/azure/cosmos/spark/CosmosCatalogITestBase.scala|azure-cosmos-spark_4-1_2-13/src/test/scala/com/azure/cosmos/spark/CosmosCatalogITestBase.scala"
 )
 
-# Normalize a file by removing the 2-line header comment and replacing the
+# Normalize a file by removing sync-related comments and replacing the
 # checkpointing import with the old import for comparison purposes.
 normalize() {
   grep -v '// This file mirrors azure-cosmos-spark_3' "$1" \
     | grep -v '// with HDFSMetadataLog import updated for SPARK-52787' \
+    | grep -v '// NOTE: Override copy exists in azure-cosmos-spark_4-1_2-13' \
     | sed 's/org\.apache\.spark\.sql\.execution\.streaming\.checkpointing\.HDFSMetadataLog/org.apache.spark.sql.execution.streaming.HDFSMetadataLog/g'
 }
 

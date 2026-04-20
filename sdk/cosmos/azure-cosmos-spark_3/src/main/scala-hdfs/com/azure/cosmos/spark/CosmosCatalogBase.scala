@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+// NOTE: Override copy exists in azure-cosmos-spark_4-1_2-13 — keep in sync (see SPARK-52787)
 
 package com.azure.cosmos.spark
 
