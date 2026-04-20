@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.assertj.core.api.Condition;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,7 +38,7 @@ public interface StoreResponseValidator {
             validators.add(new StoreResponseValidator() {
                 @Override
                 public void validate(StoreResponse resp) {
-                    assertThat(Arrays.asList(resp.getResponseHeaderNames()).contains(headerKey)).isTrue();
+                    assertThat(resp.getHeaderValue(headerKey)).isNotNull();
                 }
             });
             return this;
@@ -49,9 +48,7 @@ public interface StoreResponseValidator {
             validators.add(new StoreResponseValidator() {
                 @Override
                 public void validate(StoreResponse resp) {
-                    assertThat(Arrays.asList(resp.getResponseHeaderNames())).asList().contains(headerKey);
-                    int index = Arrays.asList(resp.getResponseHeaderNames()).indexOf(headerKey);
-                    assertThat(resp.getResponseHeaderValues()[index]).isEqualTo(headerValue);
+                    assertThat(resp.getHeaderValue(headerKey)).isEqualTo(headerValue);
                 }
             });
             return this;
@@ -62,9 +59,8 @@ public interface StoreResponseValidator {
             validators.add(new StoreResponseValidator() {
                 @Override
                 public void validate(StoreResponse resp) {
-                    assertThat(Arrays.asList(resp.getResponseHeaderNames())).asList().contains(headerKey);
-                    int index = Arrays.asList(resp.getResponseHeaderNames()).indexOf(headerKey);
-                    String value = resp.getResponseHeaderValues()[index];
+                    String value = resp.getHeaderValue(headerKey);
+                    assertThat(value).isNotNull();
                     condition.matches(value);
                 }
             });

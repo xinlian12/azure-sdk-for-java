@@ -35,6 +35,9 @@ import reactor.util.context.Context;
 import java.lang.invoke.WrongMethodTypeException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -414,6 +417,20 @@ public class ReactorNettyClient implements HttpClient {
             HttpHeaders headers = new HttpHeaders(reactorNettyResponse.responseHeaders().size());
             reactorNettyResponse.responseHeaders().forEach(e -> headers.set(e.getKey(), e.getValue()));
             return headers;
+        }
+
+        @Override
+        public Map<String, String> headersAsLowerCaseMap() {
+            boolean isHttp2 = reactorNettyResponse.version().majorVersion() == 2;
+            int size = reactorNettyResponse.responseHeaders().size();
+            Map<String, String> map = new HashMap<>(size);
+            if (isHttp2) {
+                reactorNettyResponse.responseHeaders().forEach(e -> map.put(e.getKey(), e.getValue()));
+            } else {
+                reactorNettyResponse.responseHeaders().forEach(
+                    e -> map.put(e.getKey().toLowerCase(Locale.ROOT), e.getValue()));
+            }
+            return map;
         }
 
         @Override

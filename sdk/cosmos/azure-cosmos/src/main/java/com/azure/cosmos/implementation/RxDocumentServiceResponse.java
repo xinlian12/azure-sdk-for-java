@@ -32,18 +32,13 @@ public class RxDocumentServiceResponse {
     private CosmosDiagnostics cosmosDiagnostics;
 
     public RxDocumentServiceResponse(DiagnosticsClientContext diagnosticsClientContext, StoreResponse response) {
-        String[] headerNames = response.getResponseHeaderNames();
-        String[] headerValues = response.getResponseHeaderValues();
 
-        this.headersMap = new HashMap<>(headerNames.length);
+        // StoreResponse.getResponseHeaders() returns an unmodifiable view over lowercase-keyed map.
+        // Copy it for RxDocumentServiceResponse's own mutable use (callers may put into headersMap).
+        this.headersMap = new HashMap<>(response.getResponseHeaders());
 
         // Gets status code.
         this.statusCode = response.getStatus();
-
-        // Extracts headers.
-        for (int i = 0; i < headerNames.length; i++) {
-            this.headersMap.put(headerNames[i], headerValues[i]);
-        }
 
         this.storeResponse = response;
         this.diagnosticsClientContext = diagnosticsClientContext;
