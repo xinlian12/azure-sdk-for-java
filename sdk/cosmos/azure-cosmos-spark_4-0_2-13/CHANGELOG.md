@@ -5,12 +5,12 @@
 #### Features Added
 * Added support for change feed with `startFrom` point-in-time on merged partitions by enabling the `CHANGE_FEED_WITH_START_TIME_POST_MERGE` SDK capability in the azure-cosmos SDK. - See [PR 48752](https://github.com/Azure/azure-sdk-for-java/pull/48752)
 
-#### Other Changes
-* Refactored to use shared `azure-cosmos-spark_4` base module for code common across Spark 4.x versions. - See [PR 48861](https://github.com/Azure/azure-sdk-for-java/pull/48861)
-
 #### Bugs Fixed
 * Fixed `NoClassDefFoundError` for `MetadataVersionUtil` when using change feed Spark Structured Streaming on Databricks Runtime 17.3+ by inlining the version validation logic. - See [PR 48837](https://github.com/Azure/azure-sdk-for-java/pull/48837)
 * Fixed JVM `<clinit>` deadlock when multiple threads concurrently trigger Cosmos SDK class loading for the first time. - See [PR 48689](https://github.com/Azure/azure-sdk-for-java/pull/48689)
+
+#### Other Changes
+* Refactored to use shared `azure-cosmos-spark_4` base module for code common across Spark 4.x versions. - See [PR 48861](https://github.com/Azure/azure-sdk-for-java/pull/48861)
 
 ### 4.46.0 (2026-03-27)
 

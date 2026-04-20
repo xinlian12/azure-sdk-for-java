@@ -65,7 +65,7 @@
             <goals>
               <goal>add-source</goal>
             </goals>
-            <configuration>
+            <configuration combine.self="override">
               <sources>
                 <!-- scala-hdfs intentionally omitted: Spark 4.1 SPARK-52787 moved HDFSMetadataLog
                      to streaming.checkpointing package; overrides provided in ./src/main/scala -->
@@ -81,7 +81,7 @@
             <goals>
               <goal>add-test-source</goal>
             </goals>
-            <configuration>
+            <configuration combine.self="override">
               <sources>
                 <!-- test/scala-hdfs intentionally omitted: see add-sources comment above -->
                 <source>${basedir}/../azure-cosmos-spark_3/src/test/scala</source>
