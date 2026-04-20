@@ -161,7 +161,7 @@ stages:
       SparkVersion: 'azure-cosmos-spark_4-1_2-13'
       # NOTE: This cluster must be provisioned in the Databricks workspace with a
       # Spark 4.1-compatible runtime before this stage can run successfully.
-      ClusterName: 'oltp-ci-spark41-2workers-ds3v2-17.3'
+      ClusterName: 'oltp-ci-spark40-2workers-d4dsv5-18.1'
       AvoidDBFS: true
       JavaVersion: '1.21'
       JarStorageAccountKey: $(spark-databricks-cosmos-spn-clientIdCert)
