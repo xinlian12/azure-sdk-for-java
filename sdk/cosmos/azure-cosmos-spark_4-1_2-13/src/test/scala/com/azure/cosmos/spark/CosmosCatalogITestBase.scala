@@ -1,6 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
-// This file mirrors azure-cosmos-spark_3/src/test/scala-hdfs/.../CosmosCatalogITestBase.scala
 // with HDFSMetadataLog import updated for SPARK-52787. Keep in sync.
 package com.azure.cosmos.spark
 //scalastyle:off file.size.limit

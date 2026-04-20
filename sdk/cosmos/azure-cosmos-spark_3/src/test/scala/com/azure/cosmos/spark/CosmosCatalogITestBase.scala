@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
-// NOTE: Override copy exists in azure-cosmos-spark_4-1_2-13 — keep in sync (see SPARK-52787)
 package com.azure.cosmos.spark
-//scalastyle:off file.size.limit
 
 import com.azure.cosmos.CosmosException
 import com.azure.cosmos.implementation.{TestConfigurations, Utils}
@@ -90,10 +88,8 @@ abstract class CosmosCatalogITestBase(val skipHive: Boolean = false) extends Int
       val containerName = RandomStringUtils.randomAlphabetic(6).toLowerCase + System.currentTimeMillis()
 
       spark.sql(s"CREATE DATABASE testCatalog.$databaseName;")
-      // scalastyle:off line.size.limit
       spark.sql(s"CREATE TABLE testCatalog.$databaseName.$containerName (word STRING, number INT) using cosmos.oltp " +
           s"TBLPROPERTIES(partitionKeyPath = '/tenantId,/userId,/sessionId', partitionKeyVersion = 'V2', partitionKeyKind = 'MultiHash', manualThroughput = '1100')")
-      // scalastyle:on line.size.limit
 
       val containerProperties = cosmosClient.getDatabase(databaseName).getContainer(containerName).read().block().getProperties
       containerProperties.getPartitionKeyDefinition.getPaths.asScala.toArray should equal(Array("/tenantId", "/userId", "/sessionId"))
@@ -501,7 +497,7 @@ abstract class CosmosCatalogITestBase(val skipHive: Boolean = false) extends Int
         raw""""excludedPaths":[{"path":"\/*"}],"vectorIndexes":[{"path":"\/vector1","type":"flat"}]}"""
 
     spark.sql(s"CREATE DATABASE testCatalog.$databaseName;")
-
+    
     spark.sql(s"CREATE TABLE testCatalog.$databaseName.$containerName (word STRING, number INT) using cosmos.oltp " +
       s"TBLPROPERTIES(partitionKeyPath = '/mypk', manualThroughput = '1100', " +
       s"indexingPolicy = '$indexingPolicyJson', " +
@@ -512,7 +508,7 @@ abstract class CosmosCatalogITestBase(val skipHive: Boolean = false) extends Int
 
     // validate vector embedding policy
     val vectorEmbeddingPolicy = containerProperties.getVectorEmbeddingPolicy
-    vectorEmbeddingPolicy should not be null // scalastyle:ignore null
+    vectorEmbeddingPolicy should not be null
     vectorEmbeddingPolicy.getVectorEmbeddings should have size 1
     val embedding = vectorEmbeddingPolicy.getVectorEmbeddings.get(0)
     embedding.getPath shouldEqual "/vector1"

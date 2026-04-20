@@ -47,6 +47,50 @@
   <build>
     <plugins>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>2.4.3</version>
+        <executions>
+          <execution>
+            <id>copy-shared-sources</id>
+            <phase>initialize</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}/shared-sources</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${basedir}/../azure-cosmos-spark_3/src/main/scala</directory>
+                  <excludes>
+                    <exclude>**/ChangeFeedInitialOffsetWriter.scala</exclude>
+                    <exclude>**/CosmosCatalogBase.scala</exclude>
+                  </excludes>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-shared-test-sources</id>
+            <phase>initialize</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.directory}/shared-test-sources</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${basedir}/../azure-cosmos-spark_3/src/test/scala</directory>
+                  <excludes>
+                    <exclude>**/CosmosCatalogITestBase.scala</exclude>
+                  </excludes>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>
         <version>3.6.1</version> <!-- {x-version-update;org.codehaus.mojo:build-helper-maven-plugin;external_dependency} -->
@@ -59,9 +103,7 @@
             </goals>
             <configuration combine.self="override">
               <sources>
-                <!-- scala-hdfs intentionally omitted: Spark 4.1 SPARK-52787 moved HDFSMetadataLog
-                     to streaming.checkpointing package; overrides provided in ./src/main/scala -->
-                <source>${basedir}/../azure-cosmos-spark_3/src/main/scala</source>
+                <source>${project.build.directory}/shared-sources</source>
                 <source>${basedir}/../azure-cosmos-spark_4/src/main/scala</source>
                 <source>${basedir}/src/main/scala</source>
               </sources>
@@ -75,8 +117,7 @@
             </goals>
             <configuration combine.self="override">
               <sources>
-                <!-- test/scala-hdfs intentionally omitted: see add-sources comment above -->
-                <source>${basedir}/../azure-cosmos-spark_3/src/test/scala</source>
+                <source>${project.build.directory}/shared-test-sources</source>
                 <source>${basedir}/../azure-cosmos-spark_4/src/test/scala</source>
                 <source>${basedir}/src/test/scala</source>
               </sources>

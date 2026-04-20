@@ -1,6 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
-// NOTE: Override copy exists in azure-cosmos-spark_4-1_2-13 — keep in sync (see SPARK-52787)
 package com.azure.cosmos.spark
 
 import org.apache.spark.sql.SparkSession
@@ -40,7 +39,7 @@ private class ChangeFeedInitialOffsetWriter
 
   private def readerToString(reader: java.io.Reader): String = {
     val writer = new StringBuilderWriter
-    val buffer = new Array[Char](4096) // scalastyle:ignore magic.number
+    val buffer = new Array[Char](4096)
     Stream.continually(reader.read(buffer)).takeWhile(_ != -1).foreach(writer.write(buffer, 0, _))
     writer.toString
   }
@@ -77,7 +76,7 @@ private[spark] object ChangeFeedInitialOffsetWriter {
               s"Log file was malformed: failed to read correct log version from $versionText.")
         }
       if (version > 0 && version <= maxSupportedVersion) {
-        return version // scalastyle:ignore return
+        return version
       }
       if (version > maxSupportedVersion) {
         throw new IllegalStateException(

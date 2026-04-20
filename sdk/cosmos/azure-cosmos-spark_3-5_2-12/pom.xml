@@ -69,7 +69,6 @@
             <configuration>
               <sources>
                 <source>${basedir}/../azure-cosmos-spark_3/src/main/scala</source>
-                <source>${basedir}/../azure-cosmos-spark_3/src/main/scala-hdfs</source>
                 <source>${basedir}/../azure-cosmos-spark_3-5/src/main/scala</source>
                 <source>${basedir}/src/main/scala</source>
               </sources>
@@ -84,7 +83,6 @@
             <configuration>
               <sources>
                 <source>${basedir}/../azure-cosmos-spark_3/src/test/scala</source>
-                <source>${basedir}/../azure-cosmos-spark_3/src/test/scala-hdfs</source>
                 <source>${basedir}/../azure-cosmos-spark_3-5/src/test/scala</source>
                 <source>${basedir}/src/test/scala</source>
               </sources>
