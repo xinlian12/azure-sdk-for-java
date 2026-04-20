@@ -10,9 +10,9 @@
 #
 # Run from the repo root or sdk/cosmos directory.
 #
-# TODO: Wire this script into CI. The cosmos-sdk-client.yml pipeline template does
-# not currently support PreBuildSteps, and the emulator matrix runs on Windows agents
-# where bash is unavailable. Options for a follow-up:
+# TODO: Wire this script into CI — tracked in https://github.com/Azure/azure-sdk-for-java/issues/48881
+# The cosmos-sdk-client.yml pipeline template does not currently support PreBuildSteps,
+# and the emulator matrix runs on Windows agents where bash is unavailable. Options:
 #   1. Add PreBuildSteps support to cosmos-sdk-client.yml and invoke from ci.yml
 #   2. Rewrite as a platform-independent check (e.g., Maven Enforcer custom rule)
 #   3. Add a dedicated Linux-based validation stage to ci.yml
