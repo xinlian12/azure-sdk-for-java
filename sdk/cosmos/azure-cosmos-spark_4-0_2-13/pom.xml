@@ -163,7 +163,7 @@
     </profile>
     <profile>
       <!-- Skip build and tests for Java < 17 - Spark 4.0 dependencies require Java 17+ -->
-      <id>spark-4-0-skip-java-lt-17</id>
+      <id>spark-4-0-disable-tests-java-lt-17</id>
       <activation>
         <jdk>(,17)</jdk>
       </activation>
