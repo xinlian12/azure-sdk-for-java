@@ -65,6 +65,7 @@
                   <excludes>
                     <exclude>**/ChangeFeedInitialOffsetWriter.scala</exclude>
                     <exclude>**/CosmosCatalogBase.scala</exclude>
+                    <exclude>**/ItemsBatchWriter.scala</exclude>
                   </excludes>
                 </resource>
               </resources>
