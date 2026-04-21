@@ -41,6 +41,8 @@
   <properties>
     <cosmos.spark.skip>false</cosmos.spark.skip>
     <cosmos-spark-version>4.1</cosmos-spark-version>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
     <spotless.skip>true</spotless.skip>
   </properties>
 
@@ -208,34 +210,14 @@
     </profile>
     <profile>
       <!-- Disable unit tests for Java < 17 - Spark 4.1 dependencies require Java 17+ to run -->
-      <!-- Also skip Scala compilation because Spark 4.1 references java.lang.Record (JDK 16+),
-           so the Scala compiler on JDK 8/11 cannot resolve it even with -release 1.8. -->
       <id>spark-4-1-disable-tests-java-lt-17</id>
       <activation>
         <jdk>(,17)</jdk>
       </activation>
       <properties>
-        <skipTests>true</skipTests>
         <cosmos.spark.skip>true</cosmos.spark.skip>
+        <skipTests>true</skipTests>
       </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>net.alchim31.maven</groupId>
-            <artifactId>scala-maven-plugin</artifactId>
-            <configuration>
-              <skip>true</skip>
-            </configuration>
-          </plugin>
-          <plugin>
-            <groupId>org.scalastyle</groupId>
-            <artifactId>scalastyle-maven-plugin</artifactId>
-            <configuration>
-              <skip>true</skip>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
     <profile>
       <id>java9-plus</id>
