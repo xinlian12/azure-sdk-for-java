@@ -60,7 +60,6 @@
             <configuration combine.self="override">
               <sources>
                 <source>${basedir}/../azure-cosmos-spark_3/src/main/scala</source>
-                <source>${basedir}/../azure-cosmos-spark_3/src/main/scala</source>
                 <source>${basedir}/../azure-cosmos-spark_4/src/main/scala</source>
                 <source>${basedir}/src/main/scala</source>
               </sources>
@@ -74,7 +73,6 @@
             </goals>
             <configuration combine.self="override">
               <sources>
-                <source>${basedir}/../azure-cosmos-spark_3/src/test/scala</source>
                 <source>${basedir}/../azure-cosmos-spark_3/src/test/scala</source>
                 <source>${basedir}/../azure-cosmos-spark_4/src/test/scala</source>
                 <source>${basedir}/src/test/scala</source>

@@ -84,7 +84,9 @@ Contribution is welcome. Please follow
 [this instruction](https://github.com/Azure/azure-sdk-for-java/blob/main/CONTRIBUTING.md) to contribute code.
 
 ## HDFS override file sync
-When modifying files in `azure-cosmos-spark_3/src/{main,test}/scala-hdfs/`, you **must** also
+When modifying the HDFS-dependent files (`ChangeFeedInitialOffsetWriter.scala`,
+`CosmosCatalogBase.scala`, `CosmosCatalogITestBase.scala`) in
+`azure-cosmos-spark_3/src/{main,test}/scala/`, you **must** also
 update the corresponding override files in `azure-cosmos-spark_4-1_2-13/src/` and run
 the drift guard script to verify they stay in sync:
 

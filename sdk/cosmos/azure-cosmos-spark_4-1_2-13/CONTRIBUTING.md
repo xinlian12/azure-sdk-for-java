@@ -96,7 +96,7 @@ through and may cause duplicate source paths or compilation failures.
 
 ## HDFS override file sync
 This module provides 3 override files for `HDFSMetadataLog` (SPARK-52787). When modifying
-the original files in `azure-cosmos-spark_3/src/{main,test}/scala-hdfs/`, you **must** also
+the original files in `azure-cosmos-spark_3/src/{main,test}/scala/`, you **must** also
 update the corresponding overrides here and run the drift guard script:
 
 ```bash

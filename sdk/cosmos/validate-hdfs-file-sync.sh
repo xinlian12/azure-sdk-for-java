@@ -3,7 +3,7 @@
 # Licensed under the MIT License.
 #
 # Validates that the HDFS-dependent override files in azure-cosmos-spark_4-1_2-13
-# stay in sync with the originals in azure-cosmos-spark_3/src/{main,test}/scala-hdfs.
+# stay in sync with the originals in azure-cosmos-spark_3/src/{main,test}/scala.
 # The files should be identical except for:
 #   - The HDFSMetadataLog import line (streaming vs streaming.checkpointing)
 #   - The 2-line header comment in the 4-1 overrides referencing the original file
@@ -28,18 +28,23 @@ if [[ -d "${COSMOS_DIR}/sdk/cosmos" ]]; then
 fi
 
 FILE_PAIRS=(
-  "azure-cosmos-spark_3/src/main/scala-hdfs/com/azure/cosmos/spark/ChangeFeedInitialOffsetWriter.scala|azure-cosmos-spark_4-1_2-13/src/main/scala/com/azure/cosmos/spark/ChangeFeedInitialOffsetWriter.scala"
-  "azure-cosmos-spark_3/src/main/scala-hdfs/com/azure/cosmos/spark/CosmosCatalogBase.scala|azure-cosmos-spark_4-1_2-13/src/main/scala/com/azure/cosmos/spark/CosmosCatalogBase.scala"
-  "azure-cosmos-spark_3/src/test/scala-hdfs/com/azure/cosmos/spark/CosmosCatalogITestBase.scala|azure-cosmos-spark_4-1_2-13/src/test/scala/com/azure/cosmos/spark/CosmosCatalogITestBase.scala"
+  "azure-cosmos-spark_3/src/main/scala/com/azure/cosmos/spark/ChangeFeedInitialOffsetWriter.scala|azure-cosmos-spark_4-1_2-13/src/main/scala/com/azure/cosmos/spark/ChangeFeedInitialOffsetWriter.scala"
+  "azure-cosmos-spark_3/src/main/scala/com/azure/cosmos/spark/CosmosCatalogBase.scala|azure-cosmos-spark_4-1_2-13/src/main/scala/com/azure/cosmos/spark/CosmosCatalogBase.scala"
+  "azure-cosmos-spark_3/src/test/scala/com/azure/cosmos/spark/CosmosCatalogITestBase.scala|azure-cosmos-spark_4-1_2-13/src/test/scala/com/azure/cosmos/spark/CosmosCatalogITestBase.scala"
 )
 
-# Normalize a file by removing sync-related comments and replacing the
-# checkpointing import with the old import for comparison purposes.
+# Normalize a file by removing sync-related comments, scalastyle annotations,
+# and replacing the checkpointing import with the old import for comparison purposes.
 normalize() {
   grep -v '// This file mirrors azure-cosmos-spark_3' "$1" \
     | grep -v '// with HDFSMetadataLog import updated for SPARK-52787' \
     | grep -v '// NOTE: Override copy exists in azure-cosmos-spark_4-1_2-13' \
-    | sed 's/org\.apache\.spark\.sql\.execution\.streaming\.checkpointing\.HDFSMetadataLog/org.apache.spark.sql.execution.streaming.HDFSMetadataLog/g'
+    | grep -v '//scalastyle:off' \
+    | grep -v '// scalastyle:off' \
+    | grep -v '// scalastyle:on' \
+    | sed 's/ *\/\/ scalastyle:ignore.*//g' \
+    | sed 's/org\.apache\.spark\.sql\.execution\.streaming\.checkpointing\.HDFSMetadataLog/org.apache.spark.sql.execution.streaming.HDFSMetadataLog/g' \
+    | sed 's/[[:space:]]*$//'
 }
 
 FAILURES=0
