@@ -95,6 +95,16 @@
             </executions>
           </plugin>
           <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <!-- Override inherited target=1.8 from spark_3 — Spark 4.x requires JDK 17+
+                 and Spark 4.1 APIs reference java.lang.Record (JDK 14+). -->
+            <configuration>
+              <source>17</source>
+              <target>17</target>
+            </configuration>
+          </plugin>
+          <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-enforcer-plugin</artifactId>
             <version>3.6.1</version> <!-- {x-version-update;org.apache.maven.plugins:maven-enforcer-plugin;external_dependency} -->
