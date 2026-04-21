@@ -33,8 +33,12 @@
     <scalactic.version>3.2.3</scalactic.version> <!-- {x-version-update;cosmos-scala213_org.scalactic:scalactic_2.13;external_dependency} -->
     <scalamock.version>5.0.0</scalamock.version> <!-- {x-version-update;cosmos-scala213_org.scalamock:scalamock_2.13;external_dependency} -->
     <scala-jackson.version>2.18.6</scala-jackson.version> <!-- {x-version-update;com.fasterxml.jackson.module:jackson-module-scala_2.13;external_dependency} -->
-    <maven.compiler.source>17</maven.compiler.source>
-    <maven.compiler.target>17</maven.compiler.target>
+    <!-- maven.compiler.source/target inherited as 8 from spark_3 grandparent.
+         There are no Java sources in Spark connector modules (Scala only), so the
+         javac source/target level is irrelevant.  Scala bytecode target is set to
+         17 in the build-scala profile's scala-maven-plugin configuration below.
+         Keeping the inherited value of 8 avoids maven-compiler-plugin failures
+         when the CI matrix runs NotFromSource builds on Java 8 or 11. -->
   </properties>
   <profiles>
     <!-- build-scala profile: serves as template for child modules (spark_4-0, spark_4-1).
