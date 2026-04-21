@@ -41,8 +41,7 @@ private class ItemsBatchWriter
   }
 
   override def useCommitCoordinator(): Boolean = {
-    return false
-    // TODO
+    false
   }
 
   // Databricks Runtime 18.1+ adds storeOffsets() to the BatchWrite interface.
