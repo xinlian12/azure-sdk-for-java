@@ -30,6 +30,11 @@ import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNo
  */
 public class StoreResponse {
     private static final Logger logger = LoggerFactory.getLogger(StoreResponse.class.getSimpleName());
+
+    // Initial capacity for the replica-status map. Chosen to avoid resizing in
+    // the common case where only a handful of replica status entries are tracked.
+    private static final int REPLICA_STATUS_MAP_INITIAL_CAPACITY = 6;
+
     final private int status;
     final private String[] responseHeaderNames;
     final private String[] responseHeaderValues;
@@ -69,7 +74,7 @@ public class StoreResponse {
         }
 
         this.status = status;
-        replicaStatusList = new HashMap<>(6);
+        replicaStatusList = new HashMap<>(REPLICA_STATUS_MAP_INITIAL_CAPACITY);
         this.responsePayload = parseResponsePayload(
             contentStream, responsePayloadLength, responseHeaderNames, responseHeaderValues);
     }
@@ -101,14 +106,14 @@ public class StoreResponse {
         // This is kept separate from populateLowerCaseHeaders because HttpHeaders is a
         // general-purpose HTTP class and should not contain Cosmos-specific URL-decoding logic.
         for (int i = 0; i < headerCount; i++) {
-            if (HttpConstants.HttpHeaders.OWNER_FULL_NAME.equals(responseHeaderNames[i])) {
+            if (HttpConstants.HttpHeaders.OWNER_FULL_NAME.equalsIgnoreCase(responseHeaderNames[i])) {
                 responseHeaderValues[i] = HttpUtils.urlDecode(responseHeaderValues[i]);
                 break;
             }
         }
 
         this.status = status;
-        replicaStatusList = new HashMap<>(6);
+        replicaStatusList = new HashMap<>(REPLICA_STATUS_MAP_INITIAL_CAPACITY);
         this.responsePayload = parseResponsePayload(
             contentStream, responsePayloadLength, responseHeaderNames, responseHeaderValues);
     }
@@ -134,7 +139,7 @@ public class StoreResponse {
         }
 
         this.status = status;
-        replicaStatusList = new HashMap<>(6);
+        replicaStatusList = new HashMap<>(REPLICA_STATUS_MAP_INITIAL_CAPACITY);
         this.responsePayload = responsePayload;
     }
 

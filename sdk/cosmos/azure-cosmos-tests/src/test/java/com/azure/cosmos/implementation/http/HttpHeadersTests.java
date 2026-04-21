@@ -5,9 +5,11 @@ package com.azure.cosmos.implementation.http;
 
 import org.testng.annotations.Test;
 
+import java.util.Locale;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class HttpHeadersTests {
 
@@ -40,7 +42,7 @@ public class HttpHeadersTests {
 
         // All names should be lowercase
         for (String name : names) {
-            assertThat(name).isEqualTo(name.toLowerCase());
+            assertThat(name).isEqualTo(name.toLowerCase(Locale.ROOT));
         }
 
         // Verify values are present (order depends on HashMap iteration, so use containment)
@@ -64,5 +66,40 @@ public class HttpHeadersTests {
 
         assertThat(names).isEmpty();
         assertThat(values).isEmpty();
+    }
+
+    @Test(groups = "unit")
+    public void populateLowerCaseHeadersRejectsNullNames() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Key", "value");
+
+        assertThatThrownBy(() -> headers.populateLowerCaseHeaders(null, new String[1]))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("names");
+    }
+
+    @Test(groups = "unit")
+    public void populateLowerCaseHeadersRejectsNullValues() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Key", "value");
+
+        assertThatThrownBy(() -> headers.populateLowerCaseHeaders(new String[1], null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("values");
+    }
+
+    @Test(groups = "unit")
+    public void populateLowerCaseHeadersRejectsTooSmallArrays() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("A", "1");
+        headers.set("B", "2");
+
+        assertThatThrownBy(() -> headers.populateLowerCaseHeaders(new String[1], new String[2]))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("names");
+
+        assertThatThrownBy(() -> headers.populateLowerCaseHeaders(new String[2], new String[1]))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("values");
     }
 }

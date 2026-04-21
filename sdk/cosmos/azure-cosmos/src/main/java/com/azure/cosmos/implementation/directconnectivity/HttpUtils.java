@@ -30,7 +30,11 @@ public class HttpUtils {
      * without resizing, accounting for the default load factor of 0.75.
      */
     public static int mapCapacityForSize(int expectedSize) {
-        return expectedSize * 4 / 3 + 1;
+        if (expectedSize <= 0) {
+            return 1;
+        }
+        long capacity = (long) expectedSize * 4 / 3 + 1;
+        return capacity >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) capacity;
     }
 
     public static String urlEncode(String url) {

@@ -141,6 +141,22 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * @param values array to populate with header values (must be at least size() long)
      */
     public void populateLowerCaseHeaders(String[] names, String[] values) {
+        if (names == null) {
+            throw new IllegalArgumentException("Parameter 'names' must not be null.");
+        }
+        if (values == null) {
+            throw new IllegalArgumentException("Parameter 'values' must not be null.");
+        }
+        int headerCount = headers.size();
+        if (names.length < headerCount) {
+            throw new IllegalArgumentException(
+                "Parameter 'names' must have length >= size(). Required: " + headerCount + ", actual: " + names.length);
+        }
+        if (values.length < headerCount) {
+            throw new IllegalArgumentException(
+                "Parameter 'values' must have length >= size(). Required: " + headerCount + ", actual: " + values.length);
+        }
+
         int i = 0;
         for (Map.Entry<String, HttpHeader> entry : headers.entrySet()) {
             names[i] = entry.getKey();

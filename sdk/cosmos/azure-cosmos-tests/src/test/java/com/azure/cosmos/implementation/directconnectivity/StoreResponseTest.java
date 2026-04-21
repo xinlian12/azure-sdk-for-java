@@ -3,6 +3,7 @@
 
 package com.azure.cosmos.implementation.directconnectivity;
 
+import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.http.HttpHeaders;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -109,5 +110,23 @@ public class StoreResponseTest {
         assertThat(sp.getStatus()).isEqualTo(204);
         assertThat(sp.getResponseBodyAsJson()).isNull();
         assertThat(sp.getHeaderValue("key1")).isEqualTo("value1");
+    }
+
+    @Test(groups = { "unit" })
+    public void httpHeadersConstructorDecodesOwnerFullName() {
+        // OWNER_FULL_NAME value with URL-encoded segments (e.g. spaces encoded as %20)
+        String encodedOwner = "dbs%2FmyDb%2Fcolls%2Fmy%20Collection";
+        String expectedDecoded = "dbs/myDb/colls/my Collection";
+
+        HttpHeaders httpHeaders = new HttpHeaders();
+        httpHeaders.set(HttpConstants.HttpHeaders.OWNER_FULL_NAME, encodedOwner);
+        httpHeaders.set("X-Other", "plain");
+
+        StoreResponse sp = new StoreResponse("endpoint", 200, httpHeaders, null, 0);
+
+        // The encoded OWNER_FULL_NAME should be URL-decoded when accessed via getHeaderValue
+        assertThat(sp.getHeaderValue(HttpConstants.HttpHeaders.OWNER_FULL_NAME)).isEqualTo(expectedDecoded);
+        // Other headers are left as-is
+        assertThat(sp.getHeaderValue("X-Other")).isEqualTo("plain");
     }
 }
