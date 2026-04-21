@@ -426,8 +426,8 @@
             <artifactId>scala-maven-plugin</artifactId>
             <version>4.8.1</version> <!-- {x-version-update;cosmos_net.alchim31.maven:scala-maven-plugin;external_dependency} -->
             <configuration>
-              <source>1.8</source>
-              <target>1.8</target>
+              <source>${maven.compiler.source}</source>
+              <target>${maven.compiler.target}</target>
               <scalaVersion>${scala.version}</scalaVersion>
             </configuration>
             <executions>
