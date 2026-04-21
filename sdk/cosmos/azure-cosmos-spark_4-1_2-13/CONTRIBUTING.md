@@ -94,13 +94,6 @@ corresponding `combine.self="override"` execution with the same ID in this modul
 (and in `azure-cosmos-spark_4-0_2-13/pom.xml`). Otherwise the parent execution silently leaks
 through and may cause duplicate source paths or compilation failures.
 
-## HDFS override file sync
-This module provides 3 override files for `HDFSMetadataLog` (SPARK-52787). When modifying
-the original files in `azure-cosmos-spark_3/src/{main,test}/scala/`, you **must** also
-update the corresponding overrides here and run the drift guard script:
-
-```bash
-bash sdk/cosmos/validate-hdfs-file-sync.sh
-```
-
-See [validate-hdfs-file-sync.sh](https://github.com/Azure/azure-sdk-for-java/blob/main/sdk/cosmos/validate-hdfs-file-sync.sh) for details.
+## Contribute to code
+Contribution is welcome. Please follow
+[this instruction](https://github.com/Azure/azure-sdk-for-java/blob/main/CONTRIBUTING.md) to contribute code.
