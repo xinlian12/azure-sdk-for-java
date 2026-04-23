@@ -151,6 +151,8 @@ public class ReactorNettyClient implements HttpClient {
                         )))
                 .protocol(HttpProtocol.H2, HttpProtocol.HTTP11)
                 .http2Settings(settings -> settings
+                    // headerTableSize defaults to 4096 bytes per HTTP/2 spec (RFC 7540),
+                    // allowing the server to use HPACK dynamic table for response header compression
                     .initialWindowSize(1024 * 1024) // 1MB initial window size
                     .maxFrameSize(64 * 1024)        // 64KB max frame size
                     .maxConcurrentStreams(httpCfgAccessor().getEffectiveMaxConcurrentStreams(http2Cfg))  // Increased from default 30
