@@ -7,6 +7,7 @@ import com.azure.cosmos.implementation.Constants.UrlEncodingInfo;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.Strings;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
+import com.azure.cosmos.implementation.http.HttpHeader;
 import com.azure.cosmos.implementation.http.HttpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,14 +52,14 @@ public class HttpUtils {
 
     public static Map<String, String> asMap(HttpHeaders headers) {
         if (headers == null) {
-            return new HashMap<>();
+            return new HashMap<>(4);
         }
         HashMap<String, String> map = new HashMap<>(headers.size());
-        for (Entry<String, String> entry : headers.toMap().entrySet()) {
-            if (entry.getKey().equals(HttpConstants.HttpHeaders.OWNER_FULL_NAME)) {
-                map.put(entry.getKey(), HttpUtils.urlDecode(entry.getValue()));
+        for (HttpHeader header : headers) {
+            if (header.name().equals(HttpConstants.HttpHeaders.OWNER_FULL_NAME)) {
+                map.put(header.name(), HttpUtils.urlDecode(header.value()));
             } else {
-                map.put(entry.getKey(), entry.getValue());
+                map.put(header.name(), header.value());
             }
         }
         return map;

@@ -24,7 +24,7 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * Create an empty HttpHeaders instance.
      */
     public HttpHeaders() {
-        this.headers = new HashMap<>();
+        this.headers = new HashMap<>(16);
     }
 
     /**
@@ -66,7 +66,7 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * @return this HttpHeaders
      */
     public HttpHeaders set(String name, String value) {
-        final String headerKey = name.toLowerCase(Locale.ROOT);
+        final String headerKey = isAsciiLowerCase(name) ? name : name.toLowerCase(Locale.ROOT);
         if (value == null) {
             headers.remove(headerKey);
         } else {
@@ -100,8 +100,18 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
     }
 
     private HttpHeader getHeader(String headerName) {
-        final String headerKey = headerName.toLowerCase(Locale.ROOT);
+        final String headerKey = isAsciiLowerCase(headerName) ? headerName : headerName.toLowerCase(Locale.ROOT);
         return headers.get(headerKey);
+    }
+
+    private static boolean isAsciiLowerCase(String s) {
+        for (int i = 0, len = s.length(); i < len; i++) {
+            char c = s.charAt(i);
+            if (c >= 'A' && c <= 'Z') {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -128,6 +138,22 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
             result.put(headerName, headers.get(headerName).value());
         }
         return result;
+    }
+
+    /**
+     * Populates the provided arrays with lowercased header names and their values
+     * directly from the internal map, avoiding intermediate HashMap allocation.
+     *
+     * @param names  array to populate with lowercased header names (must be at least size() long)
+     * @param values array to populate with header values (must be at least size() long)
+     */
+    public void populateLowerCaseHeaders(String[] names, String[] values) {
+        int i = 0;
+        for (Map.Entry<String, HttpHeader> entry : headers.entrySet()) {
+            names[i] = entry.getKey();
+            values[i] = entry.getValue().value();
+            i++;
+        }
     }
 
     @Override
