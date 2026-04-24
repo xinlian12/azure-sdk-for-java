@@ -13,6 +13,7 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.logging.LogLevel;
 import io.netty.resolver.DefaultAddressResolverGroup;
+import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.ResourceLeakDetector;
 import org.reactivestreams.Publisher;
@@ -35,6 +36,8 @@ import reactor.util.context.Context;
 import java.lang.invoke.WrongMethodTypeException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -393,6 +396,7 @@ public class ReactorNettyClient implements HttpClient {
 
         private final HttpClientResponse reactorNettyResponse;
         private final Connection reactorNettyConnection;
+        private HttpHeaders cachedHeaders;
 
         ReactorNettyHttpResponse(HttpClientResponse reactorNettyResponse, Connection reactorNettyConnection) {
             this.reactorNettyResponse = reactorNettyResponse;
@@ -411,9 +415,30 @@ public class ReactorNettyClient implements HttpClient {
 
         @Override
         public HttpHeaders headers() {
-            HttpHeaders headers = new HttpHeaders(reactorNettyResponse.responseHeaders().size());
-            reactorNettyResponse.responseHeaders().forEach(e -> headers.set(e.getKey(), e.getValue()));
-            return headers;
+            HttpHeaders result = cachedHeaders;
+            if (result != null) {
+                return result;
+            }
+            io.netty.handler.codec.http.HttpHeaders nettyHeaders = reactorNettyResponse.responseHeaders();
+            int size = nettyHeaders.size();
+            result = new HttpHeaders(size);
+            boolean isHttp2 = reactorNettyResponse.version().majorVersion() >= 2;
+            Iterator<Map.Entry<CharSequence, CharSequence>> it = nettyHeaders.iteratorCharSequence();
+            while (it.hasNext()) {
+                Map.Entry<CharSequence, CharSequence> entry = it.next();
+                CharSequence key = entry.getKey();
+                String value = entry.getValue().toString();
+                if (isHttp2) {
+                    // HTTP/2 header names are already lowercase per RFC 7540 §8.1.2
+                    result.setLowerCase(key.toString(), value);
+                } else if (key instanceof AsciiString) {
+                    result.setLowerCase(((AsciiString) key).toLowerCase().toString(), value);
+                } else {
+                    result.set(key.toString(), value);
+                }
+            }
+            cachedHeaders = result;
+            return result;
         }
 
         @Override
