@@ -169,6 +169,15 @@ public class BenchmarkConfig {
     }
 
     /**
+     * Loads dispatch config from a JSON file. Package-private for testing.
+     */
+    void loadDispatchConfigFromFile(File configFile) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode root = mapper.readTree(configFile);
+        loadDispatchConfig(root);
+    }
+
+    /**
      * Orchestrator-level dispatch settings from the JSON root.
      * These control how many total operations to run and with what concurrency.
      */

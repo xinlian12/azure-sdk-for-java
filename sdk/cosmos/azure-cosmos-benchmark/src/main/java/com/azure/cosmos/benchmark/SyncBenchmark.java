@@ -298,17 +298,23 @@ abstract class SyncBenchmark<T> implements Benchmark {
             .subscribeOn(scheduler)
             .doOnSuccess(v -> SyncBenchmark.this.onSuccess())
             .doOnError(e -> {
-                logger.error("Encountered failure {} on thread {}",
-                    e.getMessage(), Thread.currentThread().getName(), e);
-                SyncBenchmark.this.onError(e);
+                try {
+                    logger.error("Encountered failure {} on thread {}",
+                        e.getMessage(), Thread.currentThread().getName(), e);
+                    SyncBenchmark.this.onError(e);
+                } catch (Exception handlerEx) {
+                    logger.error("onError handler threw for original error: {}", e.getMessage(), handlerEx);
+                }
             });
     }
 
     public void run() throws Exception {
 
         // Lazily create the executor for standalone (non-dispatch) mode
-        if (executorService == null) {
-            executorService = Executors.newFixedThreadPool(workloadConfig.getConcurrency());
+        synchronized (this) {
+            if (executorService == null) {
+                executorService = Executors.newFixedThreadPool(workloadConfig.getConcurrency());
+            }
         }
 
         long startTime = System.currentTimeMillis();

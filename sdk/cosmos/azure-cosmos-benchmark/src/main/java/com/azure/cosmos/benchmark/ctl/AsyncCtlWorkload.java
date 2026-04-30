@@ -188,10 +188,19 @@ public class AsyncCtlWorkload implements Benchmark {
         // Intentionally omits onSuccess callback — consistent with run() which also
         // does not track per-operation success for CTL workloads.
         // NOTE: mirrors dispatch-wrapping pattern in AsyncBenchmark.performSingleOperation().
+        // Unlike AsyncBenchmark and AsyncEncryptionBenchmark, this class does not call
+        // onError(e) because CTL workloads have no per-operation error callback. Error
+        // counting is handled by the orchestrator's doOnError + errorCount.
         return selectAndPerformWorkload(operationIndex)
             .subscribeOn(benchmarkScheduler)
-            .doOnError(e -> logger.error("Encountered failure {} on thread {}",
-                e.getMessage(), Thread.currentThread().getName(), e));
+            .doOnError(e -> {
+                try {
+                    logger.error("Encountered failure {} on thread {}",
+                        e.getMessage(), Thread.currentThread().getName(), e);
+                } catch (Exception handlerEx) {
+                    logger.error("Error handler threw for original error: {}", e.getMessage(), handlerEx);
+                }
+            });
     }
 
     public void run() throws Exception {

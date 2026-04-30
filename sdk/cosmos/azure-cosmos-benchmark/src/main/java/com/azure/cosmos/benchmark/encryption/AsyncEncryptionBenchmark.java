@@ -217,9 +217,13 @@ public abstract class AsyncEncryptionBenchmark<T> implements Benchmark {
             .subscribeOn(benchmarkScheduler)
             .doOnSuccess(v -> AsyncEncryptionBenchmark.this.onSuccess())
             .doOnError(e -> {
-                logger.error("Encountered failure {} on thread {}",
-                    e.getMessage(), Thread.currentThread().getName(), e);
-                AsyncEncryptionBenchmark.this.onError(e);
+                try {
+                    logger.error("Encountered failure {} on thread {}",
+                        e.getMessage(), Thread.currentThread().getName(), e);
+                    AsyncEncryptionBenchmark.this.onError(e);
+                } catch (Exception handlerEx) {
+                    logger.error("onError handler threw for original error: {}", e.getMessage(), handlerEx);
+                }
             });
     }
 

@@ -130,7 +130,12 @@ public class BenchmarkOrchestrator {
         Scheduler benchmarkScheduler = Schedulers.parallel();
 
         // Dedicated scheduler for sync benchmark operations (SyncBenchmark subclasses).
-        // Sized to the orchestrator concurrency to avoid becoming a bottleneck.
+        // Capped at availableProcessors * 4 as a safety measure to prevent thread explosion.
+        // Sync benchmarks perform blocking I/O, so this cap may bottleneck throughput compared
+        // to async dispatch (e.g., 16 threads on a 4-core machine vs 1000 async concurrency).
+        // This trade-off is intentional — unbounded sync thread pools risk OOM and context-switch
+        // overhead. Consider increasing the multiplier or making it configurable if sync
+        // throughput needs to match async levels.
         AtomicInteger syncThreadCounter = new AtomicInteger(0);
         ExecutorService syncExecutorService = Executors.newFixedThreadPool(
             Math.min(config.getConcurrency(), Runtime.getRuntime().availableProcessors() * 4),
@@ -326,6 +331,7 @@ public class BenchmarkOrchestrator {
         // Start non-dispatchable benchmarks in their own threads
         ExecutorService legacyExecutor = null;
         List<Future<?>> legacyFutures = new ArrayList<>();
+        AtomicInteger nonDispatchableFailures = new AtomicInteger(0);
         if (!nonDispatchable.isEmpty()) {
             logger.info("Running {} non-dispatchable benchmark(s) in legacy mode", nonDispatchable.size());
             AtomicInteger legacyCounter = new AtomicInteger(0);
@@ -335,7 +341,6 @@ public class BenchmarkOrchestrator {
                 return t;
             });
             final int currentCycle = cycle;
-            AtomicInteger nonDispatchableFailures = new AtomicInteger(0);
             for (Benchmark benchmark : nonDispatchable) {
                 legacyFutures.add(legacyExecutor.submit(() -> {
                     try {
@@ -371,12 +376,13 @@ public class BenchmarkOrchestrator {
 
                 Flux<Long> source;
                 if (maxDuration != null) {
-                    final long deadline = workloadStartTime + maxDuration.toMillis();
+                    // Use monotonic nanoTime to avoid wall-clock skew from NTP adjustments
+                    final long deadlineNanos = System.nanoTime() + maxDuration.toNanos();
                     source = Flux.generate(
-                        AtomicLong::new,
+                        () -> new long[]{0},
                         (state, sink) -> {
-                            if (System.currentTimeMillis() < deadline) {
-                                sink.next(state.getAndIncrement());
+                            if (System.nanoTime() < deadlineNanos) {
+                                sink.next(state[0]++);
                             } else {
                                 sink.complete();
                             }
@@ -384,9 +390,9 @@ public class BenchmarkOrchestrator {
                         });
                 } else {
                     source = Flux.generate(
-                        AtomicLong::new,
+                        () -> new long[]{0},
                         (state, sink) -> {
-                            long current = state.getAndIncrement();
+                            long current = state[0]++;
                             if (current < numberOfOps) {
                                 sink.next(current);
                             } else {
@@ -422,6 +428,10 @@ public class BenchmarkOrchestrator {
             // Wait for non-dispatchable benchmarks to finish
             for (Future<?> f : legacyFutures) {
                 f.get();
+            }
+            if (!nonDispatchable.isEmpty() && nonDispatchableFailures.get() > 0) {
+                logger.error("{} non-dispatchable benchmark(s) failed in cycle {}",
+                    nonDispatchableFailures.get(), cycle);
             }
         } finally {
             if (legacyExecutor != null) {
