@@ -50,8 +50,10 @@ public class BenchmarkConfig {
     private int minConnectionPoolSizePerEndpoint = 0;
 
     // -- Orchestrator-level dispatch (controls total workload, not per-tenant) --
+    // In dispatch mode, per-tenant concurrency and numberOfOperations in TenantWorkloadConfig
+    // are ignored — the orchestrator-level values below control the total workload.
     private int concurrency = 1000;
-    private int numberOfOperations = 100000;
+    private long numberOfOperations = 100000;
     private boolean numberOfOperationsExplicitlySet = false;
     private String maxRunningTimeDuration;
 
@@ -128,7 +130,7 @@ public class BenchmarkConfig {
     public int getMinConnectionPoolSizePerEndpoint() { return minConnectionPoolSizePerEndpoint; }
 
     public int getConcurrency() { return concurrency; }
-    public int getNumberOfOperations() { return numberOfOperations; }
+    public long getNumberOfOperations() { return numberOfOperations; }
     public boolean isNumberOfOperationsExplicitlySet() { return numberOfOperationsExplicitlySet; }
     public String getMaxRunningTimeDuration() { return maxRunningTimeDuration; }
 
@@ -175,14 +177,18 @@ public class BenchmarkConfig {
             concurrency = root.get("concurrency").asInt(concurrency);
         }
         if (root.has("numberOfOperations")) {
-            numberOfOperations = root.get("numberOfOperations").asInt(numberOfOperations);
+            numberOfOperations = root.get("numberOfOperations").asLong(numberOfOperations);
             numberOfOperationsExplicitlySet = true;
         }
         if (root.has("maxRunningTimeDuration")) {
             maxRunningTimeDuration = root.get("maxRunningTimeDuration").asText();
             // Validate eagerly so malformed values surface at config-load time
             try {
-                java.time.Duration.parse(maxRunningTimeDuration);
+                java.time.Duration d = java.time.Duration.parse(maxRunningTimeDuration);
+                if (d.isZero() || d.isNegative()) {
+                    throw new IllegalArgumentException(
+                        "maxRunningTimeDuration must be positive, got: '" + maxRunningTimeDuration + "'");
+                }
             } catch (java.time.format.DateTimeParseException e) {
                 throw new IllegalArgumentException(
                     "maxRunningTimeDuration is not a valid ISO-8601 duration: '"

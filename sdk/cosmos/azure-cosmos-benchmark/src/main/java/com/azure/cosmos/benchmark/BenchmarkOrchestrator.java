@@ -328,17 +328,20 @@ public class BenchmarkOrchestrator {
         List<Future<?>> legacyFutures = new ArrayList<>();
         if (!nonDispatchable.isEmpty()) {
             logger.info("Running {} non-dispatchable benchmark(s) in legacy mode", nonDispatchable.size());
+            AtomicInteger legacyCounter = new AtomicInteger(0);
             legacyExecutor = Executors.newFixedThreadPool(nonDispatchable.size(), r -> {
-                Thread t = new Thread(r, "legacy-dispatch-" + r.hashCode());
+                Thread t = new Thread(r, "legacy-dispatch-" + legacyCounter.getAndIncrement());
                 t.setDaemon(true);
                 return t;
             });
             final int currentCycle = cycle;
+            AtomicInteger nonDispatchableFailures = new AtomicInteger(0);
             for (Benchmark benchmark : nonDispatchable) {
                 legacyFutures.add(legacyExecutor.submit(() -> {
                     try {
                         benchmark.run();
                     } catch (Exception e) {
+                        nonDispatchableFailures.incrementAndGet();
                         logger.error("Non-dispatchable benchmark failed in cycle " + currentCycle, e);
                     }
                 }));
@@ -404,7 +407,8 @@ public class BenchmarkOrchestrator {
                         long tenantLocalIndex = tenantCounters[tenantIndex].getAndIncrement();
                         return selected.performSingleOperation(tenantLocalIndex)
                             .doOnSuccess(v -> completedCount.incrementAndGet())
-                            .doOnError(e -> errorCount.incrementAndGet());
+                            .doOnError(e -> errorCount.incrementAndGet())
+                            .onErrorResume(e -> Mono.empty());
                     }, concurrency)
                     .blockLast();
 

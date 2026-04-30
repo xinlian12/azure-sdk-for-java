@@ -46,7 +46,7 @@ abstract class SyncBenchmark<T> implements Benchmark {
     private static final ImplementationBridgeHelpers.CosmosClientBuilderHelper.CosmosClientBuilderAccessor clientBuilderAccessor
         = ImplementationBridgeHelpers.CosmosClientBuilderHelper.getCosmosClientBuilderAccessor();
 
-    private ExecutorService executorService;
+    private volatile ExecutorService executorService;
 
     private boolean databaseCreated;
     private boolean collectionCreated;
@@ -288,6 +288,9 @@ abstract class SyncBenchmark<T> implements Benchmark {
 
     @Override
     public Mono<?> performSingleOperation(long operationIndex) {
+        // NOTE: This dispatch-wrapping pattern (subscribe + onSuccess + onError)
+        // mirrors AsyncBenchmark and AsyncEncryptionBenchmark (different packages).
+        // If modifying this logic, update those performSingleOperation() implementations too.
         Scheduler scheduler = syncDispatchScheduler != null
             ? syncDispatchScheduler
             : Schedulers.boundedElastic();
@@ -298,8 +301,7 @@ abstract class SyncBenchmark<T> implements Benchmark {
                 logger.error("Encountered failure {} on thread {}",
                     e.getMessage(), Thread.currentThread().getName(), e);
                 SyncBenchmark.this.onError(e);
-            })
-            .onErrorResume(e -> Mono.empty());
+            });
     }
 
     public void run() throws Exception {

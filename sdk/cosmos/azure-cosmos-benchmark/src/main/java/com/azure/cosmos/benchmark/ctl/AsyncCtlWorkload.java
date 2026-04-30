@@ -187,11 +187,11 @@ public class AsyncCtlWorkload implements Benchmark {
     public Mono<?> performSingleOperation(long operationIndex) {
         // Intentionally omits onSuccess callback — consistent with run() which also
         // does not track per-operation success for CTL workloads.
+        // NOTE: mirrors dispatch-wrapping pattern in AsyncBenchmark.performSingleOperation().
         return selectAndPerformWorkload(operationIndex)
             .subscribeOn(benchmarkScheduler)
-            .doOnError(e -> logger.error("CTL failure on thread {}: {}",
-                Thread.currentThread().getName(), e.getMessage(), e))
-            .onErrorResume(e -> Mono.empty());
+            .doOnError(e -> logger.error("Encountered failure {} on thread {}",
+                e.getMessage(), Thread.currentThread().getName(), e));
     }
 
     public void run() throws Exception {
