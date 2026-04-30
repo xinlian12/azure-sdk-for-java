@@ -342,28 +342,14 @@ abstract class AsyncBenchmark<T> implements Benchmark {
 
     @Override
     public Mono<?> performSingleOperation(long operationIndex) {
-        // NOTE: This dispatch-wrapping pattern (sparsity + subscribe + onSuccess + onError)
-        // is duplicated in AsyncEncryptionBenchmark, AsyncCtlWorkload, and SyncBenchmark
-        // (different packages). A shared static helper or abstract base would reduce duplication,
-        // but is impractical because those classes are in sub-packages that cannot access
-        // package-private members. If modifying this logic, update all 4 implementations.
         Mono<T> workload = performWorkload(operationIndex);
         Mono<T> delayed = sparsityMono(operationIndex);
         if (delayed != null) {
             workload = delayed.then(workload);
         }
-        return workload
-            .subscribeOn(benchmarkScheduler)
-            .doOnSuccess(v -> AsyncBenchmark.this.onSuccess())
-            .doOnError(e -> {
-                try {
-                    logger.error("Encountered failure {} on thread {}",
-                        e.getMessage(), Thread.currentThread().getName(), e);
-                    AsyncBenchmark.this.onError(e);
-                } catch (Exception handlerEx) {
-                    logger.error("onError handler threw for original error: {}", e.getMessage(), handlerEx);
-                }
-            });
+        return Benchmark.wrapDispatchCallbacks(
+            workload.subscribeOn(benchmarkScheduler),
+            this::onSuccess, this::onError, logger);
     }
 
     @SuppressWarnings("unchecked")

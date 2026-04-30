@@ -206,25 +206,14 @@ public abstract class AsyncEncryptionBenchmark<T> implements Benchmark {
 
     @Override
     public Mono<?> performSingleOperation(long operationIndex) {
-        // NOTE: This dispatch-wrapping pattern mirrors AsyncBenchmark.performSingleOperation().
-        // If modifying this logic, update AsyncBenchmark and AsyncCtlWorkload too.
         Mono<T> workload = performWorkload(operationIndex);
         Mono<T> delayed = sparsityMono(operationIndex);
         if (delayed != null) {
             workload = delayed.then(workload);
         }
-        return workload
-            .subscribeOn(benchmarkScheduler)
-            .doOnSuccess(v -> AsyncEncryptionBenchmark.this.onSuccess())
-            .doOnError(e -> {
-                try {
-                    logger.error("Encountered failure {} on thread {}",
-                        e.getMessage(), Thread.currentThread().getName(), e);
-                    AsyncEncryptionBenchmark.this.onError(e);
-                } catch (Exception handlerEx) {
-                    logger.error("onError handler threw for original error: {}", e.getMessage(), handlerEx);
-                }
-            });
+        return Benchmark.wrapDispatchCallbacks(
+            workload.subscribeOn(benchmarkScheduler),
+            this::onSuccess, this::onError, logger);
     }
 
     @SuppressWarnings("unchecked")

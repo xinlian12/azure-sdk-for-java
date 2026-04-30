@@ -245,8 +245,18 @@ abstract class SyncBenchmark<T> implements Benchmark {
                     docsToRead = createDocumentFutureList.stream().map(future -> getOrThrow(future)).collect(Collectors.toList());
                 } finally {
                     preCreateExecutor.shutdown();
+                    try {
+                        if (!preCreateExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
+                            preCreateExecutor.shutdownNow();
+                        }
+                    } catch (InterruptedException e) {
+                        preCreateExecutor.shutdownNow();
+                        Thread.currentThread().interrupt();
+                    }
                 }
             } else {
+                // Write-only operations skip pre-creation; createDocumentFutureList is empty,
+                // so this evaluates to an empty list.
                 docsToRead = createDocumentFutureList.stream().map(future -> getOrThrow(future)).collect(Collectors.toList());
             }
 
@@ -288,24 +298,13 @@ abstract class SyncBenchmark<T> implements Benchmark {
 
     @Override
     public Mono<?> performSingleOperation(long operationIndex) {
-        // NOTE: This dispatch-wrapping pattern (subscribe + onSuccess + onError)
-        // mirrors AsyncBenchmark and AsyncEncryptionBenchmark (different packages).
-        // If modifying this logic, update those performSingleOperation() implementations too.
         Scheduler scheduler = syncDispatchScheduler != null
             ? syncDispatchScheduler
             : Schedulers.boundedElastic();
-        return Mono.fromCallable(() -> performWorkload(operationIndex))
-            .subscribeOn(scheduler)
-            .doOnSuccess(v -> SyncBenchmark.this.onSuccess())
-            .doOnError(e -> {
-                try {
-                    logger.error("Encountered failure {} on thread {}",
-                        e.getMessage(), Thread.currentThread().getName(), e);
-                    SyncBenchmark.this.onError(e);
-                } catch (Exception handlerEx) {
-                    logger.error("onError handler threw for original error: {}", e.getMessage(), handlerEx);
-                }
-            });
+        return Benchmark.wrapDispatchCallbacks(
+            Mono.fromCallable(() -> performWorkload(operationIndex))
+                .subscribeOn(scheduler),
+            this::onSuccess, this::onError, logger);
     }
 
     public void run() throws Exception {

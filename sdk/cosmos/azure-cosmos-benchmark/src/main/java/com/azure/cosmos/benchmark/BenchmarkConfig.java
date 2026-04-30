@@ -56,6 +56,7 @@ public class BenchmarkConfig {
     private long numberOfOperations = 100000;
     private boolean numberOfOperationsExplicitlySet = false;
     private String maxRunningTimeDuration;
+    private java.time.Duration maxRunningTimeDurationParsed;
 
     // -- Tenants (each carries its full effective config) --
     private List<TenantWorkloadConfig> tenantWorkloads = Collections.emptyList();
@@ -135,8 +136,7 @@ public class BenchmarkConfig {
     public String getMaxRunningTimeDuration() { return maxRunningTimeDuration; }
 
     public java.time.Duration getMaxRunningTimeDurationParsed() {
-        if (maxRunningTimeDuration == null) return null;
-        return java.time.Duration.parse(maxRunningTimeDuration);
+        return maxRunningTimeDurationParsed;
     }
 
     public List<TenantWorkloadConfig> getTenantWorkloads() { return tenantWorkloads; }
@@ -198,6 +198,7 @@ public class BenchmarkConfig {
                     throw new IllegalArgumentException(
                         "maxRunningTimeDuration must be positive, got: '" + maxRunningTimeDuration + "'");
                 }
+                maxRunningTimeDurationParsed = d;
             } catch (java.time.format.DateTimeParseException e) {
                 throw new IllegalArgumentException(
                     "maxRunningTimeDuration is not a valid ISO-8601 duration: '"

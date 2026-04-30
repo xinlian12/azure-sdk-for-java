@@ -3,7 +3,10 @@
 
 package com.azure.cosmos.benchmark;
 
+import org.slf4j.Logger;
 import reactor.core.publisher.Mono;
+
+import java.util.function.Consumer;
 
 /**
  * Common contract for all benchmark workloads.
@@ -45,5 +48,32 @@ public interface Benchmark {
      */
     default boolean isDispatchable() {
         return false;
+    }
+
+    /**
+     * Wraps a dispatch Mono with standard success/error observability callbacks.
+     * Centralizes the try-catch error-logging pattern used by AsyncBenchmark,
+     * AsyncEncryptionBenchmark, and SyncBenchmark to avoid copy-paste drift.
+     *
+     * @param source     the operation Mono (already subscribeOn'd by the caller)
+     * @param onSuccess  callback invoked on success (e.g. metrics increment)
+     * @param onError    callback invoked on error (e.g. metrics increment)
+     * @param logger     the caller's logger for error messages
+     * @param <T>        the Mono element type
+     * @return the wrapped Mono
+     */
+    static <T> Mono<T> wrapDispatchCallbacks(Mono<T> source, Runnable onSuccess,
+                                              Consumer<Throwable> onError, Logger logger) {
+        return source
+            .doOnSuccess(v -> onSuccess.run())
+            .doOnError(e -> {
+                try {
+                    logger.error("Encountered failure {} on thread {}",
+                        e.getMessage(), Thread.currentThread().getName(), e);
+                    onError.accept(e);
+                } catch (Exception handlerEx) {
+                    logger.error("onError handler threw for original error: {}", e.getMessage(), handlerEx);
+                }
+            });
     }
 }

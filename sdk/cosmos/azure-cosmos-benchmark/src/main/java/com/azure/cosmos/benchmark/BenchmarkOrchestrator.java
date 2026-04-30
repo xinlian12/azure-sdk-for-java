@@ -146,6 +146,15 @@ public class BenchmarkOrchestrator {
             });
         Scheduler syncScheduler = Schedulers.fromExecutorService(syncExecutorService, "sync-dispatch");
 
+        int effectiveSyncPoolSize = Math.min(config.getConcurrency(), Runtime.getRuntime().availableProcessors() * 4);
+        if (effectiveSyncPoolSize < config.getConcurrency()) {
+            logger.info("Sync dispatch pool: {} threads (capped from concurrency={}). "
+                + "Async benchmarks use full concurrency; sync throughput may be lower.",
+                effectiveSyncPoolSize, config.getConcurrency());
+        } else {
+            logger.info("Sync dispatch pool: {} threads", effectiveSyncPoolSize);
+        }
+
         try {
             for (int cycle = 1; cycle <= totalCycles; cycle++) {
                 logger.info("[LIFECYCLE] CYCLE_START cycle={} timestamp={}", cycle, Instant.now());
@@ -283,9 +292,14 @@ public class BenchmarkOrchestrator {
             syncExecutorService.shutdown();
             try {
                 if (!syncExecutorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                    logger.warn("Sync dispatch pool did not terminate within 60s, forcing shutdown");
                     syncExecutorService.shutdownNow();
+                    if (!syncExecutorService.awaitTermination(10, TimeUnit.SECONDS)) {
+                        logger.error("Sync dispatch pool did not terminate after shutdownNow");
+                    }
                 }
             } catch (InterruptedException e) {
+                logger.error("Interrupted while waiting for sync dispatch pool termination", e);
                 syncExecutorService.shutdownNow();
                 Thread.currentThread().interrupt();
             }
@@ -432,6 +446,8 @@ public class BenchmarkOrchestrator {
             if (!nonDispatchable.isEmpty() && nonDispatchableFailures.get() > 0) {
                 logger.error("{} non-dispatchable benchmark(s) failed in cycle {}",
                     nonDispatchableFailures.get(), cycle);
+                throw new RuntimeException(
+                    nonDispatchableFailures.get() + " non-dispatchable benchmark(s) failed in cycle " + cycle);
             }
         } finally {
             if (legacyExecutor != null) {
