@@ -252,7 +252,9 @@ public class TenantWorkloadConfig {
     }
 
     public int getConcurrency() { return concurrency != null ? concurrency : 1000; }
+    public boolean isConcurrencyExplicitlySet() { return concurrency != null; }
     public int getNumberOfOperations() { return numberOfOperations != null ? numberOfOperations : 100000; }
+    public boolean isNumberOfOperationsExplicitlySet() { return numberOfOperations != null; }
     public int getNumberOfPreCreatedDocuments() { return numberOfPreCreatedDocuments != null ? numberOfPreCreatedDocuments : 1000; }
     public int getThroughput() { return throughput != null ? throughput : 100000; }
     public int getDocumentDataFieldSize() { return documentDataFieldSize != null ? documentDataFieldSize : 20; }

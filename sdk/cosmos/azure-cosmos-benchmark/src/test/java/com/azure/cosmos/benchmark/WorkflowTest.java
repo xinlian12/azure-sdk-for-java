@@ -315,6 +315,11 @@ public class WorkflowTest {
         int numberOfOperations,
         int numberOfPreCreatedDocuments) throws Exception {
 
+        // concurrency and numberOfOperations are set at the orchestrator level only.
+        // Tenant-level concurrency/numberOfOperations are intentionally left to their defaults
+        // because orchestrator dispatch mode ignores per-tenant values. The SyncBenchmark
+        // concurrencyControlSemaphore uses the tenant's getConcurrency() (default 1000),
+        // which is fine since the orchestrator's flatMap concurrency controls actual parallelism.
         String json = String.format(
             "{ \"concurrency\": %d, \"numberOfOperations\": %d, "
                 + "\"tenants\": [{ "

@@ -83,6 +83,19 @@ public class BenchmarkConfigTest {
     }
 
     @Test(groups = "unit")
+    public void concurrency_negativeConcurrency_throwsIllegalArgument() throws Exception {
+        File configFile = createConfigFile("{ \"concurrency\": -1, \"tenants\": [] }");
+        try {
+            BenchmarkConfig config = new BenchmarkConfig();
+            assertThatThrownBy(() -> config.loadDispatchConfigFromFile(configFile))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("concurrency must be a positive integer");
+        } finally {
+            configFile.delete();
+        }
+    }
+
+    @Test(groups = "unit")
     public void numberOfOperations_zeroOperations_throwsIllegalArgument() throws Exception {
         File configFile = createConfigFile("{ \"numberOfOperations\": 0, \"tenants\": [] }");
         try {
@@ -110,6 +123,7 @@ public class BenchmarkConfigTest {
 
     private File createConfigFile(String json) throws Exception {
         File tempFile = File.createTempFile("benchmark-config-test-", ".json");
+        tempFile.deleteOnExit();
         try (FileWriter writer = new FileWriter(tempFile)) {
             writer.write(json);
         }

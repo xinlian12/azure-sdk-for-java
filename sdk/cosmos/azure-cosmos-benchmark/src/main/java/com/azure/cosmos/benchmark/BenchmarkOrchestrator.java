@@ -136,9 +136,10 @@ public class BenchmarkOrchestrator {
         // This trade-off is intentional — unbounded sync thread pools risk OOM and context-switch
         // overhead. For high-concurrency sync scenarios, consider adding a syncDispatchMultiplier
         // config field to BenchmarkConfig to allow per-run tuning of this cap.
+        int effectiveSyncPoolSize = Math.min(config.getConcurrency(), Runtime.getRuntime().availableProcessors() * 4);
         AtomicInteger syncThreadCounter = new AtomicInteger(0);
         ExecutorService syncExecutorService = Executors.newFixedThreadPool(
-            Math.min(config.getConcurrency(), Runtime.getRuntime().availableProcessors() * 4),
+            effectiveSyncPoolSize,
             r -> {
                 Thread t = new Thread(r, "sync-dispatch-" + syncThreadCounter.getAndIncrement());
                 t.setDaemon(true);
@@ -146,7 +147,6 @@ public class BenchmarkOrchestrator {
             });
         Scheduler syncScheduler = Schedulers.fromExecutorService(syncExecutorService, "sync-dispatch");
 
-        int effectiveSyncPoolSize = Math.min(config.getConcurrency(), Runtime.getRuntime().availableProcessors() * 4);
         if (effectiveSyncPoolSize < config.getConcurrency()) {
             logger.info("Sync dispatch pool: {} threads (capped from concurrency={}). "
                 + "Async benchmarks use full concurrency; sync throughput may be lower.",
@@ -331,6 +331,22 @@ public class BenchmarkOrchestrator {
      * (e.g., a weight field in TenantWorkloadConfig) for reproducing realistic traffic ratios.</p>
      */
     private void runWorkload(List<Benchmark> benchmarks, int cycle, BenchmarkConfig config) throws Exception {
+        // Warn if any dispatchable tenant specifies concurrency/numberOfOperations,
+        // which are ignored in orchestrator dispatch mode.
+        for (int i = 0; i < benchmarks.size(); i++) {
+            if (benchmarks.get(i).isDispatchable()) {
+                TenantWorkloadConfig tenantCfg = config.getTenantWorkloads().get(i);
+                if (tenantCfg.isConcurrencyExplicitlySet() || tenantCfg.isNumberOfOperationsExplicitlySet()) {
+                    logger.warn("Tenant '{}' has explicitly-set {} which is ignored in orchestrator dispatch mode. "
+                        + "Use orchestrator-level concurrency/numberOfOperations in BenchmarkConfig instead.",
+                        tenantCfg.getId() != null ? tenantCfg.getId() : ("tenant-" + i),
+                        (tenantCfg.isConcurrencyExplicitlySet() ? "concurrency=" + tenantCfg.getConcurrency() : "")
+                            + (tenantCfg.isConcurrencyExplicitlySet() && tenantCfg.isNumberOfOperationsExplicitlySet() ? ", " : "")
+                            + (tenantCfg.isNumberOfOperationsExplicitlySet() ? "numberOfOperations=" + tenantCfg.getNumberOfOperations() : ""));
+                }
+            }
+        }
+
         // Separate dispatchable from non-dispatchable benchmarks
         List<Benchmark> dispatchable = new ArrayList<>();
         List<Benchmark> nonDispatchable = new ArrayList<>();

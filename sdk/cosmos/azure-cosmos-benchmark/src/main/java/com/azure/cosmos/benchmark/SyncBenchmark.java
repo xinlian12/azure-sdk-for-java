@@ -298,12 +298,11 @@ abstract class SyncBenchmark<T> implements Benchmark {
 
     @Override
     public Mono<?> performSingleOperation(long operationIndex) {
-        Scheduler scheduler = syncDispatchScheduler != null
-            ? syncDispatchScheduler
-            : Schedulers.boundedElastic();
+        java.util.Objects.requireNonNull(syncDispatchScheduler,
+            "syncDispatchScheduler must be set by the orchestrator before dispatch");
         return Benchmark.wrapDispatchCallbacks(
             Mono.fromCallable(() -> performWorkload(operationIndex))
-                .subscribeOn(scheduler),
+                .subscribeOn(syncDispatchScheduler),
             this::onSuccess, this::onError, logger);
     }
 
