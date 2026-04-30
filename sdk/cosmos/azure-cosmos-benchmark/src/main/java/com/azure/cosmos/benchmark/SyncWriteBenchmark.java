@@ -7,6 +7,8 @@ import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.PartitionKey;
 import org.apache.commons.lang3.RandomStringUtils;
 
+import reactor.core.scheduler.Scheduler;
+
 
 import java.util.UUID;
 
@@ -15,8 +17,8 @@ class SyncWriteBenchmark extends SyncBenchmark<CosmosItemResponse> {
     private final String dataFieldValue;
     private final String uuid;
 
-    SyncWriteBenchmark(TenantWorkloadConfig workloadCfg) throws Exception {
-        super(workloadCfg);
+    SyncWriteBenchmark(TenantWorkloadConfig workloadCfg, Scheduler syncDispatchScheduler) throws Exception {
+        super(workloadCfg, syncDispatchScheduler);
 
         uuid = UUID.randomUUID().toString();
         dataFieldValue =

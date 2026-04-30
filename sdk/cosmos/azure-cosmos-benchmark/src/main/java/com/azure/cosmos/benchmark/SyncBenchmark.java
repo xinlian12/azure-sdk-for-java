@@ -72,9 +72,16 @@ abstract class SyncBenchmark<T> implements Benchmark {
         abstract public T apply(T o, Throwable throwable);
     }
 
-    SyncBenchmark(TenantWorkloadConfig workloadCfg) throws Exception {
+    /**
+     * Scheduler for executing sync benchmark operations from the orchestrator dispatch loop.
+     * Passed through the constructor by the orchestrator.
+     */
+    private final Scheduler syncDispatchScheduler;
+
+    SyncBenchmark(TenantWorkloadConfig workloadCfg, Scheduler syncDispatchScheduler) throws Exception {
         executorService = Executors.newFixedThreadPool(workloadCfg.getConcurrency());
         workloadConfig = workloadCfg;
+        this.syncDispatchScheduler = syncDispatchScheduler;
 
         boolean isManagedIdentityRequired = workloadCfg.isManagedIdentityRequired();
 
@@ -262,14 +269,9 @@ abstract class SyncBenchmark<T> implements Benchmark {
 
     protected abstract T performWorkload(long i) throws Exception;
 
-    /**
-     * Scheduler for executing sync benchmark operations from the orchestrator dispatch loop.
-     * Set by the orchestrator before the workload starts.
-     */
-    private volatile Scheduler syncDispatchScheduler;
-
-    public void setSyncDispatchScheduler(Scheduler scheduler) {
-        this.syncDispatchScheduler = scheduler;
+    @Override
+    public boolean isDispatchable() {
+        return true;
     }
 
     @Override

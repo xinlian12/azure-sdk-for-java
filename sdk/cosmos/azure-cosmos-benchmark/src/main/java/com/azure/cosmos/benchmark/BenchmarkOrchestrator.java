@@ -131,10 +131,11 @@ public class BenchmarkOrchestrator {
 
         // Dedicated scheduler for sync benchmark operations (SyncBenchmark subclasses).
         // Sized to the orchestrator concurrency to avoid becoming a bottleneck.
+        AtomicInteger syncThreadCounter = new AtomicInteger(0);
         ExecutorService syncExecutorService = Executors.newFixedThreadPool(
             Math.min(config.getConcurrency(), Runtime.getRuntime().availableProcessors() * 4),
             r -> {
-                Thread t = new Thread(r, "sync-dispatch-" + Thread.currentThread().getId());
+                Thread t = new Thread(r, "sync-dispatch-" + syncThreadCounter.getAndIncrement());
                 t.setDaemon(true);
                 return t;
             });
@@ -205,14 +206,7 @@ public class BenchmarkOrchestrator {
                     double baselineCpu = CpuMonitor.captureProcessCpuLoad();
 
                     // 2. Create clients (constructors perform data ingestion)
-                    List<Benchmark> benchmarks = createBenchmarks(config, benchmarkScheduler);
-
-                    // Inject sync dispatch scheduler into sync benchmarks
-                    for (Benchmark b : benchmarks) {
-                        if (b instanceof SyncBenchmark) {
-                            ((SyncBenchmark<?>) b).setSyncDispatchScheduler(syncScheduler);
-                        }
-                    }
+                    List<Benchmark> benchmarks = createBenchmarks(config, benchmarkScheduler, syncScheduler);
 
                     logger.info("[LIFECYCLE] POST_CREATE cycle={} clients={} timestamp={}",
                         cycle, benchmarks.size(), Instant.now());
@@ -297,10 +291,10 @@ public class BenchmarkOrchestrator {
             totalCycles, durationSec, Instant.now());
     }
 
-    private List<Benchmark> createBenchmarks(BenchmarkConfig config, Scheduler scheduler) throws Exception {
+    private List<Benchmark> createBenchmarks(BenchmarkConfig config, Scheduler scheduler, Scheduler syncScheduler) throws Exception {
         List<Benchmark> benchmarks = new ArrayList<>();
         for (TenantWorkloadConfig tenant : config.getTenantWorkloads()) {
-            benchmarks.add(createBenchmarkForOperation(tenant, scheduler));
+            benchmarks.add(createBenchmarkForOperation(tenant, scheduler, syncScheduler));
         }
         return benchmarks;
     }
@@ -308,7 +302,10 @@ public class BenchmarkOrchestrator {
     /**
      * Run workload by dispatching operations from the orchestrator.
      * Dispatchable benchmarks participate in a single Flux dispatch loop where the
-     * orchestrator randomly picks a tenant for each operation slot.
+     * orchestrator randomly picks a tenant for each operation slot. Tenant selection
+     * is uniform random; per-tenant concurrency and numberOfOperations settings in
+     * {@link TenantWorkloadConfig} are not used during orchestrator dispatch — the
+     * orchestrator-level settings in {@link BenchmarkConfig} control the total workload.
      * Non-dispatchable benchmarks (e.g. LICtlWorkload) run via their own run() in a separate thread.
      */
     private void runWorkload(List<Benchmark> benchmarks, int cycle, BenchmarkConfig config) throws Exception {
@@ -341,72 +338,86 @@ public class BenchmarkOrchestrator {
             }
         }
 
-        // Dispatch operations across dispatchable benchmarks
-        if (!dispatchable.isEmpty()) {
-            int concurrency = config.getConcurrency();
-            long numberOfOps = config.getNumberOfOperations();
-            Duration maxDuration = config.getMaxRunningTimeDurationParsed();
-            long workloadStartTime = System.currentTimeMillis();
+        try {
+            // Dispatch operations across dispatchable benchmarks
+            if (!dispatchable.isEmpty()) {
+                int concurrency = config.getConcurrency();
+                long numberOfOps = config.getNumberOfOperations();
+                Duration maxDuration = config.getMaxRunningTimeDurationParsed();
+                long workloadStartTime = System.currentTimeMillis();
 
-            // Per-tenant operation counters for tenant-local indexing
-            AtomicLong[] tenantCounters = new AtomicLong[dispatchable.size()];
-            for (int i = 0; i < tenantCounters.length; i++) {
-                tenantCounters[i] = new AtomicLong(0);
+                // Log precedence when both limits are set
+                if (maxDuration != null && numberOfOps > 0) {
+                    logger.warn("Both maxRunningTimeDuration ({}) and numberOfOperations ({}) are set. "
+                        + "maxRunningTimeDuration takes precedence; numberOfOperations is ignored.",
+                        maxDuration, numberOfOps);
+                }
+
+                // Per-tenant operation counters for tenant-local indexing
+                AtomicLong[] tenantCounters = new AtomicLong[dispatchable.size()];
+                for (int i = 0; i < tenantCounters.length; i++) {
+                    tenantCounters[i] = new AtomicLong(0);
+                }
+
+                Flux<Long> source;
+                if (maxDuration != null) {
+                    final long deadline = workloadStartTime + maxDuration.toMillis();
+                    source = Flux.generate(
+                        AtomicLong::new,
+                        (state, sink) -> {
+                            if (System.currentTimeMillis() < deadline) {
+                                sink.next(state.getAndIncrement());
+                            } else {
+                                sink.complete();
+                            }
+                            return state;
+                        });
+                } else {
+                    source = Flux.generate(
+                        AtomicLong::new,
+                        (state, sink) -> {
+                            long current = state.getAndIncrement();
+                            if (current < numberOfOps) {
+                                sink.next(current);
+                            } else {
+                                sink.complete();
+                            }
+                            return state;
+                        });
+                }
+
+                AtomicLong completedCount = new AtomicLong(0);
+                int tenantCount = dispatchable.size();
+
+                source
+                    .flatMap(globalIndex -> {
+                        int tenantIndex = ThreadLocalRandom.current().nextInt(tenantCount);
+                        Benchmark selected = dispatchable.get(tenantIndex);
+                        long tenantLocalIndex = tenantCounters[tenantIndex].getAndIncrement();
+                        return selected.performSingleOperation(tenantLocalIndex)
+                            .doOnTerminate(completedCount::incrementAndGet);
+                    }, concurrency)
+                    .blockLast();
+
+                long endTime = System.currentTimeMillis();
+                logger.info("[DISPATCH] {} operations dispatched across {} tenants in {}s (cycle={})",
+                    completedCount.get(), tenantCount,
+                    (int) ((endTime - workloadStartTime) / 1000), cycle);
             }
 
-            Flux<Long> source;
-            if (maxDuration != null) {
-                final long deadline = workloadStartTime + maxDuration.toMillis();
-                source = Flux.generate(
-                    AtomicLong::new,
-                    (state, sink) -> {
-                        if (System.currentTimeMillis() < deadline) {
-                            sink.next(state.getAndIncrement());
-                        } else {
-                            sink.complete();
-                        }
-                        return state;
-                    });
-            } else {
-                source = Flux.generate(
-                    AtomicLong::new,
-                    (state, sink) -> {
-                        long current = state.getAndIncrement();
-                        if (current < numberOfOps) {
-                            sink.next(current);
-                        } else {
-                            sink.complete();
-                        }
-                        return state;
-                    });
+            // Wait for non-dispatchable benchmarks to finish
+            for (Future<?> f : legacyFutures) {
+                f.get();
             }
-
-            AtomicLong completedCount = new AtomicLong(0);
-            int tenantCount = dispatchable.size();
-
-            source
-                .flatMap(globalIndex -> {
-                    int tenantIndex = ThreadLocalRandom.current().nextInt(tenantCount);
-                    Benchmark selected = dispatchable.get(tenantIndex);
-                    long tenantLocalIndex = tenantCounters[tenantIndex].getAndIncrement();
-                    return selected.performSingleOperation(tenantLocalIndex)
-                        .doOnTerminate(completedCount::incrementAndGet);
-                }, concurrency)
-                .blockLast();
-
-            long endTime = System.currentTimeMillis();
-            logger.info("[DISPATCH] {} operations dispatched across {} tenants in {}s (cycle={})",
-                completedCount.get(), tenantCount,
-                (int) ((endTime - workloadStartTime) / 1000), cycle);
-        }
-
-        // Wait for non-dispatchable benchmarks to finish
-        for (Future<?> f : legacyFutures) {
-            f.get();
-        }
-        if (legacyExecutor != null) {
-            legacyExecutor.shutdown();
-            legacyExecutor.awaitTermination(60, TimeUnit.SECONDS);
+        } finally {
+            if (legacyExecutor != null) {
+                legacyExecutor.shutdownNow();
+                try {
+                    legacyExecutor.awaitTermination(60, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
         }
     }
 
@@ -447,14 +458,14 @@ public class BenchmarkOrchestrator {
 
     // ======== Benchmark factory ========
 
-    private Benchmark createBenchmarkForOperation(TenantWorkloadConfig cfg, Scheduler scheduler) throws Exception {
+    private Benchmark createBenchmarkForOperation(TenantWorkloadConfig cfg, Scheduler scheduler, Scheduler syncScheduler) throws Exception {
         // Sync benchmarks
         if (cfg.isSync()) {
             switch (cfg.getOperationType()) {
                 case ReadThroughput:
-                    return new SyncReadBenchmark(cfg);
+                    return new SyncReadBenchmark(cfg, syncScheduler);
                 case WriteThroughput:
-                    return new SyncWriteBenchmark(cfg);
+                    return new SyncWriteBenchmark(cfg, syncScheduler);
                 default:
                     throw new IllegalArgumentException(
                         "Sync mode is not supported for operation: " + cfg.getOperationType());

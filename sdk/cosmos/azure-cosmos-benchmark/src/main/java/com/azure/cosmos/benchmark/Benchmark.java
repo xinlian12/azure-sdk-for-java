@@ -19,6 +19,11 @@ import reactor.core.publisher.Mono;
  * {@code false}; the orchestrator will call {@link #run()} directly for those.</p>
  */
 public interface Benchmark {
+    /**
+     * Run the full benchmark workload. For dispatchable benchmarks, this is the legacy
+     * execution path retained for standalone / non-orchestrator usage. The orchestrator
+     * uses {@link #performSingleOperation(long)} instead.
+     */
     void run() throws Exception;
     void shutdown();
 
@@ -39,6 +44,6 @@ public interface Benchmark {
      * Non-dispatchable benchmarks are run via {@link #run()} in their own thread.
      */
     default boolean isDispatchable() {
-        return true;
+        return false;
     }
 }

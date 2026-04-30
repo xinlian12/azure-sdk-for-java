@@ -179,7 +179,14 @@ public class AsyncCtlWorkload implements Benchmark {
     }
 
     @Override
+    public boolean isDispatchable() {
+        return true;
+    }
+
+    @Override
     public Mono<?> performSingleOperation(long operationIndex) {
+        // Intentionally omits onSuccess callback — consistent with run() which also
+        // does not track per-operation success for CTL workloads.
         return selectAndPerformWorkload(operationIndex)
             .subscribeOn(benchmarkScheduler)
             .doOnError(e -> logger.error("CTL failure on thread {}: {}",

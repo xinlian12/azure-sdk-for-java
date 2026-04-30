@@ -200,8 +200,17 @@ public abstract class AsyncEncryptionBenchmark<T> implements Benchmark {
     protected abstract Mono<T> performWorkload(long i);
 
     @Override
+    public boolean isDispatchable() {
+        return true;
+    }
+
+    @Override
     public Mono<?> performSingleOperation(long operationIndex) {
         Mono<T> workload = performWorkload(operationIndex);
+        Mono<T> delayed = sparsityMono(operationIndex);
+        if (delayed != null) {
+            workload = delayed.then(workload);
+        }
         return workload
             .subscribeOn(benchmarkScheduler)
             .doOnSuccess(v -> AsyncEncryptionBenchmark.this.onSuccess())

@@ -170,13 +170,22 @@ public class BenchmarkConfig {
      */
     private void loadDispatchConfig(JsonNode root) {
         if (root.has("concurrency")) {
-            concurrency = Integer.parseInt(root.get("concurrency").asText());
+            concurrency = root.get("concurrency").asInt(concurrency);
         }
         if (root.has("numberOfOperations")) {
-            numberOfOperations = Integer.parseInt(root.get("numberOfOperations").asText());
+            numberOfOperations = root.get("numberOfOperations").asInt(numberOfOperations);
         }
         if (root.has("maxRunningTimeDuration")) {
             maxRunningTimeDuration = root.get("maxRunningTimeDuration").asText();
+        }
+
+        if (concurrency <= 0) {
+            throw new IllegalArgumentException(
+                "concurrency must be a positive integer, got: " + concurrency);
+        }
+        if (numberOfOperations <= 0) {
+            throw new IllegalArgumentException(
+                "numberOfOperations must be a positive integer, got: " + numberOfOperations);
         }
     }
 

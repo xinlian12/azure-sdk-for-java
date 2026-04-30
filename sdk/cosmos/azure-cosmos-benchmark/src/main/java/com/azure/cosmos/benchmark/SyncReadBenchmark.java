@@ -8,11 +8,13 @@ import com.azure.cosmos.models.CosmosItemRequestOptions;
 import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.PartitionKey;
 
+import reactor.core.scheduler.Scheduler;
+
 
 class SyncReadBenchmark extends SyncBenchmark<CosmosItemResponse> {
 
-    SyncReadBenchmark(TenantWorkloadConfig workloadCfg) throws Exception {
-        super(workloadCfg);
+    SyncReadBenchmark(TenantWorkloadConfig workloadCfg, Scheduler syncDispatchScheduler) throws Exception {
+        super(workloadCfg, syncDispatchScheduler);
     }
 
     @Override
