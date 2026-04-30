@@ -316,7 +316,8 @@ public class WorkflowTest {
         int numberOfPreCreatedDocuments) throws Exception {
 
         String json = String.format(
-            "{ \"tenants\": [{ "
+            "{ \"concurrency\": %d, \"numberOfOperations\": %d, "
+                + "\"tenants\": [{ "
                 + "\"serviceEndpoint\": \"%s\", "
                 + "\"masterKey\": \"%s\", "
                 + "\"databaseId\": \"%s\", "
@@ -324,13 +325,12 @@ public class WorkflowTest {
                 + "\"operation\": \"%s\", "
                 + "\"connectionMode\": \"%s\", "
                 + "\"consistencyLevel\": \"%s\", "
-                + "\"concurrency\": %d, "
-                + "\"numberOfOperations\": %d, "
                 + "\"numberOfPreCreatedDocuments\": %d "
                 + "}] }",
+            concurrency, numberOfOperations,
             serviceEndpoint, masterKey, databaseId, containerId,
             operation, connectionMode, consistencyLevel,
-            concurrency, numberOfOperations, numberOfPreCreatedDocuments);
+            numberOfPreCreatedDocuments);
 
         File tempFile = File.createTempFile("workload-config-", ".json");
         try (FileWriter writer = new FileWriter(tempFile)) {

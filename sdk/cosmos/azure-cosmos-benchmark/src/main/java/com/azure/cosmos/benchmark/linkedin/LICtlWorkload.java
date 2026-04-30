@@ -66,6 +66,11 @@ public class LICtlWorkload implements Benchmark {
         _testRunner.run();
     }
 
+    @Override
+    public boolean isDispatchable() {
+        return false;
+    }
+
     public void shutdown() {
         _testRunner.cleanup();
         if (_workloadConfig.isSuppressCleanup()) {

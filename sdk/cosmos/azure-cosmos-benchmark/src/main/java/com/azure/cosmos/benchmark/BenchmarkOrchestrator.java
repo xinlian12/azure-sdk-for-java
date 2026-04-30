@@ -21,9 +21,12 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -32,8 +35,10 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Benchmark orchestrator. Sets up infrastructure (metrics, reporters, system properties),
@@ -118,30 +123,31 @@ public class BenchmarkOrchestrator {
         int totalCycles = config.getCycles();
         List<TenantWorkloadConfig> tenants = config.getTenantWorkloads();
 
-        logger.info("Starting benchmark: {} cycles x {} tenants", totalCycles, tenants.size());
+        logger.info("Starting benchmark: {} cycles x {} tenants, concurrency={}, numberOfOperations={}",
+            totalCycles, tenants.size(), config.getConcurrency(), config.getNumberOfOperations());
         long startTime = System.currentTimeMillis();
 
         Scheduler benchmarkScheduler = Schedulers.parallel();
 
-        AtomicInteger threadCounter = new AtomicInteger(0);
-        ExecutorService executor = Executors.newFixedThreadPool(tenants.size(), r -> {
-            Thread t = new Thread(r, "tenant-worker-" + threadCounter.getAndIncrement());
-            t.setDaemon(false);
-            return t;
-        });
+        // Dedicated scheduler for sync benchmark operations (SyncBenchmark subclasses).
+        // Sized to the orchestrator concurrency to avoid becoming a bottleneck.
+        ExecutorService syncExecutorService = Executors.newFixedThreadPool(
+            Math.min(config.getConcurrency(), Runtime.getRuntime().availableProcessors() * 4),
+            r -> {
+                Thread t = new Thread(r, "sync-dispatch-" + Thread.currentThread().getId());
+                t.setDaemon(true);
+                return t;
+            });
+        Scheduler syncScheduler = Schedulers.fromExecutorService(syncExecutorService, "sync-dispatch");
 
         try {
             for (int cycle = 1; cycle <= totalCycles; cycle++) {
                 logger.info("[LIFECYCLE] CYCLE_START cycle={} timestamp={}", cycle, Instant.now());
 
                 // --- Fresh per-cycle metrics infrastructure ---
-                // Each cycle gets its own registry + reporter. The Cosmos SDK calls
-                // registry.clear() + registry.close() when a CosmosClient is destroyed,
-                // so we give it a disposable registry that we flush before shutdown.
                 CompositeMeterRegistry cycleRegistry = new CompositeMeterRegistry();
                 cycleRegistry.add(loggingRegistry);
 
-                // Netty HTTP connection pool metrics
                 boolean addedToGlobal = false;
                 if (config.isEnableNettyHttpMetrics()) {
                     Metrics.addRegistry(cycleRegistry);
@@ -168,14 +174,12 @@ public class BenchmarkOrchestrator {
                                 SimpleMeterRegistry cosmosSimpleRegistry = new SimpleMeterRegistry();
                                 cycleRegistry.add(cosmosSimpleRegistry);
                                 Set<String> ops = new LinkedHashSet<>();
-                                int totalConcurrency = 0;
                                 for (TenantWorkloadConfig t : tenants) {
                                     ops.add(t.getOperation() != null ? t.getOperation() : "Unknown");
-                                    totalConcurrency += t.getConcurrency();
                                 }
                                 cosmosReporter = CosmosMetricsReporter.create(
                                     cosmosSimpleRegistry, config.getCosmosReporterConfig(),
-                                    String.join("+", ops), totalConcurrency);
+                                    String.join("+", ops), config.getConcurrency());
                                 cosmosReporter.start(config.getPrintingInterval(), TimeUnit.SECONDS);
                                 break;
 
@@ -202,14 +206,22 @@ public class BenchmarkOrchestrator {
 
                     // 2. Create clients (constructors perform data ingestion)
                     List<Benchmark> benchmarks = createBenchmarks(config, benchmarkScheduler);
+
+                    // Inject sync dispatch scheduler into sync benchmarks
+                    for (Benchmark b : benchmarks) {
+                        if (b instanceof SyncBenchmark) {
+                            ((SyncBenchmark<?>) b).setSyncDispatchScheduler(syncScheduler);
+                        }
+                    }
+
                     logger.info("[LIFECYCLE] POST_CREATE cycle={} clients={} timestamp={}",
                         cycle, benchmarks.size(), Instant.now());
 
                     // 3. Cool-down: wait for CPU to settle after data ingestion before measuring workload
                     CpuMonitor.awaitCoolDown(baselineCpu);
 
-                    // 4. Run workload in parallel
-                    runWorkload(benchmarks, cycle, executor);
+                    // 4. Run workload — orchestrator dispatches operations across tenants
+                    runWorkload(benchmarks, cycle, config);
                     logger.info("[LIFECYCLE] POST_WORKLOAD cycle={} timestamp={}", cycle, Instant.now());
 
                     // 5. Flush reporters before shutdown destroys the registry
@@ -236,7 +248,6 @@ public class BenchmarkOrchestrator {
                         appInsightsRegistry = null;
                     }
                 } finally {
-                    // Ensure cleanup even if an exception occurred mid-cycle
                     if (csvReporter != null) {
                         try { csvReporter.stop(); } catch (Exception e) { /* already stopped or best-effort */ }
                     }
@@ -268,19 +279,15 @@ public class BenchmarkOrchestrator {
                 logger.info("[LIFECYCLE] POST_SETTLE cycle={} timestamp={}", cycle, Instant.now());
             }
         } finally {
-            logger.info("[LIFECYCLE] Shutting down executor...");
-            executor.shutdown();
+            logger.info("[LIFECYCLE] Shutting down sync dispatch scheduler...");
+            syncScheduler.dispose();
+            syncExecutorService.shutdown();
             try {
-                if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-                    logger.warn("Executor did not terminate within the timeout");
-                    executor.shutdownNow();
-                    if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-                        logger.error("Executor did not terminate after shutdownNow");
-                    }
+                if (!syncExecutorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                    syncExecutorService.shutdownNow();
                 }
             } catch (InterruptedException e) {
-                logger.warn("Interrupted while awaiting executor termination", e);
-                executor.shutdownNow();
+                syncExecutorService.shutdownNow();
                 Thread.currentThread().interrupt();
             }
         }
@@ -298,20 +305,108 @@ public class BenchmarkOrchestrator {
         return benchmarks;
     }
 
-    private void runWorkload(List<Benchmark> benchmarks, int cycle, ExecutorService executor) throws Exception {
-        List<Future<?>> futures = new ArrayList<>();
-        final int currentCycle = cycle;
-        for (Benchmark benchmark : benchmarks) {
-            futures.add(executor.submit(() -> {
-                try {
-                    benchmark.run();
-                } catch (Exception e) {
-                    logger.error("Benchmark failed in cycle " + currentCycle, e);
-                }
-            }));
+    /**
+     * Run workload by dispatching operations from the orchestrator.
+     * Dispatchable benchmarks participate in a single Flux dispatch loop where the
+     * orchestrator randomly picks a tenant for each operation slot.
+     * Non-dispatchable benchmarks (e.g. LICtlWorkload) run via their own run() in a separate thread.
+     */
+    private void runWorkload(List<Benchmark> benchmarks, int cycle, BenchmarkConfig config) throws Exception {
+        // Separate dispatchable from non-dispatchable benchmarks
+        List<Benchmark> dispatchable = new ArrayList<>();
+        List<Benchmark> nonDispatchable = new ArrayList<>();
+        for (Benchmark b : benchmarks) {
+            if (b.isDispatchable()) {
+                dispatchable.add(b);
+            } else {
+                nonDispatchable.add(b);
+            }
         }
-        for (Future<?> f : futures) {
+
+        // Start non-dispatchable benchmarks in their own threads
+        ExecutorService legacyExecutor = null;
+        List<Future<?>> legacyFutures = new ArrayList<>();
+        if (!nonDispatchable.isEmpty()) {
+            logger.info("Running {} non-dispatchable benchmark(s) in legacy mode", nonDispatchable.size());
+            legacyExecutor = Executors.newFixedThreadPool(nonDispatchable.size());
+            final int currentCycle = cycle;
+            for (Benchmark benchmark : nonDispatchable) {
+                legacyFutures.add(legacyExecutor.submit(() -> {
+                    try {
+                        benchmark.run();
+                    } catch (Exception e) {
+                        logger.error("Non-dispatchable benchmark failed in cycle " + currentCycle, e);
+                    }
+                }));
+            }
+        }
+
+        // Dispatch operations across dispatchable benchmarks
+        if (!dispatchable.isEmpty()) {
+            int concurrency = config.getConcurrency();
+            long numberOfOps = config.getNumberOfOperations();
+            Duration maxDuration = config.getMaxRunningTimeDurationParsed();
+            long workloadStartTime = System.currentTimeMillis();
+
+            // Per-tenant operation counters for tenant-local indexing
+            AtomicLong[] tenantCounters = new AtomicLong[dispatchable.size()];
+            for (int i = 0; i < tenantCounters.length; i++) {
+                tenantCounters[i] = new AtomicLong(0);
+            }
+
+            Flux<Long> source;
+            if (maxDuration != null) {
+                final long deadline = workloadStartTime + maxDuration.toMillis();
+                source = Flux.generate(
+                    AtomicLong::new,
+                    (state, sink) -> {
+                        if (System.currentTimeMillis() < deadline) {
+                            sink.next(state.getAndIncrement());
+                        } else {
+                            sink.complete();
+                        }
+                        return state;
+                    });
+            } else {
+                source = Flux.generate(
+                    AtomicLong::new,
+                    (state, sink) -> {
+                        long current = state.getAndIncrement();
+                        if (current < numberOfOps) {
+                            sink.next(current);
+                        } else {
+                            sink.complete();
+                        }
+                        return state;
+                    });
+            }
+
+            AtomicLong completedCount = new AtomicLong(0);
+            int tenantCount = dispatchable.size();
+
+            source
+                .flatMap(globalIndex -> {
+                    int tenantIndex = ThreadLocalRandom.current().nextInt(tenantCount);
+                    Benchmark selected = dispatchable.get(tenantIndex);
+                    long tenantLocalIndex = tenantCounters[tenantIndex].getAndIncrement();
+                    return selected.performSingleOperation(tenantLocalIndex)
+                        .doOnTerminate(completedCount::incrementAndGet);
+                }, concurrency)
+                .blockLast();
+
+            long endTime = System.currentTimeMillis();
+            logger.info("[DISPATCH] {} operations dispatched across {} tenants in {}s (cycle={})",
+                completedCount.get(), tenantCount,
+                (int) ((endTime - workloadStartTime) / 1000), cycle);
+        }
+
+        // Wait for non-dispatchable benchmarks to finish
+        for (Future<?> f : legacyFutures) {
             f.get();
+        }
+        if (legacyExecutor != null) {
+            legacyExecutor.shutdown();
+            legacyExecutor.awaitTermination(60, TimeUnit.SECONDS);
         }
     }
 

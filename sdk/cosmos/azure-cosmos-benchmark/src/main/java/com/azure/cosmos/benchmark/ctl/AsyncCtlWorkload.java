@@ -178,6 +178,15 @@ public class AsyncCtlWorkload implements Benchmark {
         }
     }
 
+    @Override
+    public Mono<?> performSingleOperation(long operationIndex) {
+        return selectAndPerformWorkload(operationIndex)
+            .subscribeOn(benchmarkScheduler)
+            .doOnError(e -> logger.error("CTL failure on thread {}: {}",
+                Thread.currentThread().getName(), e.getMessage(), e))
+            .onErrorResume(e -> Mono.empty());
+    }
+
     public void run() throws Exception {
 
         long startTime = System.currentTimeMillis();
