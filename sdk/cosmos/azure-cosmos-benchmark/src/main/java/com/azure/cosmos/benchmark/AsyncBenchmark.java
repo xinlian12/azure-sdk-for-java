@@ -369,6 +369,10 @@ abstract class AsyncBenchmark<T> implements Benchmark {
     @SuppressWarnings("unchecked")
     public void run() throws Exception {
 
+        // Note: legacy run() uses System.currentTimeMillis() for deadline (wall-clock).
+        // The orchestrator dispatch path uses System.nanoTime() (monotonic) instead.
+        // This is acceptable here because standalone legacy runs are short-lived and
+        // NTP clock skew is negligible for typical benchmark durations.
         long startTime = System.currentTimeMillis();
         int concurrency = workloadConfig.getConcurrency();
 

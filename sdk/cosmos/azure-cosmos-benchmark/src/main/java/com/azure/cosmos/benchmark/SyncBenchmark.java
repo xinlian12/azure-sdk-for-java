@@ -340,7 +340,6 @@ abstract class SyncBenchmark<T> implements Benchmark {
 
                         logger.error("Encountered failure {} on thread {}" ,
                                      throwable.getMessage(), Thread.currentThread().getName(), throwable);
-                        concurrencyControlSemaphore.release();
                         SyncBenchmark.this.onError(throwable);
 
                         synchronized (count) {

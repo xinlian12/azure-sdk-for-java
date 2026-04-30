@@ -134,8 +134,8 @@ public class BenchmarkOrchestrator {
         // Sync benchmarks perform blocking I/O, so this cap may bottleneck throughput compared
         // to async dispatch (e.g., 16 threads on a 4-core machine vs 1000 async concurrency).
         // This trade-off is intentional — unbounded sync thread pools risk OOM and context-switch
-        // overhead. Consider increasing the multiplier or making it configurable if sync
-        // throughput needs to match async levels.
+        // overhead. For high-concurrency sync scenarios, consider adding a syncDispatchMultiplier
+        // config field to BenchmarkConfig to allow per-run tuning of this cap.
         AtomicInteger syncThreadCounter = new AtomicInteger(0);
         ExecutorService syncExecutorService = Executors.newFixedThreadPool(
             Math.min(config.getConcurrency(), Runtime.getRuntime().availableProcessors() * 4),
@@ -402,7 +402,7 @@ public class BenchmarkOrchestrator {
                         });
                 }
 
-                AtomicLong completedCount = new AtomicLong(0);
+                AtomicLong successCount = new AtomicLong(0);
                 AtomicLong errorCount = new AtomicLong(0);
                 int tenantCount = dispatchable.size();
 
@@ -412,7 +412,7 @@ public class BenchmarkOrchestrator {
                         Benchmark selected = dispatchable.get(tenantIndex);
                         long tenantLocalIndex = tenantCounters[tenantIndex].getAndIncrement();
                         return selected.performSingleOperation(tenantLocalIndex)
-                            .doOnSuccess(v -> completedCount.incrementAndGet())
+                            .doOnSuccess(v -> successCount.incrementAndGet())
                             .doOnError(e -> errorCount.incrementAndGet())
                             .onErrorResume(e -> Mono.empty());
                     }, concurrency)
@@ -420,7 +420,7 @@ public class BenchmarkOrchestrator {
 
                 long endTime = System.currentTimeMillis();
                 logger.info("[DISPATCH] {} operations completed ({} succeeded, {} failed) across {} tenants in {}s (cycle={})",
-                    completedCount.get() + errorCount.get(), completedCount.get(), errorCount.get(),
+                    successCount.get() + errorCount.get(), successCount.get(), errorCount.get(),
                     tenantCount,
                     (int) ((endTime - workloadStartTime) / 1000), cycle);
             }

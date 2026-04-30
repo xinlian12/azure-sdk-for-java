@@ -82,6 +82,32 @@ public class BenchmarkConfigTest {
         }
     }
 
+    @Test(groups = "unit")
+    public void numberOfOperations_zeroOperations_throwsIllegalArgument() throws Exception {
+        File configFile = createConfigFile("{ \"numberOfOperations\": 0, \"tenants\": [] }");
+        try {
+            BenchmarkConfig config = new BenchmarkConfig();
+            assertThatThrownBy(() -> config.loadDispatchConfigFromFile(configFile))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("numberOfOperations must be a positive integer");
+        } finally {
+            configFile.delete();
+        }
+    }
+
+    @Test(groups = "unit")
+    public void numberOfOperations_negativeOperations_throwsIllegalArgument() throws Exception {
+        File configFile = createConfigFile("{ \"numberOfOperations\": -5, \"tenants\": [] }");
+        try {
+            BenchmarkConfig config = new BenchmarkConfig();
+            assertThatThrownBy(() -> config.loadDispatchConfigFromFile(configFile))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("numberOfOperations must be a positive integer");
+        } finally {
+            configFile.delete();
+        }
+    }
+
     private File createConfigFile(String json) throws Exception {
         File tempFile = File.createTempFile("benchmark-config-test-", ".json");
         try (FileWriter writer = new FileWriter(tempFile)) {
