@@ -342,6 +342,9 @@ abstract class AsyncBenchmark<T> implements Benchmark {
 
     @Override
     public Mono<?> performSingleOperation(long operationIndex) {
+        // NOTE: This dispatch-wrapping pattern (sparsity + subscribe + onSuccess + onError + resume)
+        // is duplicated in AsyncEncryptionBenchmark, which doesn't extend this class.
+        // If modifying this logic, update AsyncEncryptionBenchmark.performSingleOperation() too.
         Mono<T> workload = performWorkload(operationIndex);
         Mono<T> delayed = sparsityMono(operationIndex);
         if (delayed != null) {

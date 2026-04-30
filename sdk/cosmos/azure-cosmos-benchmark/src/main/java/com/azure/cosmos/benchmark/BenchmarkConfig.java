@@ -52,6 +52,7 @@ public class BenchmarkConfig {
     // -- Orchestrator-level dispatch (controls total workload, not per-tenant) --
     private int concurrency = 1000;
     private int numberOfOperations = 100000;
+    private boolean numberOfOperationsExplicitlySet = false;
     private String maxRunningTimeDuration;
 
     // -- Tenants (each carries its full effective config) --
@@ -128,6 +129,7 @@ public class BenchmarkConfig {
 
     public int getConcurrency() { return concurrency; }
     public int getNumberOfOperations() { return numberOfOperations; }
+    public boolean isNumberOfOperationsExplicitlySet() { return numberOfOperationsExplicitlySet; }
     public String getMaxRunningTimeDuration() { return maxRunningTimeDuration; }
 
     public java.time.Duration getMaxRunningTimeDurationParsed() {
@@ -174,9 +176,18 @@ public class BenchmarkConfig {
         }
         if (root.has("numberOfOperations")) {
             numberOfOperations = root.get("numberOfOperations").asInt(numberOfOperations);
+            numberOfOperationsExplicitlySet = true;
         }
         if (root.has("maxRunningTimeDuration")) {
             maxRunningTimeDuration = root.get("maxRunningTimeDuration").asText();
+            // Validate eagerly so malformed values surface at config-load time
+            try {
+                java.time.Duration.parse(maxRunningTimeDuration);
+            } catch (java.time.format.DateTimeParseException e) {
+                throw new IllegalArgumentException(
+                    "maxRunningTimeDuration is not a valid ISO-8601 duration: '"
+                        + maxRunningTimeDuration + "'", e);
+            }
         }
 
         if (concurrency <= 0) {

@@ -307,6 +307,9 @@ public class BenchmarkOrchestrator {
      * {@link TenantWorkloadConfig} are not used during orchestrator dispatch — the
      * orchestrator-level settings in {@link BenchmarkConfig} control the total workload.
      * Non-dispatchable benchmarks (e.g. LICtlWorkload) run via their own run() in a separate thread.
+     *
+     * <p>TODO: Consider weighted tenant selection based on per-tenant config
+     * (e.g., a weight field in TenantWorkloadConfig) for reproducing realistic traffic ratios.</p>
      */
     private void runWorkload(List<Benchmark> benchmarks, int cycle, BenchmarkConfig config) throws Exception {
         // Separate dispatchable from non-dispatchable benchmarks
@@ -325,7 +328,11 @@ public class BenchmarkOrchestrator {
         List<Future<?>> legacyFutures = new ArrayList<>();
         if (!nonDispatchable.isEmpty()) {
             logger.info("Running {} non-dispatchable benchmark(s) in legacy mode", nonDispatchable.size());
-            legacyExecutor = Executors.newFixedThreadPool(nonDispatchable.size());
+            legacyExecutor = Executors.newFixedThreadPool(nonDispatchable.size(), r -> {
+                Thread t = new Thread(r, "legacy-dispatch-" + r.hashCode());
+                t.setDaemon(true);
+                return t;
+            });
             final int currentCycle = cycle;
             for (Benchmark benchmark : nonDispatchable) {
                 legacyFutures.add(legacyExecutor.submit(() -> {
@@ -346,9 +353,9 @@ public class BenchmarkOrchestrator {
                 Duration maxDuration = config.getMaxRunningTimeDurationParsed();
                 long workloadStartTime = System.currentTimeMillis();
 
-                // Log precedence when both limits are set
-                if (maxDuration != null && numberOfOps > 0) {
-                    logger.warn("Both maxRunningTimeDuration ({}) and numberOfOperations ({}) are set. "
+                // Log precedence when both limits are explicitly set
+                if (maxDuration != null && config.isNumberOfOperationsExplicitlySet()) {
+                    logger.warn("Both maxRunningTimeDuration ({}) and numberOfOperations ({}) are explicitly set. "
                         + "maxRunningTimeDuration takes precedence; numberOfOperations is ignored.",
                         maxDuration, numberOfOps);
                 }
@@ -387,6 +394,7 @@ public class BenchmarkOrchestrator {
                 }
 
                 AtomicLong completedCount = new AtomicLong(0);
+                AtomicLong errorCount = new AtomicLong(0);
                 int tenantCount = dispatchable.size();
 
                 source
@@ -395,13 +403,15 @@ public class BenchmarkOrchestrator {
                         Benchmark selected = dispatchable.get(tenantIndex);
                         long tenantLocalIndex = tenantCounters[tenantIndex].getAndIncrement();
                         return selected.performSingleOperation(tenantLocalIndex)
-                            .doOnTerminate(completedCount::incrementAndGet);
+                            .doOnSuccess(v -> completedCount.incrementAndGet())
+                            .doOnError(e -> errorCount.incrementAndGet());
                     }, concurrency)
                     .blockLast();
 
                 long endTime = System.currentTimeMillis();
-                logger.info("[DISPATCH] {} operations dispatched across {} tenants in {}s (cycle={})",
-                    completedCount.get(), tenantCount,
+                logger.info("[DISPATCH] {} operations completed ({} succeeded, {} failed) across {} tenants in {}s (cycle={})",
+                    completedCount.get() + errorCount.get(), completedCount.get(), errorCount.get(),
+                    tenantCount,
                     (int) ((endTime - workloadStartTime) / 1000), cycle);
             }
 

@@ -46,7 +46,7 @@ abstract class SyncBenchmark<T> implements Benchmark {
     private static final ImplementationBridgeHelpers.CosmosClientBuilderHelper.CosmosClientBuilderAccessor clientBuilderAccessor
         = ImplementationBridgeHelpers.CosmosClientBuilderHelper.getCosmosClientBuilderAccessor();
 
-    private final ExecutorService executorService;
+    private ExecutorService executorService;
 
     private boolean databaseCreated;
     private boolean collectionCreated;
@@ -79,7 +79,6 @@ abstract class SyncBenchmark<T> implements Benchmark {
     private final Scheduler syncDispatchScheduler;
 
     SyncBenchmark(TenantWorkloadConfig workloadCfg, Scheduler syncDispatchScheduler) throws Exception {
-        executorService = Executors.newFixedThreadPool(workloadCfg.getConcurrency());
         workloadConfig = workloadCfg;
         this.syncDispatchScheduler = syncDispatchScheduler;
 
@@ -186,60 +185,71 @@ abstract class SyncBenchmark<T> implements Benchmark {
 
             if (workloadCfg.getOperationType() != Operation.WriteThroughput
                     && workloadCfg.getOperationType() != Operation.ReadMyWrites) {
-                String dataFieldValue = RandomStringUtils.randomAlphabetic(workloadCfg.getDocumentDataFieldSize());
-                for (int i = 0; i < workloadCfg.getNumberOfPreCreatedDocuments(); i++) {
-                    String uuid = UUID.randomUUID().toString();
-                    PojoizedJson newDoc = BenchmarkHelper.generateDocument(uuid,
-                            dataFieldValue,
-                            partitionKey,
-                            workloadCfg.getDocumentDataFieldCount());
-                    CompletableFuture<PojoizedJson> futureResult = CompletableFuture.supplyAsync(() -> {
+                // Use a small temporary pool for document pre-creation only.
+                // The full executorService is lazily created in run() to avoid leaking
+                // a large thread pool when the orchestrator handles dispatch.
+                int preCreateThreads = Math.min(workloadCfg.getConcurrency(), 8);
+                ExecutorService preCreateExecutor = Executors.newFixedThreadPool(preCreateThreads);
+                try {
+                    String dataFieldValue = RandomStringUtils.randomAlphabetic(workloadCfg.getDocumentDataFieldSize());
+                    for (int i = 0; i < workloadCfg.getNumberOfPreCreatedDocuments(); i++) {
+                        String uuid = UUID.randomUUID().toString();
+                        PojoizedJson newDoc = BenchmarkHelper.generateDocument(uuid,
+                                dataFieldValue,
+                                partitionKey,
+                                workloadCfg.getDocumentDataFieldCount());
+                        CompletableFuture<PojoizedJson> futureResult = CompletableFuture.supplyAsync(() -> {
 
-                        int maxRetries = 5;
-                        Exception lastException = null;
-                        for (int attempt = 0; attempt <= maxRetries; attempt++) {
-                            try {
-                                CosmosItemResponse<PojoizedJson> itemResponse = cosmosContainer.createItem(newDoc);
-                                return toPojoizedJson(itemResponse);
-                            } catch (CosmosException ce) {
-                                lastException = ce;
-                                if (ce.getStatusCode() == 409) {
-                                    // conflict — document already exists, read it back
-                                    try {
-                                        return cosmosContainer.readItem(
-                                            uuid, new PartitionKey(uuid), PojoizedJson.class).getItem();
-                                    } catch (Exception readEx) {
-                                        throw propagate(readEx);
+                            int maxRetries = 5;
+                            Exception lastException = null;
+                            for (int attempt = 0; attempt <= maxRetries; attempt++) {
+                                try {
+                                    CosmosItemResponse<PojoizedJson> itemResponse = cosmosContainer.createItem(newDoc);
+                                    return toPojoizedJson(itemResponse);
+                                } catch (CosmosException ce) {
+                                    lastException = ce;
+                                    if (ce.getStatusCode() == 409) {
+                                        // conflict — document already exists, read it back
+                                        try {
+                                            return cosmosContainer.readItem(
+                                                uuid, new PartitionKey(uuid), PojoizedJson.class).getItem();
+                                        } catch (Exception readEx) {
+                                            throw propagate(readEx);
+                                        }
                                     }
-                                }
-                                int statusCode = ce.getStatusCode();
-                                boolean isTransient = statusCode == 408 || statusCode == 410
-                                    || statusCode == 429 || statusCode == 449
-                                    || statusCode == 500 || statusCode == 503;
-                                if (isTransient && attempt < maxRetries) {
-                                    try {
-                                        Thread.sleep(1000L * (attempt + 1));
-                                    } catch (InterruptedException ie) {
-                                        Thread.currentThread().interrupt();
-                                        throw propagate(ce);
+                                    int statusCode = ce.getStatusCode();
+                                    boolean isTransient = statusCode == 408 || statusCode == 410
+                                        || statusCode == 429 || statusCode == 449
+                                        || statusCode == 500 || statusCode == 503;
+                                    if (isTransient && attempt < maxRetries) {
+                                        try {
+                                            Thread.sleep(1000L * (attempt + 1));
+                                        } catch (InterruptedException ie) {
+                                            Thread.currentThread().interrupt();
+                                            throw propagate(ce);
+                                        }
+                                        continue;
                                     }
-                                    continue;
+                                    throw propagate(ce);
+                                } catch (Exception e) {
+                                    lastException = e;
+                                    throw propagate(e);
                                 }
-                                throw propagate(ce);
-                            } catch (Exception e) {
-                                lastException = e;
-                                throw propagate(e);
                             }
-                        }
-                        throw new RuntimeException("Exhausted retries for createItem", lastException);
+                            throw new RuntimeException("Exhausted retries for createItem", lastException);
 
-                    }, executorService);
+                        }, preCreateExecutor);
 
-                    createDocumentFutureList.add(futureResult);
+                        createDocumentFutureList.add(futureResult);
+                    }
+                    docsToRead = createDocumentFutureList.stream().map(future -> getOrThrow(future)).collect(Collectors.toList());
+                } finally {
+                    preCreateExecutor.shutdown();
                 }
+            } else {
+                docsToRead = createDocumentFutureList.stream().map(future -> getOrThrow(future)).collect(Collectors.toList());
             }
 
-            docsToRead = createDocumentFutureList.stream().map(future -> getOrThrow(future)).collect(Collectors.toList());
             init();
     }
 
@@ -258,7 +268,9 @@ abstract class SyncBenchmark<T> implements Benchmark {
         }
 
         benchmarkWorkloadClient.close();
-        executorService.shutdown();
+        if (executorService != null) {
+            executorService.shutdown();
+        }
     }
 
     protected void onSuccess() {
@@ -291,6 +303,11 @@ abstract class SyncBenchmark<T> implements Benchmark {
     }
 
     public void run() throws Exception {
+
+        // Lazily create the executor for standalone (non-dispatch) mode
+        if (executorService == null) {
+            executorService = Executors.newFixedThreadPool(workloadConfig.getConcurrency());
+        }
 
         long startTime = System.currentTimeMillis();
 
