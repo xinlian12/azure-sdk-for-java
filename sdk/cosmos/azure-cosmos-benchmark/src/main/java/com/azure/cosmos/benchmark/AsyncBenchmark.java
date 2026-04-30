@@ -335,6 +335,24 @@ abstract class AsyncBenchmark<T> implements Benchmark {
 
     protected abstract Mono<T> performWorkload(long i);
 
+    @Override
+    public Mono<?> performSingleOperation(long operationIndex) {
+        Mono<T> workload = performWorkload(operationIndex);
+        Mono<T> delayed = sparsityMono(operationIndex);
+        if (delayed != null) {
+            workload = delayed.then(workload);
+        }
+        return workload
+            .subscribeOn(benchmarkScheduler)
+            .doOnSuccess(v -> AsyncBenchmark.this.onSuccess())
+            .doOnError(e -> {
+                logger.error("Encountered failure {} on thread {}",
+                    e.getMessage(), Thread.currentThread().getName(), e);
+                AsyncBenchmark.this.onError(e);
+            })
+            .onErrorResume(e -> Mono.empty());
+    }
+
     @SuppressWarnings("unchecked")
     public void run() throws Exception {
 

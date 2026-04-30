@@ -199,6 +199,20 @@ public abstract class AsyncEncryptionBenchmark<T> implements Benchmark {
 
     protected abstract Mono<T> performWorkload(long i);
 
+    @Override
+    public Mono<?> performSingleOperation(long operationIndex) {
+        Mono<T> workload = performWorkload(operationIndex);
+        return workload
+            .subscribeOn(benchmarkScheduler)
+            .doOnSuccess(v -> AsyncEncryptionBenchmark.this.onSuccess())
+            .doOnError(e -> {
+                logger.error("Encountered failure {} on thread {}",
+                    e.getMessage(), Thread.currentThread().getName(), e);
+                AsyncEncryptionBenchmark.this.onError(e);
+            })
+            .onErrorResume(e -> Mono.empty());
+    }
+
     @SuppressWarnings("unchecked")
     public void run() throws Exception {
 

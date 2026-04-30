@@ -49,6 +49,11 @@ public class BenchmarkConfig {
     private boolean isPerPartitionAutomaticFailoverRequired = true;
     private int minConnectionPoolSizePerEndpoint = 0;
 
+    // -- Orchestrator-level dispatch (controls total workload, not per-tenant) --
+    private int concurrency = 1000;
+    private int numberOfOperations = 100000;
+    private String maxRunningTimeDuration;
+
     // -- Tenants (each carries its full effective config) --
     private List<TenantWorkloadConfig> tenantWorkloads = Collections.emptyList();
 
@@ -121,16 +126,27 @@ public class BenchmarkConfig {
     public boolean isPerPartitionAutomaticFailoverRequired() { return isPerPartitionAutomaticFailoverRequired; }
     public int getMinConnectionPoolSizePerEndpoint() { return minConnectionPoolSizePerEndpoint; }
 
+    public int getConcurrency() { return concurrency; }
+    public int getNumberOfOperations() { return numberOfOperations; }
+    public String getMaxRunningTimeDuration() { return maxRunningTimeDuration; }
+
+    public java.time.Duration getMaxRunningTimeDurationParsed() {
+        if (maxRunningTimeDuration == null) return null;
+        return java.time.Duration.parse(maxRunningTimeDuration);
+    }
+
     public List<TenantWorkloadConfig> getTenantWorkloads() { return tenantWorkloads; }
 
     @Override
     public String toString() {
         return String.format(
             "BenchmarkConfig{cycles=%d, settleTimeMs=%d, suppressCleanup=%s, " +
-            "gcBetweenCycles=%s, tenants=%d, reportingDestination=%s, " +
+            "gcBetweenCycles=%s, tenants=%d, concurrency=%d, numberOfOperations=%d, " +
+            "maxRunningTimeDuration=%s, reportingDestination=%s, " +
             "circuitBreaker=%s, ppaf=%s, minConnPoolSize=%d}",
             cycles, settleTimeMs, suppressCleanup, gcBetweenCycles,
-            tenantWorkloads.size(), getReportingDestination(),
+            tenantWorkloads.size(), concurrency, numberOfOperations,
+            maxRunningTimeDuration, getReportingDestination(),
             isPartitionLevelCircuitBreakerEnabled, isPerPartitionAutomaticFailoverRequired,
             minConnectionPoolSizePerEndpoint);
     }
@@ -143,8 +159,25 @@ public class BenchmarkConfig {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode root = mapper.readTree(workloadConfigFile);
 
+        loadDispatchConfig(root);
         loadJvmSystemProperties(root);
         loadMetricsConfig(root);
+    }
+
+    /**
+     * Orchestrator-level dispatch settings from the JSON root.
+     * These control how many total operations to run and with what concurrency.
+     */
+    private void loadDispatchConfig(JsonNode root) {
+        if (root.has("concurrency")) {
+            concurrency = Integer.parseInt(root.get("concurrency").asText());
+        }
+        if (root.has("numberOfOperations")) {
+            numberOfOperations = Integer.parseInt(root.get("numberOfOperations").asText());
+        }
+        if (root.has("maxRunningTimeDuration")) {
+            maxRunningTimeDuration = root.get("maxRunningTimeDuration").asText();
+        }
     }
 
     /**

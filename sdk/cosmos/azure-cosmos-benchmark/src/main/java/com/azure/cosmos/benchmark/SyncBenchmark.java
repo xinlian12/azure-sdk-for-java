@@ -37,6 +37,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
+
 abstract class SyncBenchmark<T> implements Benchmark {
 
     private static final ImplementationBridgeHelpers.CosmosClientBuilderHelper.CosmosClientBuilderAccessor clientBuilderAccessor
@@ -257,6 +261,32 @@ abstract class SyncBenchmark<T> implements Benchmark {
     }
 
     protected abstract T performWorkload(long i) throws Exception;
+
+    /**
+     * Scheduler for executing sync benchmark operations from the orchestrator dispatch loop.
+     * Set by the orchestrator before the workload starts.
+     */
+    private volatile Scheduler syncDispatchScheduler;
+
+    public void setSyncDispatchScheduler(Scheduler scheduler) {
+        this.syncDispatchScheduler = scheduler;
+    }
+
+    @Override
+    public Mono<?> performSingleOperation(long operationIndex) {
+        Scheduler scheduler = syncDispatchScheduler != null
+            ? syncDispatchScheduler
+            : Schedulers.boundedElastic();
+        return Mono.fromCallable(() -> performWorkload(operationIndex))
+            .subscribeOn(scheduler)
+            .doOnSuccess(v -> SyncBenchmark.this.onSuccess())
+            .doOnError(e -> {
+                logger.error("Encountered failure {} on thread {}",
+                    e.getMessage(), Thread.currentThread().getName(), e);
+                SyncBenchmark.this.onError(e);
+            })
+            .onErrorResume(e -> Mono.empty());
+    }
 
     public void run() throws Exception {
 
