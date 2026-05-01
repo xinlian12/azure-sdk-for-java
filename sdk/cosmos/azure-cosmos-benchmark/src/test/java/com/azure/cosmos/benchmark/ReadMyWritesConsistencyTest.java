@@ -99,7 +99,7 @@ public class ReadMyWritesConsistencyTest {
 
         // Create a temp config file with orchestrator + tenant config
         String json = String.format(
-            "{ \"orchestrator\": { \"concurrency\": %d, \"numberOfOperations\": %d, \"maxRunningTimeDuration\": \"%s\" }, "
+            "{ \"orchestrator\": { \"concurrency\": %d, \"numberOfOperations\": %d, \"maxRunningTimeDuration\": \"%s\", "
                 + "\"tenants\": [{ "
                 + "\"serviceEndpoint\": \"%s\", "
                 + "\"masterKey\": \"%s\", "
@@ -109,7 +109,7 @@ public class ReadMyWritesConsistencyTest {
                 + "\"connectionMode\": \"Direct\", "
                 + "\"consistencyLevel\": \"%s\", "
                 + "\"numberOfPreCreatedDocuments\": 100 "
-                + "}] }",
+                + "}] } }",
             concurrency, numberOfOperations, maxRunningTime,
             TestConfigurations.HOST, TestConfigurations.MASTER_KEY,
             database.getId(), collection.getId(), desiredConsistency);

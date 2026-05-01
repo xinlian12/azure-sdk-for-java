@@ -19,24 +19,28 @@ import java.util.List;
  * Root benchmark configuration, deserialized directly from a single JSON file.
  * All settings live here — no CLI arguments except the config file path itself.
  *
- * <p>Settings are grouped into logical categories:</p>
+ * <p>Settings are grouped into two top-level categories:</p>
  * <ul>
  *   <li>{@link LifecycleConfig} — cycle control, settle time, cleanup</li>
- *   <li>{@link OrchestratorConfig} — dispatch concurrency, operation count, time limit</li>
- *   <li>{@link JvmPropertiesConfig} — JVM-wide system properties (circuit breaker, PPAF, pool size)</li>
- *   <li>{@link MetricsConfig} — reporting intervals, JVM stats, destination (CSV/Cosmos/AppInsights)</li>
- *   <li>{@code tenantDefaults} + {@code tenants} — per-tenant workload configuration</li>
+ *   <li>{@link OrchestratorConfig} — dispatch concurrency, operation count, time limit,
+ *       JVM-wide system properties, metrics, tenant defaults, and tenants</li>
  * </ul>
  *
  * <p>Example JSON:</p>
  * <pre>{@code
  * {
- *   "lifecycle": { "cycles": 1, "settleTimeMs": 0, "suppressCleanup": false },
- *   "orchestrator": { "concurrency": 1000, "numberOfOperations": 100000 },
- *   "jvmProperties": { "isPartitionLevelCircuitBreakerEnabled": true },
- *   "metrics": { "printingInterval": 10, "destination": { "csv": { "reportingDirectory": "/tmp/csv" } } },
- *   "tenantDefaults": { "connectionMode": "DIRECT" },
- *   "tenants": [{ "serviceEndpoint": "...", "masterKey": "...", "databaseId": "...", "containerId": "..." }]
+ *   "lifecycle": { "cycles": 1, "settleTimeMs": 0, "suppressCleanup": false, "gcBetweenCycles": true },
+ *   "orchestrator": {
+ *     "concurrency": 1000,
+ *     "numberOfOperations": 100000,
+ *     "maxRunningTimeDuration": "PT1H",
+ *     "isPartitionLevelCircuitBreakerEnabled": true,
+ *     "isPerPartitionAutomaticFailoverRequired": true,
+ *     "minConnectionPoolSizePerEndpoint": 0,
+ *     "metrics": { "printingInterval": 10, "destination": { "csv": { "reportingDirectory": "/tmp/csv" } } },
+ *     "tenantDefaults": { "connectionMode": "DIRECT" },
+ *     "tenants": [{ "serviceEndpoint": "...", "masterKey": "...", "databaseId": "...", "containerId": "..." }]
+ *   }
  * }
  * }</pre>
  */
@@ -54,15 +58,7 @@ public class BenchmarkConfig {
     @JsonProperty("orchestrator")
     private OrchestratorConfig orchestrator = new OrchestratorConfig();
 
-    @JsonProperty("jvmProperties")
-    private JvmPropertiesConfig jvmProperties = new JvmPropertiesConfig();
-
-    @JsonProperty("metrics")
-    private MetricsConfig metrics = new MetricsConfig();
-
-    // ======== Tenants (parsed separately via TenantWorkloadConfig.parseWorkloadConfig) ========
-    // tenantDefaults + tenants are handled by TenantWorkloadConfig parser, not directly here.
-    // The tenantWorkloads list is populated post-deserialization.
+    // ======== Tenants (parsed from orchestrator.tenants via TenantWorkloadConfig.parseWorkloadConfig) ========
     private transient List<TenantWorkloadConfig> tenantWorkloads = Collections.emptyList();
 
     public BenchmarkConfig() {}
@@ -71,8 +67,8 @@ public class BenchmarkConfig {
 
     /**
      * Deserialize a BenchmarkConfig from a JSON file.
-     * The file contains all configuration: lifecycle, orchestrator dispatch, JVM properties,
-     * metrics, tenant defaults, and tenant definitions.
+     * The file contains all configuration: lifecycle and orchestrator (which includes
+     * dispatch settings, JVM properties, metrics, tenant defaults, and tenant definitions).
      *
      * <p>After deserialization, applies smart defaults for multi-cycle runs:
      * settleTimeMs defaults to 90s when cycles &gt; 1 and not explicitly set.</p>
@@ -96,7 +92,7 @@ public class BenchmarkConfig {
             config.lifecycle.settleTimeMs = 0;
         }
 
-        // Parse tenants from the same file (uses tenantDefaults merging)
+        // Parse tenants from orchestrator section of the same file
         config.tenantWorkloads = TenantWorkloadConfig.parseWorkloadConfig(configFile);
 
         // Validate orchestrator settings
@@ -121,26 +117,26 @@ public class BenchmarkConfig {
     public int getNumberOfOperations() { return orchestrator.numberOfOperations; }
     public Duration getMaxRunningTimeDuration() { return orchestrator.maxRunningTimeDuration; }
 
-    // -- JVM system properties --
-    public boolean isPartitionLevelCircuitBreakerEnabled() { return jvmProperties.isPartitionLevelCircuitBreakerEnabled; }
-    public boolean isPerPartitionAutomaticFailoverRequired() { return jvmProperties.isPerPartitionAutomaticFailoverRequired; }
-    public int getMinConnectionPoolSizePerEndpoint() { return jvmProperties.minConnectionPoolSizePerEndpoint; }
+    // -- JVM system properties (now under orchestrator) --
+    public boolean isPartitionLevelCircuitBreakerEnabled() { return orchestrator.isPartitionLevelCircuitBreakerEnabled; }
+    public boolean isPerPartitionAutomaticFailoverRequired() { return orchestrator.isPerPartitionAutomaticFailoverRequired; }
+    public int getMinConnectionPoolSizePerEndpoint() { return orchestrator.minConnectionPoolSizePerEndpoint; }
 
-    // -- Metrics --
-    public boolean isEnableJvmStats() { return metrics.enableJvmStats; }
-    public boolean isEnableNettyHttpMetrics() { return metrics.enableNettyHttpMetrics; }
-    public int getPrintingInterval() { return metrics.printingInterval; }
+    // -- Metrics (now under orchestrator) --
+    public boolean isEnableJvmStats() { return orchestrator.metrics.enableJvmStats; }
+    public boolean isEnableNettyHttpMetrics() { return orchestrator.metrics.enableNettyHttpMetrics; }
+    public int getPrintingInterval() { return orchestrator.metrics.printingInterval; }
 
     public CsvReporterConfig getCsvReporterConfig() {
-        return metrics.destination != null ? metrics.destination.csv : null;
+        return orchestrator.metrics.destination != null ? orchestrator.metrics.destination.csv : null;
     }
 
     public CosmosReporterConfig getCosmosReporterConfig() {
-        return metrics.destination != null ? metrics.destination.cosmos : null;
+        return orchestrator.metrics.destination != null ? orchestrator.metrics.destination.cosmos : null;
     }
 
     public AppInsightsReporterConfig getAppInsightsReporterConfig() {
-        return metrics.destination != null ? metrics.destination.applicationInsights : null;
+        return orchestrator.metrics.destination != null ? orchestrator.metrics.destination.applicationInsights : null;
     }
 
     /**
@@ -159,10 +155,8 @@ public class BenchmarkConfig {
     @Override
     public String toString() {
         return String.format(
-            "BenchmarkConfig{lifecycle=%s, orchestrator=%s, jvmProperties=%s, "
-            + "tenants=%d, reportingDestination=%s}",
-            lifecycle, orchestrator, jvmProperties,
-            tenantWorkloads.size(), getReportingDestination());
+            "BenchmarkConfig{lifecycle=%s, orchestrator=%s, tenants=%d, reportingDestination=%s}",
+            lifecycle, orchestrator, tenantWorkloads.size(), getReportingDestination());
     }
 
     // ======== Nested configuration classes ========
@@ -195,12 +189,18 @@ public class BenchmarkConfig {
     }
 
     /**
-     * Orchestrator-level dispatch settings.
-     * These control how many total operations to run and with what concurrency.
-     * They are NOT per-tenant — the orchestrator owns dispatch across all tenants.
+     * Orchestrator-level configuration.
+     * Contains dispatch settings, JVM-wide system properties (flattened),
+     * metrics configuration, tenant defaults, and tenant definitions.
+     *
+     * <p>Dispatch settings control how many total operations to run and with what concurrency.
+     * They are NOT per-tenant — the orchestrator owns dispatch across all tenants.</p>
+     *
+     * <p>JVM-global system properties apply to all tenants and are set once at startup.</p>
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class OrchestratorConfig {
+        // -- Dispatch settings --
         @JsonProperty("concurrency")
         int concurrency = 1000;
 
@@ -215,19 +215,7 @@ public class BenchmarkConfig {
         @JsonProperty("maxRunningTimeDuration")
         Duration maxRunningTimeDuration;
 
-        @Override
-        public String toString() {
-            return String.format("Orchestrator{concurrency=%d, numberOfOperations=%d, maxRunningTimeDuration=%s}",
-                concurrency, numberOfOperations, maxRunningTimeDuration);
-        }
-    }
-
-    /**
-     * JVM-global system properties that apply to all tenants.
-     * Set once at startup, cannot vary per tenant.
-     */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class JvmPropertiesConfig {
+        // -- JVM system properties (flattened from former jvmProperties section) --
         @JsonProperty("isPartitionLevelCircuitBreakerEnabled")
         boolean isPartitionLevelCircuitBreakerEnabled = true;
 
@@ -237,9 +225,16 @@ public class BenchmarkConfig {
         @JsonProperty("minConnectionPoolSizePerEndpoint")
         int minConnectionPoolSizePerEndpoint = 0;
 
+        // -- Metrics (nested under orchestrator) --
+        @JsonProperty("metrics")
+        MetricsConfig metrics = new MetricsConfig();
+
         @Override
         public String toString() {
-            return String.format("JvmProperties{circuitBreaker=%s, ppaf=%s, minConnPoolSize=%d}",
+            return String.format(
+                "Orchestrator{concurrency=%d, numberOfOperations=%d, maxRunningTimeDuration=%s, "
+                + "circuitBreaker=%s, ppaf=%s, minConnPoolSize=%d}",
+                concurrency, numberOfOperations, maxRunningTimeDuration,
                 isPartitionLevelCircuitBreakerEnabled, isPerPartitionAutomaticFailoverRequired,
                 minConnectionPoolSizePerEndpoint);
         }

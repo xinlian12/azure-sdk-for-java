@@ -543,13 +543,18 @@ public class TenantWorkloadConfig {
     public static List<TenantWorkloadConfig> parseWorkloadConfig(File workloadConfigFile) throws IOException {
         JsonNode root = OBJECT_MAPPER.readTree(workloadConfigFile);
 
+        // tenantDefaults and tenants are nested under "orchestrator"
+        JsonNode orchestratorNode = root.get("orchestrator");
+
         Map<String, String> tenantDefaults = new HashMap<>();
-        JsonNode defaultsNode = root.get("tenantDefaults");
-        if (defaultsNode != null && defaultsNode.isObject()) {
-            Iterator<Map.Entry<String, JsonNode>> fields = defaultsNode.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> entry = fields.next();
-                tenantDefaults.put(entry.getKey(), entry.getValue().asText());
+        if (orchestratorNode != null) {
+            JsonNode defaultsNode = orchestratorNode.get("tenantDefaults");
+            if (defaultsNode != null && defaultsNode.isObject()) {
+                Iterator<Map.Entry<String, JsonNode>> fields = defaultsNode.fields();
+                while (fields.hasNext()) {
+                    Map.Entry<String, JsonNode> entry = fields.next();
+                    tenantDefaults.put(entry.getKey(), entry.getValue().asText());
+                }
             }
         }
 
@@ -560,7 +565,7 @@ public class TenantWorkloadConfig {
 
         List<TenantWorkloadConfig> tenants = new ArrayList<>();
 
-        JsonNode tenantsNode = root.get("tenants");
+        JsonNode tenantsNode = orchestratorNode != null ? orchestratorNode.get("tenants") : null;
         if (tenantsNode != null && tenantsNode.isArray()) {
             for (JsonNode tenantNode : tenantsNode) {
                 TenantWorkloadConfig tenant = OBJECT_MAPPER.treeToValue(tenantNode, TenantWorkloadConfig.class);

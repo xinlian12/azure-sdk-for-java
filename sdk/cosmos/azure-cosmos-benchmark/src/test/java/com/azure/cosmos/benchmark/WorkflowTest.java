@@ -231,7 +231,7 @@ public class WorkflowTest {
         int numberOfPreCreatedDocuments) throws Exception {
 
         String json = String.format(
-            "{ \"orchestrator\": { \"concurrency\": %d, \"numberOfOperations\": %d }, "
+            "{ \"orchestrator\": { \"concurrency\": %d, \"numberOfOperations\": %d, "
                 + "\"tenants\": [{ "
                 + "\"serviceEndpoint\": \"%s\", "
                 + "\"masterKey\": \"%s\", "
@@ -241,7 +241,7 @@ public class WorkflowTest {
                 + "\"connectionMode\": \"%s\", "
                 + "\"consistencyLevel\": \"%s\", "
                 + "\"numberOfPreCreatedDocuments\": %d "
-                + "}] }",
+                + "}] } }",
             concurrency, numberOfOperations,
             serviceEndpoint, masterKey, databaseId, containerId,
             operation, connectionMode, consistencyLevel,
