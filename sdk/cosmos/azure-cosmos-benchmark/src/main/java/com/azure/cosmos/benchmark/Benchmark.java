@@ -5,21 +5,36 @@ package com.azure.cosmos.benchmark;
 
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
+
 /**
  * Common contract for all benchmark workloads.
  * Implementations are created by {@link BenchmarkOrchestrator} and participate
  * in its lifecycle loop (create → run → shutdown → settle × N cycles).
  *
- * <p>Workloads that support per-operation dispatch by the orchestrator should
- * implement {@link #performSingleOperation(long)}. The orchestrator calls this
- * method for each operation slot, passing a <em>tenant-local</em> operation index.</p>
+ * <p>Dispatchable benchmarks (the default) implement {@link #performSingleOperation(long)}.
+ * The orchestrator calls this for each operation slot, passing a tenant-local index.</p>
  *
- * <p>Workloads with complex lifecycles (e.g. {@code LICtlWorkload}) that cannot
- * be dispatched per-operation should override {@link #isDispatchable()} to return
- * {@code false}; the orchestrator will call {@link #run()} directly for those.</p>
+ * <p>Non-dispatchable benchmarks override {@link #isDispatchable()} to return {@code false}.
+ * The orchestrator calls {@link #run()} for those, which manages its own dispatch loop.
+ * Non-dispatchable benchmarks receive dispatch parameters via
+ * {@link #setDispatchParams(int, long, Duration)} before {@link #run()} is called.</p>
  */
 public interface Benchmark {
-    void run() throws Exception;
+
+    /**
+     * Run the benchmark in self-dispatch mode.
+     * Only used for non-dispatchable benchmarks (those where {@link #isDispatchable()} returns false).
+     * Dispatchable benchmarks do not use this method — the orchestrator drives them via
+     * {@link #performSingleOperation(long)}.
+     *
+     * @throws UnsupportedOperationException if the benchmark is dispatchable
+     */
+    default void run() throws Exception {
+        throw new UnsupportedOperationException(
+            getClass().getSimpleName() + " is dispatchable — use performSingleOperation() via the orchestrator");
+    }
+
     void shutdown();
 
     /**
@@ -40,5 +55,17 @@ public interface Benchmark {
      */
     default boolean isDispatchable() {
         return true;
+    }
+
+    /**
+     * Sets orchestrator-level dispatch parameters for non-dispatchable benchmarks.
+     * Called by the orchestrator before {@link #run()} to communicate global dispatch settings.
+     *
+     * @param concurrency max concurrent operations
+     * @param numberOfOperations total operations (ignored when maxRunningTime is set)
+     * @param maxRunningTime wall-clock time limit (null = use numberOfOperations)
+     */
+    default void setDispatchParams(int concurrency, long numberOfOperations, Duration maxRunningTime) {
+        // Default no-op for dispatchable benchmarks
     }
 }

@@ -169,7 +169,7 @@ class ReadMyWriteWorkflow extends AsyncBenchmark<PojoizedJson> {
             .blockLast(Duration.ofMinutes(10));
 
         BenchmarkHelper.retryFailedBulkOperations(failedResponses, cosmosAsyncContainer,
-            workloadConfig.getConcurrency());
+            workloadConfig.getIngestionConcurrency());
 
         for (int i = 0; i < generatedDocs.size(); i++) {
             cache.put(i, generatedDocs.get(i));

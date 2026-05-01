@@ -331,6 +331,12 @@ public class BenchmarkOrchestrator {
             legacyExecutor = Executors.newFixedThreadPool(nonDispatchable.size());
             final int currentCycle = cycle;
             for (Benchmark benchmark : nonDispatchable) {
+                // Pass orchestrator dispatch params so non-dispatchable benchmarks
+                // know the concurrency/ops/duration limits
+                benchmark.setDispatchParams(
+                    config.getConcurrency(),
+                    config.getNumberOfOperations(),
+                    config.getMaxRunningTimeDuration());
                 legacyFutures.add(legacyExecutor.submit(() -> {
                     try {
                         benchmark.run();
@@ -345,7 +351,7 @@ public class BenchmarkOrchestrator {
         if (!dispatchable.isEmpty()) {
             int concurrency = config.getConcurrency();
             long numberOfOps = config.getNumberOfOperations();
-            Duration maxDuration = config.getMaxRunningTimeDurationParsed();
+            Duration maxDuration = config.getMaxRunningTimeDuration();
             long workloadStartTime = System.currentTimeMillis();
 
             // Per-tenant operation counters for tenant-local indexing

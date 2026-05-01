@@ -3,33 +3,42 @@
 
 package com.azure.cosmos.benchmark;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Configuration for Cosmos DB metrics reporting destination.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CosmosReporterConfig {
-    private final String serviceEndpoint;
-    private final String masterKey;
-    private final String database;
-    private final String container;
-    private final String testVariationName;
-    private final String branchName;
-    private final String commitId;
+
+    @JsonProperty("serviceEndpoint")
+    private String serviceEndpoint;
+
+    @JsonProperty("masterKey")
+    private String masterKey;
+
+    @JsonProperty("database")
+    private String database;
+
+    @JsonProperty("container")
+    private String container;
+
+    @JsonProperty("testVariationName")
+    private String testVariationName = "";
+
+    @JsonProperty("branchName")
+    private String branchName = "";
+
+    @JsonProperty("commitId")
+    private String commitId = "";
+
+    /** Jackson deserialization constructor. */
+    public CosmosReporterConfig() {}
 
     public CosmosReporterConfig(String serviceEndpoint, String masterKey,
                                 String database, String container,
                                 String testVariationName, String branchName, String commitId) {
-        if (serviceEndpoint == null || serviceEndpoint.isEmpty()) {
-            throw new IllegalArgumentException("Cosmos reporter requires 'serviceEndpoint' to be set");
-        }
-        if (masterKey == null || masterKey.isEmpty()) {
-            throw new IllegalArgumentException("Cosmos reporter requires 'masterKey' to be set");
-        }
-        if (database == null || database.isEmpty()) {
-            throw new IllegalArgumentException("Cosmos reporter requires 'database' to be set");
-        }
-        if (container == null || container.isEmpty()) {
-            throw new IllegalArgumentException("Cosmos reporter requires 'container' to be set");
-        }
         this.serviceEndpoint = serviceEndpoint;
         this.masterKey = masterKey;
         this.database = database;

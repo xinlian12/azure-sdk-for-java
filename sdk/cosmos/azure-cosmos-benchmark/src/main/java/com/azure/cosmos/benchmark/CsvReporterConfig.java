@@ -3,16 +3,22 @@
 
 package com.azure.cosmos.benchmark;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Configuration for CSV metrics reporting destination.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CsvReporterConfig {
-    private final String reportingDirectory;
+
+    @JsonProperty("reportingDirectory")
+    private String reportingDirectory;
+
+    /** Jackson deserialization constructor. */
+    public CsvReporterConfig() {}
 
     public CsvReporterConfig(String reportingDirectory) {
-        if (reportingDirectory == null || reportingDirectory.isEmpty()) {
-            throw new IllegalArgumentException("CSV reporter requires 'reportingDirectory' to be set");
-        }
         this.reportingDirectory = reportingDirectory;
     }
 

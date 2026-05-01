@@ -89,11 +89,12 @@ public class TenantWorkloadConfig {
     @JsonProperty("operation")
     private String operation;
 
-    @JsonProperty("concurrency")
-    private Integer concurrency;
-
-    @JsonProperty("numberOfOperations")
-    private Integer numberOfOperations;
+    /**
+     * Concurrency for data ingestion, bulk retry, and non-dispatchable benchmark thread pools.
+     * This is NOT the orchestrator dispatch concurrency (which lives in BenchmarkConfig.OrchestratorConfig).
+     */
+    @JsonProperty("ingestionConcurrency")
+    private Integer ingestionConcurrency;
 
     @JsonProperty("numberOfPreCreatedDocuments")
     private Integer numberOfPreCreatedDocuments;
@@ -136,9 +137,6 @@ public class TenantWorkloadConfig {
 
     @JsonProperty("isDefaultLog4jLoggerEnabled")
     private Boolean isDefaultLog4jLoggerEnabled;
-
-    @JsonProperty("maxRunningTimeDuration")
-    private String maxRunningTimeDuration;
 
     @JsonProperty("diagnosticsThresholdDuration")
     private String diagnosticsThresholdDuration;
@@ -251,8 +249,7 @@ public class TenantWorkloadConfig {
         return op != null ? op : Operation.WriteThroughput;
     }
 
-    public int getConcurrency() { return concurrency != null ? concurrency : 1000; }
-    public int getNumberOfOperations() { return numberOfOperations != null ? numberOfOperations : 100000; }
+    public int getIngestionConcurrency() { return ingestionConcurrency != null ? ingestionConcurrency : 10; }
     public int getNumberOfPreCreatedDocuments() { return numberOfPreCreatedDocuments != null ? numberOfPreCreatedDocuments : 1000; }
     public int getThroughput() { return throughput != null ? throughput : 100000; }
     public int getDocumentDataFieldSize() { return documentDataFieldSize != null ? documentDataFieldSize : 20; }
@@ -285,11 +282,6 @@ public class TenantWorkloadConfig {
     public Duration getDiagnosticsThresholdDuration() {
         if (diagnosticsThresholdDuration == null) return Duration.ofSeconds(60);
         return Duration.parse(diagnosticsThresholdDuration);
-    }
-
-    public Duration getMaxRunningTimeDuration() {
-        if (maxRunningTimeDuration == null) return null;
-        return Duration.parse(maxRunningTimeDuration);
     }
 
     public Duration getSparsityWaitTime() {
@@ -395,8 +387,7 @@ public class TenantWorkloadConfig {
     public void setDatabaseId(String databaseId) { this.databaseId = databaseId; }
     public void setContainerId(String containerId) { this.containerId = containerId; }
     public void setOperation(String operation) { this.operation = operation; }
-    public void setConcurrency(int concurrency) { this.concurrency = concurrency; }
-    public void setNumberOfOperations(int numberOfOperations) { this.numberOfOperations = numberOfOperations; }
+    public void setIngestionConcurrency(int ingestionConcurrency) { this.ingestionConcurrency = ingestionConcurrency; }
     public void setConnectionMode(String connectionMode) { this.connectionMode = connectionMode; }
     public void setConsistencyLevel(String consistencyLevel) { this.consistencyLevel = consistencyLevel; }
     public void setMaxConnectionPoolSize(int maxConnectionPoolSize) { this.maxConnectionPoolSize = maxConnectionPoolSize; }
@@ -414,7 +405,7 @@ public class TenantWorkloadConfig {
             ", databaseId='" + databaseId + '\'' +
             ", containerId='" + containerId + '\'' +
             ", operation=" + operation +
-            ", concurrency=" + concurrency +
+            ", ingestionConcurrency=" + ingestionConcurrency +
             ", connectionMode=" + connectionMode +
             ", connectionSharingAcrossClientsEnabled=" + isConnectionSharingAcrossClientsEnabled() +
             '}';
@@ -454,10 +445,8 @@ public class TenantWorkloadConfig {
                     if (overwrite || isManagedIdentityRequired == null) isManagedIdentityRequired = Boolean.parseBoolean(value); break;
                 case "operation":
                     if (overwrite || operation == null) operation = value; break;
-                case "concurrency":
-                    if (overwrite || concurrency == null) concurrency = Integer.parseInt(value); break;
-                case "numberOfOperations":
-                    if (overwrite || numberOfOperations == null) numberOfOperations = Integer.parseInt(value); break;
+                case "ingestionConcurrency":
+                    if (overwrite || ingestionConcurrency == null) ingestionConcurrency = Integer.parseInt(value); break;
                 case "numberOfPreCreatedDocuments":
                     if (overwrite || numberOfPreCreatedDocuments == null) numberOfPreCreatedDocuments = Integer.parseInt(value); break;
                 case "throughput":
@@ -482,8 +471,6 @@ public class TenantWorkloadConfig {
                     if (overwrite || isRegionScopedSessionContainerEnabled == null) isRegionScopedSessionContainerEnabled = Boolean.parseBoolean(value); break;
                 case "isDefaultLog4jLoggerEnabled":
                     if (overwrite || isDefaultLog4jLoggerEnabled == null) isDefaultLog4jLoggerEnabled = Boolean.parseBoolean(value); break;
-                case "maxRunningTimeDuration":
-                    if (overwrite || maxRunningTimeDuration == null) maxRunningTimeDuration = value; break;
                 case "diagnosticsThresholdDuration":
                     if (overwrite || diagnosticsThresholdDuration == null) diagnosticsThresholdDuration = value; break;
                 case "sparsityWaitTime":
@@ -532,6 +519,10 @@ public class TenantWorkloadConfig {
                     if (overwrite || http2Enabled == null) http2Enabled = Boolean.parseBoolean(value); break;
                 case "http2MaxConcurrentStreams":
                     if (overwrite || http2MaxConcurrentStreams == null) http2MaxConcurrentStreams = Integer.parseInt(value); break;
+                // Orchestrator-level dispatch settings — not per-tenant. Ignored here.
+                case "concurrency":
+                case "numberOfOperations":
+                case "maxRunningTimeDuration":
                 // JVM-global properties (minConnectionPoolSizePerEndpoint, isPartitionLevelCircuitBreakerEnabled,
                 // isPerPartitionAutomaticFailoverRequired) are handled in BenchmarkConfig, not per-tenant.
                 case "minConnectionPoolSizePerEndpoint":

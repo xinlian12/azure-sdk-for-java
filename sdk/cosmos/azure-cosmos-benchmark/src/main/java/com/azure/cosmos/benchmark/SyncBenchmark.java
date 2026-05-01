@@ -31,10 +31,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 import reactor.core.publisher.Mono;
@@ -46,7 +42,7 @@ abstract class SyncBenchmark<T> implements Benchmark {
     private static final ImplementationBridgeHelpers.CosmosClientBuilderHelper.CosmosClientBuilderAccessor clientBuilderAccessor
         = ImplementationBridgeHelpers.CosmosClientBuilderHelper.getCosmosClientBuilderAccessor();
 
-    private final ExecutorService executorService;
+    private final ExecutorService ingestionExecutorService;
 
     private boolean databaseCreated;
     private boolean collectionCreated;
@@ -59,21 +55,9 @@ abstract class SyncBenchmark<T> implements Benchmark {
     final String partitionKey;
     final TenantWorkloadConfig workloadConfig;
     final List<PojoizedJson> docsToRead;
-    final Semaphore concurrencyControlSemaphore;
-
-    static abstract class ResultHandler<T, Throwable> implements BiFunction<T, Throwable, T> {
-        ResultHandler() {
-        }
-
-        protected void init() {
-        }
-
-        @Override
-        abstract public T apply(T o, Throwable throwable);
-    }
 
     SyncBenchmark(TenantWorkloadConfig workloadCfg) throws Exception {
-        executorService = Executors.newFixedThreadPool(workloadCfg.getConcurrency());
+        ingestionExecutorService = Executors.newFixedThreadPool(workloadCfg.getIngestionConcurrency());
         workloadConfig = workloadCfg;
 
         boolean isManagedIdentityRequired = workloadCfg.isManagedIdentityRequired();
@@ -173,8 +157,6 @@ abstract class SyncBenchmark<T> implements Benchmark {
             partitionKey = cosmosContainer.read().getProperties().getPartitionKeyDefinition()
                     .getPaths().iterator().next().split("/")[1];
 
-            concurrencyControlSemaphore = new Semaphore(workloadCfg.getConcurrency());
-
             ArrayList<CompletableFuture<PojoizedJson>> createDocumentFutureList = new ArrayList<>();
 
             if (workloadCfg.getOperationType() != Operation.WriteThroughput
@@ -226,7 +208,7 @@ abstract class SyncBenchmark<T> implements Benchmark {
                         }
                         throw new RuntimeException("Exhausted retries for createItem", lastException);
 
-                    }, executorService);
+                    }, ingestionExecutorService);
 
                     createDocumentFutureList.add(futureResult);
                 }
@@ -251,7 +233,7 @@ abstract class SyncBenchmark<T> implements Benchmark {
         }
 
         benchmarkWorkloadClient.close();
-        executorService.shutdown();
+        ingestionExecutorService.shutdown();
     }
 
     protected void onSuccess() {
@@ -286,73 +268,6 @@ abstract class SyncBenchmark<T> implements Benchmark {
                 SyncBenchmark.this.onError(e);
             })
             .onErrorResume(e -> Mono.empty());
-    }
-
-    public void run() throws Exception {
-
-        long startTime = System.currentTimeMillis();
-
-        AtomicLong count = new AtomicLong(0);
-        long i;
-
-        for ( i = 0; BenchmarkHelper.shouldContinue(startTime, i, workloadConfig); i++) {
-
-            ResultHandler<T, Throwable> resultHandler = new ResultHandler<T, Throwable>() {
-                @Override
-                public T apply(T t, Throwable throwable) {
-                    concurrencyControlSemaphore.release();
-                    if (t != null) {
-                        assert(throwable == null);
-                        SyncBenchmark.this.onSuccess();
-                        synchronized (count) {
-                            count.incrementAndGet();
-                            count.notify();
-                        }
-                    } else {
-                        assert(throwable != null);
-
-                        logger.error("Encountered failure {} on thread {}" ,
-                                     throwable.getMessage(), Thread.currentThread().getName(), throwable);
-                        concurrencyControlSemaphore.release();
-                        SyncBenchmark.this.onError(throwable);
-
-                        synchronized (count) {
-                            count.incrementAndGet();
-                            count.notify();
-                        }
-                    }
-
-                    return t;
-                }
-            };
-
-            concurrencyControlSemaphore.acquire();
-            final long cnt = i;
-
-            final ResultHandler<T, Throwable> finalResultHandler = resultHandler;
-
-            CompletableFuture<T> futureResult = CompletableFuture.supplyAsync(() -> {
-                try {
-                    finalResultHandler.init();
-                    return performWorkload(cnt);
-                } catch (Exception e) {
-                    throw propagate(e);
-                }
-
-            }, executorService);
-
-            futureResult.handle(resultHandler);
-        }
-
-        synchronized (count) {
-            while (count.get() < i) {
-                count.wait();
-            }
-        }
-
-        long endTime = System.currentTimeMillis();
-        logger.info("[{}] operations performed in [{}] seconds.",
-            workloadConfig.getNumberOfOperations(), (int) ((endTime - startTime) / 1000));
     }
 
     RuntimeException propagate(Exception e) {

@@ -66,10 +66,12 @@ public abstract class TestRunner {
         _workloadConfig = workloadConfig;
         _entityConfiguration = entityConfiguration;
         _accessor = createAccessor(workloadConfig, client);
-        _executorService = Executors.newFixedThreadPool(workloadConfig.getConcurrency());
+        // Executor and semaphore are sized lazily in run() based on orchestrator concurrency.
+        // Use ingestionConcurrency as a default for init.
+        _executorService = null; // created in run()
         _successCount = new AtomicLong(0);
         _errorCount = new AtomicLong(0);
-        _semaphore = new Semaphore(workloadConfig.getConcurrency());
+        _semaphore = null; // created in run()
     }
 
     public void init() {
@@ -77,42 +79,64 @@ public abstract class TestRunner {
         _accessor.initialize();
     }
 
-    public void run() {
-        LOGGER.info("Executing Tests for the configured Scenario");
-        KeyGenerator keyGenerator = getNewKeyGenerator();
-        final long runStartTime = System.currentTimeMillis();
-        long i = 0;
-        for (; BenchmarkHelper.shouldContinue(runStartTime, i, _workloadConfig); i++) {
-            if (i > _workloadConfig.getNumberOfPreCreatedDocuments()) {
-                keyGenerator = getNewKeyGenerator();
-            }
-            final Key documentKey = keyGenerator.key();
-            try {
-                _semaphore.acquire();
-            } catch (InterruptedException e) {
-                _errorCount.incrementAndGet();
-                continue;
-            }
-            _executorService.submit(() -> runOperation(documentKey));
-        }
+    /**
+     * Run the test with orchestrator-provided dispatch parameters.
+     *
+     * @param concurrency max concurrent operations
+     * @param numberOfOperations total operations (ignored when maxRunningTime is set)
+     * @param maxRunningTime wall-clock time limit (null = use numberOfOperations)
+     */
+    public void run(int concurrency, long numberOfOperations, Duration maxRunningTime) {
+        LOGGER.info("Executing Tests for the configured Scenario (concurrency={}, ops={}, maxTime={})",
+            concurrency, numberOfOperations, maxRunningTime);
 
-        // Log the completion details
-        final Instant runEndTime = Instant.now();
-        LOGGER.info("Number of iterations: {}, Errors: {}, Runtime: {} millis",
-            _successCount.get(),
-            _errorCount.get(),
-            runEndTime.minusMillis(runStartTime).toEpochMilli());
+        ExecutorService executorService = Executors.newFixedThreadPool(concurrency);
+        Semaphore semaphore = new Semaphore(concurrency);
+
+        try {
+            KeyGenerator keyGenerator = getNewKeyGenerator();
+            final long runStartTime = System.currentTimeMillis();
+            long i = 0;
+            for (; BenchmarkHelper.shouldContinue(runStartTime, i, maxRunningTime, (int) numberOfOperations); i++) {
+                if (i > _workloadConfig.getNumberOfPreCreatedDocuments()) {
+                    keyGenerator = getNewKeyGenerator();
+                }
+                final Key documentKey = keyGenerator.key();
+                try {
+                    semaphore.acquire();
+                } catch (InterruptedException e) {
+                    _errorCount.incrementAndGet();
+                    continue;
+                }
+                executorService.submit(() -> {
+                    try {
+                        runOperation(documentKey);
+                    } finally {
+                        semaphore.release();
+                    }
+                });
+            }
+
+            // Log the completion details
+            final Instant runEndTime = Instant.now();
+            LOGGER.info("Number of iterations: {}, Errors: {}, Runtime: {} millis",
+                _successCount.get(),
+                _errorCount.get(),
+                runEndTime.minusMillis(runStartTime).toEpochMilli());
+        } finally {
+            LOGGER.info("Waiting " + TERMINATION_WAIT_DURATION + " before shutting down the ExecutorService");
+            try {
+                executorService.awaitTermination(TERMINATION_WAIT_DURATION.getSeconds(), TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                LOGGER.error("Error awaiting the completion of all tasks", e);
+            }
+            executorService.shutdown();
+        }
     }
 
     public void cleanup() {
-        LOGGER.info("Waiting " + TERMINATION_WAIT_DURATION + " before shutting down the ExecutorService");
-        try {
-            _executorService.awaitTermination(TERMINATION_WAIT_DURATION.getSeconds(), TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            LOGGER.error("Error awaiting the completion of all tasks", e);
-        }
-
-        _executorService.shutdown();
+        // Executor cleanup is handled within run() now.
+        LOGGER.info("TestRunner cleanup complete.");
     }
 
     /**

@@ -3,267 +3,279 @@
 
 package com.azure.cosmos.benchmark;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Internal benchmark configuration built from CLI-parsed {@link Configuration}.
- * Contains lifecycle params, reporting config, and fully-resolved tenant workloads.
+ * Root benchmark configuration, deserialized directly from a single JSON file.
+ * All settings live here — no CLI arguments except the config file path itself.
  *
- * <p>Each {@link TenantWorkloadConfig} carries its complete effective config
- * (account info + workload params), so no separate tenantDefaults map is needed.</p>
+ * <p>Settings are grouped into logical categories:</p>
+ * <ul>
+ *   <li>{@link LifecycleConfig} — cycle control, settle time, cleanup</li>
+ *   <li>{@link OrchestratorConfig} — dispatch concurrency, operation count, time limit</li>
+ *   <li>{@link JvmPropertiesConfig} — JVM-wide system properties (circuit breaker, PPAF, pool size)</li>
+ *   <li>{@link MetricsConfig} — reporting intervals, JVM stats, destination (CSV/Cosmos/AppInsights)</li>
+ *   <li>{@code tenantDefaults} + {@code tenants} — per-tenant workload configuration</li>
+ * </ul>
  *
- * <p>When {@code cycles > 1}, sensible defaults are applied automatically
- * unless explicitly overridden (settleTimeMs=90s, suppressCleanup=true).</p>
+ * <p>Example JSON:</p>
+ * <pre>{@code
+ * {
+ *   "lifecycle": { "cycles": 1, "settleTimeMs": 0, "suppressCleanup": false },
+ *   "orchestrator": { "concurrency": 1000, "numberOfOperations": 100000 },
+ *   "jvmProperties": { "isPartitionLevelCircuitBreakerEnabled": true },
+ *   "metrics": { "printingInterval": 10, "destination": { "csv": { "reportingDirectory": "/tmp/csv" } } },
+ *   "tenantDefaults": { "connectionMode": "DIRECT" },
+ *   "tenants": [{ "serviceEndpoint": "...", "masterKey": "...", "databaseId": "...", "containerId": "..." }]
+ * }
+ * }</pre>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class BenchmarkConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(BenchmarkConfig.class);
-    private static final long DEFAULT_SETTLE_TIME_MS = 90_000;
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    // -- Lifecycle --
-    private int cycles = 1;
-    private long settleTimeMs = 0;
-    private boolean suppressCleanup = false;
-    private boolean gcBetweenCycles = true;
-    private boolean enableJvmStats = false;
-    private boolean enableNettyHttpMetrics = false;
+    // ======== Grouped configuration sections ========
 
-    // -- Reporting --
-    private int printingInterval = 10;
+    @JsonProperty("lifecycle")
+    private LifecycleConfig lifecycle = new LifecycleConfig();
 
-    // At most one destination is configured (null = console-only)
-    private CsvReporterConfig csvReporterConfig;
-    private CosmosReporterConfig cosmosReporterConfig;
-    private AppInsightsReporterConfig appInsightsReporterConfig;
+    @JsonProperty("orchestrator")
+    private OrchestratorConfig orchestrator = new OrchestratorConfig();
 
-    // -- JVM-global system properties (apply to all tenants, set once at startup) --
-    private boolean isPartitionLevelCircuitBreakerEnabled = true;
-    private boolean isPerPartitionAutomaticFailoverRequired = true;
-    private int minConnectionPoolSizePerEndpoint = 0;
+    @JsonProperty("jvmProperties")
+    private JvmPropertiesConfig jvmProperties = new JvmPropertiesConfig();
 
-    // -- Orchestrator-level dispatch (controls total workload, not per-tenant) --
-    private int concurrency = 1000;
-    private int numberOfOperations = 100000;
-    private String maxRunningTimeDuration;
+    @JsonProperty("metrics")
+    private MetricsConfig metrics = new MetricsConfig();
 
-    // -- Tenants (each carries its full effective config) --
-    private List<TenantWorkloadConfig> tenantWorkloads = Collections.emptyList();
+    // ======== Tenants (parsed separately via TenantWorkloadConfig.parseWorkloadConfig) ========
+    // tenantDefaults + tenants are handled by TenantWorkloadConfig parser, not directly here.
+    // The tenantWorkloads list is populated post-deserialization.
+    private transient List<TenantWorkloadConfig> tenantWorkloads = Collections.emptyList();
 
     public BenchmarkConfig() {}
 
+    // ======== Factory ========
+
     /**
-     * Build a BenchmarkConfig from CLI-parsed Configuration.
+     * Deserialize a BenchmarkConfig from a JSON file.
+     * The file contains all configuration: lifecycle, orchestrator dispatch, JVM properties,
+     * metrics, tenant defaults, and tenant definitions.
+     *
+     * <p>After deserialization, applies smart defaults for multi-cycle runs:
+     * settleTimeMs defaults to 90s when cycles &gt; 1 and not explicitly set.</p>
+     *
+     * @param configFile the JSON configuration file
+     * @return a fully populated BenchmarkConfig
+     * @throws IOException if the file cannot be read or parsed
      */
-    public static BenchmarkConfig fromConfiguration(Configuration cfg) throws IOException {
-        BenchmarkConfig config = new BenchmarkConfig();
+    public static BenchmarkConfig fromFile(File configFile) throws IOException {
+        logger.info("Loading benchmark config from {}.", configFile.getAbsolutePath());
 
-        // Lifecycle with smart defaults for cycles > 1
-        config.cycles = cfg.getCycles();
-        config.settleTimeMs = cfg.getSettleTimeMs();
-        config.suppressCleanup = cfg.isSuppressCleanup();
+        BenchmarkConfig config = OBJECT_MAPPER.readValue(configFile, BenchmarkConfig.class);
 
-        if (config.cycles > 1) {
-            long configuredSettleTimeMs = cfg.getSettleTimeMs();
-            // Only apply the default settle time when the configuration uses the sentinel -1.
-            // An explicit value (including 0 to disable settling) should be respected.
-            config.settleTimeMs = (configuredSettleTimeMs == -1)
-                ? DEFAULT_SETTLE_TIME_MS
-                : configuredSettleTimeMs;
-            config.suppressCleanup = true; // suppress container/database cleanup
+        // Smart defaults for multi-cycle runs
+        if (config.lifecycle.cycles > 1) {
+            if (config.lifecycle.settleTimeMs == -1) {
+                config.lifecycle.settleTimeMs = LifecycleConfig.DEFAULT_SETTLE_TIME_MS;
+            }
+            config.lifecycle.suppressCleanup = true;
+        } else if (config.lifecycle.settleTimeMs == -1) {
+            config.lifecycle.settleTimeMs = 0;
         }
 
-        config.gcBetweenCycles = cfg.isGcBetweenCycles();
+        // Parse tenants from the same file (uses tenantDefaults merging)
+        config.tenantWorkloads = TenantWorkloadConfig.parseWorkloadConfig(configFile);
 
-        // Workload config - ALWAYS from config file
-        String workloadConfigPath = cfg.getWorkloadConfig();
-        if (workloadConfigPath == null || !new File(workloadConfigPath).exists()) {
-            throw new IllegalArgumentException(
-                "A workload configuration file is required. Use -workloadConfig to specify the path."
-                + (workloadConfigPath != null ? " File not found: " + workloadConfigPath : ""));
+        // Validate orchestrator settings
+        if (config.orchestrator.concurrency < 1) {
+            throw new IllegalArgumentException("orchestrator.concurrency must be >= 1, got: "
+                + config.orchestrator.concurrency);
         }
-
-        logger.info("Loading workload configs from {}.", workloadConfigPath);
-        File workloadFile = new File(workloadConfigPath);
-        config.tenantWorkloads = TenantWorkloadConfig.parseWorkloadConfig(workloadFile);
-        config.loadWorkloadConfigSections(workloadFile);
 
         return config;
     }
 
-    // ======== Getters ========
+    // ======== Convenience getters (delegate to nested configs) ========
 
-    public int getCycles() { return cycles; }
-    public long getSettleTimeMs() { return settleTimeMs; }
-    public boolean isSuppressCleanup() { return suppressCleanup; }
-    public boolean isGcBetweenCycles() { return gcBetweenCycles; }
-    public boolean isEnableJvmStats() { return enableJvmStats; }
-    public boolean isEnableNettyHttpMetrics() { return enableNettyHttpMetrics; }
+    // -- Lifecycle --
+    public int getCycles() { return lifecycle.cycles; }
+    public long getSettleTimeMs() { return lifecycle.settleTimeMs; }
+    public boolean isSuppressCleanup() { return lifecycle.suppressCleanup; }
+    public boolean isGcBetweenCycles() { return lifecycle.gcBetweenCycles; }
 
-    public int getPrintingInterval() { return printingInterval; }
-    public CsvReporterConfig getCsvReporterConfig() { return csvReporterConfig; }
-    public CosmosReporterConfig getCosmosReporterConfig() { return cosmosReporterConfig; }
-    public AppInsightsReporterConfig getAppInsightsReporterConfig() { return appInsightsReporterConfig; }
+    // -- Orchestrator dispatch --
+    public int getConcurrency() { return orchestrator.concurrency; }
+    public int getNumberOfOperations() { return orchestrator.numberOfOperations; }
+    public Duration getMaxRunningTimeDuration() { return orchestrator.maxRunningTimeDuration; }
+
+    // -- JVM system properties --
+    public boolean isPartitionLevelCircuitBreakerEnabled() { return jvmProperties.isPartitionLevelCircuitBreakerEnabled; }
+    public boolean isPerPartitionAutomaticFailoverRequired() { return jvmProperties.isPerPartitionAutomaticFailoverRequired; }
+    public int getMinConnectionPoolSizePerEndpoint() { return jvmProperties.minConnectionPoolSizePerEndpoint; }
+
+    // -- Metrics --
+    public boolean isEnableJvmStats() { return metrics.enableJvmStats; }
+    public boolean isEnableNettyHttpMetrics() { return metrics.enableNettyHttpMetrics; }
+    public int getPrintingInterval() { return metrics.printingInterval; }
+
+    public CsvReporterConfig getCsvReporterConfig() {
+        return metrics.destination != null ? metrics.destination.csv : null;
+    }
+
+    public CosmosReporterConfig getCosmosReporterConfig() {
+        return metrics.destination != null ? metrics.destination.cosmos : null;
+    }
+
+    public AppInsightsReporterConfig getAppInsightsReporterConfig() {
+        return metrics.destination != null ? metrics.destination.applicationInsights : null;
+    }
 
     /**
      * Determine the reporting destination from which config is present.
      */
     public ReportingDestination getReportingDestination() {
-        if (csvReporterConfig != null) return ReportingDestination.CSV;
-        if (cosmosReporterConfig != null) return ReportingDestination.COSMOSDB;
-        if (appInsightsReporterConfig != null) return ReportingDestination.APPLICATION_INSIGHTS;
+        if (getCsvReporterConfig() != null) return ReportingDestination.CSV;
+        if (getCosmosReporterConfig() != null) return ReportingDestination.COSMOSDB;
+        if (getAppInsightsReporterConfig() != null) return ReportingDestination.APPLICATION_INSIGHTS;
         return null;
     }
 
-    public boolean isPartitionLevelCircuitBreakerEnabled() { return isPartitionLevelCircuitBreakerEnabled; }
-    public boolean isPerPartitionAutomaticFailoverRequired() { return isPerPartitionAutomaticFailoverRequired; }
-    public int getMinConnectionPoolSizePerEndpoint() { return minConnectionPoolSizePerEndpoint; }
-
-    public int getConcurrency() { return concurrency; }
-    public int getNumberOfOperations() { return numberOfOperations; }
-    public String getMaxRunningTimeDuration() { return maxRunningTimeDuration; }
-
-    public java.time.Duration getMaxRunningTimeDurationParsed() {
-        if (maxRunningTimeDuration == null) return null;
-        return java.time.Duration.parse(maxRunningTimeDuration);
-    }
-
+    // -- Tenants --
     public List<TenantWorkloadConfig> getTenantWorkloads() { return tenantWorkloads; }
 
     @Override
     public String toString() {
         return String.format(
-            "BenchmarkConfig{cycles=%d, settleTimeMs=%d, suppressCleanup=%s, " +
-            "gcBetweenCycles=%s, tenants=%d, concurrency=%d, numberOfOperations=%d, " +
-            "maxRunningTimeDuration=%s, reportingDestination=%s, " +
-            "circuitBreaker=%s, ppaf=%s, minConnPoolSize=%d}",
-            cycles, settleTimeMs, suppressCleanup, gcBetweenCycles,
-            tenantWorkloads.size(), concurrency, numberOfOperations,
-            maxRunningTimeDuration, getReportingDestination(),
-            isPartitionLevelCircuitBreakerEnabled, isPerPartitionAutomaticFailoverRequired,
-            minConnectionPoolSizePerEndpoint);
+            "BenchmarkConfig{lifecycle=%s, orchestrator=%s, jvmProperties=%s, "
+            + "tenants=%d, reportingDestination=%s}",
+            lifecycle, orchestrator, jvmProperties,
+            tenantWorkloads.size(), getReportingDestination());
     }
 
+    // ======== Nested configuration classes ========
+
     /**
-     * Loads all non-tenant sections from the workload config file:
-     * JVM system properties, metrics config, result upload, and run metadata.
+     * Lifecycle settings: cycle control, settle time between cycles, cleanup behavior.
      */
-    private void loadWorkloadConfigSections(File workloadConfigFile) throws IOException {
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode root = mapper.readTree(workloadConfigFile);
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class LifecycleConfig {
+        static final long DEFAULT_SETTLE_TIME_MS = 90_000;
 
-        loadDispatchConfig(root);
-        loadJvmSystemProperties(root);
-        loadMetricsConfig(root);
+        @JsonProperty("cycles")
+        int cycles = 1;
+
+        /** Milliseconds to wait between cycles. -1 = auto-default (90s when cycles &gt; 1). */
+        @JsonProperty("settleTimeMs")
+        long settleTimeMs = -1;
+
+        @JsonProperty("suppressCleanup")
+        boolean suppressCleanup = false;
+
+        @JsonProperty("gcBetweenCycles")
+        boolean gcBetweenCycles = true;
+
+        @Override
+        public String toString() {
+            return String.format("Lifecycle{cycles=%d, settleTimeMs=%d, suppressCleanup=%s, gcBetweenCycles=%s}",
+                cycles, settleTimeMs, suppressCleanup, gcBetweenCycles);
+        }
     }
 
     /**
-     * Orchestrator-level dispatch settings from the JSON root.
+     * Orchestrator-level dispatch settings.
      * These control how many total operations to run and with what concurrency.
+     * They are NOT per-tenant — the orchestrator owns dispatch across all tenants.
      */
-    private void loadDispatchConfig(JsonNode root) {
-        if (root.has("concurrency")) {
-            concurrency = Integer.parseInt(root.get("concurrency").asText());
-        }
-        if (root.has("numberOfOperations")) {
-            numberOfOperations = Integer.parseInt(root.get("numberOfOperations").asText());
-        }
-        if (root.has("maxRunningTimeDuration")) {
-            maxRunningTimeDuration = root.get("maxRunningTimeDuration").asText();
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class OrchestratorConfig {
+        @JsonProperty("concurrency")
+        int concurrency = 1000;
+
+        @JsonProperty("numberOfOperations")
+        int numberOfOperations = 100000;
+
+        /**
+         * Maximum wall-clock duration for the workload (ISO-8601 duration, e.g. "PT1H").
+         * When set, the orchestrator runs until this duration elapses (ignoring numberOfOperations).
+         * When null, the orchestrator runs until numberOfOperations are completed.
+         */
+        @JsonProperty("maxRunningTimeDuration")
+        Duration maxRunningTimeDuration;
+
+        @Override
+        public String toString() {
+            return String.format("Orchestrator{concurrency=%d, numberOfOperations=%d, maxRunningTimeDuration=%s}",
+                concurrency, numberOfOperations, maxRunningTimeDuration);
         }
     }
 
     /**
-     * JVM-global system properties from the tenantDefaults section.
-     * These are JVM-wide and cannot vary per tenant.
+     * JVM-global system properties that apply to all tenants.
+     * Set once at startup, cannot vary per tenant.
      */
-    private void loadJvmSystemProperties(JsonNode root) {
-        JsonNode defaults = root.get("tenantDefaults");
-        if (defaults != null && defaults.isObject()) {
-            if (defaults.has("isPartitionLevelCircuitBreakerEnabled")) {
-                isPartitionLevelCircuitBreakerEnabled =
-                    Boolean.parseBoolean(defaults.get("isPartitionLevelCircuitBreakerEnabled").asText());
-            }
-            if (defaults.has("isPerPartitionAutomaticFailoverRequired")) {
-                isPerPartitionAutomaticFailoverRequired =
-                    Boolean.parseBoolean(defaults.get("isPerPartitionAutomaticFailoverRequired").asText());
-            }
-            if (defaults.has("minConnectionPoolSizePerEndpoint")) {
-                minConnectionPoolSizePerEndpoint =
-                    Integer.parseInt(defaults.get("minConnectionPoolSizePerEndpoint").asText());
-            }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class JvmPropertiesConfig {
+        @JsonProperty("isPartitionLevelCircuitBreakerEnabled")
+        boolean isPartitionLevelCircuitBreakerEnabled = true;
+
+        @JsonProperty("isPerPartitionAutomaticFailoverRequired")
+        boolean isPerPartitionAutomaticFailoverRequired = true;
+
+        @JsonProperty("minConnectionPoolSizePerEndpoint")
+        int minConnectionPoolSizePerEndpoint = 0;
+
+        @Override
+        public String toString() {
+            return String.format("JvmProperties{circuitBreaker=%s, ppaf=%s, minConnPoolSize=%d}",
+                isPartitionLevelCircuitBreakerEnabled, isPerPartitionAutomaticFailoverRequired,
+                minConnectionPoolSizePerEndpoint);
         }
     }
 
     /**
-     * Metrics and reporting settings from the top-level "metrics" section.
-     * Reporter destination is determined by which key is present under "metrics.destination":
-     * "csv", "cosmos", or "applicationInsights". At most one should be configured.
+     * Metrics and reporting configuration.
      */
-    private void loadMetricsConfig(JsonNode root) {
-        JsonNode metrics = root.get("metrics");
-        if (metrics == null || !metrics.isObject()) {
-            return;
-        }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class MetricsConfig {
+        @JsonProperty("enableJvmStats")
+        boolean enableJvmStats = false;
 
-        if (metrics.has("enableJvmStats")) {
-            enableJvmStats = Boolean.parseBoolean(metrics.get("enableJvmStats").asText());
-        }
-        if (metrics.has("enableNettyHttpMetrics")) {
-            enableNettyHttpMetrics = Boolean.parseBoolean(metrics.get("enableNettyHttpMetrics").asText());
-        }
-        if (metrics.has("printingInterval")) {
-            printingInterval = Integer.parseInt(metrics.get("printingInterval").asText());
-        }
+        @JsonProperty("enableNettyHttpMetrics")
+        boolean enableNettyHttpMetrics = false;
 
-        JsonNode destination = metrics.get("destination");
-        if (destination == null || !destination.isObject()) {
-            return;
-        }
+        @JsonProperty("printingInterval")
+        int printingInterval = 10;
 
-        // CSV
-        JsonNode csv = destination.get("csv");
-        if (csv != null && csv.isObject()) {
-            csvReporterConfig = new CsvReporterConfig(
-                csv.has("reportingDirectory") ? csv.get("reportingDirectory").asText() : null);
-        }
+        @JsonProperty("destination")
+        MetricsDestinationConfig destination;
+    }
 
-        // Cosmos DB
-        JsonNode cosmos = destination.get("cosmos");
-        if (cosmos != null && cosmos.isObject()) {
-            cosmosReporterConfig = new CosmosReporterConfig(
-                cosmos.has("serviceEndpoint") ? cosmos.get("serviceEndpoint").asText() : null,
-                cosmos.has("masterKey") ? cosmos.get("masterKey").asText() : null,
-                cosmos.has("database") ? cosmos.get("database").asText() : null,
-                cosmos.has("container") ? cosmos.get("container").asText() : null,
-                cosmos.has("testVariationName") ? cosmos.get("testVariationName").asText() : null,
-                cosmos.has("branchName") ? cosmos.get("branchName").asText() : null,
-                cosmos.has("commitId") ? cosmos.get("commitId").asText() : null);
-        }
+    /**
+     * Metrics destination — at most one should be configured.
+     * Destinations are mutually exclusive (CSV, Cosmos DB, or Application Insights).
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class MetricsDestinationConfig {
+        @JsonProperty("csv")
+        CsvReporterConfig csv;
 
-        // Application Insights
-        JsonNode appInsights = destination.get("applicationInsights");
-        if (appInsights != null && appInsights.isObject()) {
-            appInsightsReporterConfig = new AppInsightsReporterConfig(
-                appInsights.has("connectionString") ? appInsights.get("connectionString").asText() : null,
-                appInsights.has("stepSeconds") ? Integer.parseInt(appInsights.get("stepSeconds").asText()) : 10,
-                appInsights.has("testCategory") ? appInsights.get("testCategory").asText() : null);
-        }
+        @JsonProperty("cosmos")
+        CosmosReporterConfig cosmos;
 
-        // Warn if multiple destinations are configured — only the first match is used
-        int configuredCount = (csvReporterConfig != null ? 1 : 0)
-            + (cosmosReporterConfig != null ? 1 : 0)
-            + (appInsightsReporterConfig != null ? 1 : 0);
-        if (configuredCount > 1) {
-            logger.warn("Multiple reporting destinations configured; only '{}' will be used. "
-                + "Destinations are mutually exclusive.", getReportingDestination());
-        }
+        @JsonProperty("applicationInsights")
+        AppInsightsReporterConfig applicationInsights;
     }
 }

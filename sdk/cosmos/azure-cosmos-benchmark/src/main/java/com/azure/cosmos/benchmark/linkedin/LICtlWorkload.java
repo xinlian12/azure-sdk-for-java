@@ -13,6 +13,8 @@ import com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+
 
 public class LICtlWorkload implements Benchmark {
     private static final Logger LOGGER = LoggerFactory.getLogger(LICtlWorkload.class);
@@ -34,6 +36,11 @@ public class LICtlWorkload implements Benchmark {
     private final DataLoader _dataLoader;
     private final TestRunner _testRunner;
 
+    // Orchestrator-level dispatch params (set via setDispatchParams before run())
+    private int dispatchConcurrency = 10;
+    private long dispatchNumberOfOperations = 100000;
+    private Duration dispatchMaxRunningTime;
+
     public LICtlWorkload(final TenantWorkloadConfig workloadCfg) {
         Preconditions.checkNotNull(workloadCfg, "The Workload configuration defining the parameters can not be null");
 
@@ -46,6 +53,13 @@ public class LICtlWorkload implements Benchmark {
             : new CollectionResourceManager(workloadCfg, _entityConfiguration, _client);
         _dataLoader = new DataLoader(workloadCfg, _entityConfiguration, _bulkLoadClient);
         _testRunner = createTestRunner(workloadCfg);
+    }
+
+    @Override
+    public void setDispatchParams(int concurrency, long numberOfOperations, Duration maxRunningTime) {
+        this.dispatchConcurrency = concurrency;
+        this.dispatchNumberOfOperations = numberOfOperations;
+        this.dispatchMaxRunningTime = maxRunningTime;
     }
 
     public void run() {
@@ -63,7 +77,7 @@ public class LICtlWorkload implements Benchmark {
         _testRunner.init();
 
         LOGGER.info("Executing the CosmosDB test");
-        _testRunner.run();
+        _testRunner.run(dispatchConcurrency, dispatchNumberOfOperations, dispatchMaxRunningTime);
     }
 
     @Override

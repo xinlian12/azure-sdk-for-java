@@ -35,15 +35,11 @@ public class BenchmarkHelper {
         return instance;
     }
 
-    public static boolean shouldContinue(long startTimeMillis, long iterationCount, TenantWorkloadConfig workloadConfig) {
-        Duration maxDurationTime = workloadConfig.getMaxRunningTimeDuration();
-        int maxNumberOfOperations = workloadConfig.getNumberOfOperations();
-
-        if (maxDurationTime == null) {
-            return iterationCount < maxNumberOfOperations;
+    public static boolean shouldContinue(long startTimeMillis, long iterationCount, Duration maxDuration, int maxOperations) {
+        if (maxDuration == null) {
+            return iterationCount < maxOperations;
         }
-
-        return startTimeMillis + maxDurationTime.toMillis() > System.currentTimeMillis();
+        return startTimeMillis + maxDuration.toMillis() > System.currentTimeMillis();
     }
 
     /**
