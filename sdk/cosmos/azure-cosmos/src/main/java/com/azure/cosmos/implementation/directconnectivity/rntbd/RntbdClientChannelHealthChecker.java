@@ -251,6 +251,7 @@ public final class RntbdClientChannelHealthChecker implements ChannelHealthCheck
 
                 logger.warn(msg);
                 promise.setSuccess(msg);
+                
             }
         });
 
