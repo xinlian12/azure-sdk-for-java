@@ -14,6 +14,7 @@ extends:
             COSMOS.CLIENT_TELEMETRY_ENDPOINT: $(cosmos-client-telemetry-endpoint)
             COSMOS.CLIENT_TELEMETRY_COSMOS_ACCOUNT: $(cosmos-client-telemetry-cosmos-account)
             COSMOS_ACR_NAME: $(kafka-mcr-name)
+            TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: $(kafka-acr-login-server)/
           CloudConfig:
             Public:
               ServiceConnection: azure-sdk-tests-cosmos
@@ -36,24 +37,34 @@ extends:
             - name: AdditionalArgs
               value: ''
           PreTestRunSteps:
-            - script: |
-                if ! command -v docker &>/dev/null; then
-                  echo "Docker not found; please install Docker or ensure it's available on the agent."
+            - pwsh: |
+                if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+                  Write-Error "Docker not found; please install Docker or ensure it's available on the agent."
                   exit 1
-                fi
+                }
 
                 # wait for docker daemon to be ready
-                for i in {1..30}; do
-                  if docker info >/dev/null 2>&1; then
-                    echo "Docker is running"
+                for ($i = 1; $i -le 30; $i++) {
+                  $null = docker info 2>&1
+                  if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Docker is running"
                     break
-                  fi
-                  echo "Waiting for Docker to start... ($i/30)"
-                  sleep 2
-                done
+                  }
+                  Write-Host "Waiting for Docker to start... ($i/30)"
+                  Start-Sleep -Seconds 2
+                }
 
-                if ! docker info >/dev/null 2>&1; then
-                  echo "Docker failed to start"
+                $null = docker info 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Docker failed to start"
                   exit 1
-                fi
+                }
               displayName: 'Ensure Docker is installed and running'
+            - pwsh: |
+                "$(kafka-acr-sp-client-secret)" | docker login "$(kafka-acr-login-server)" --username "$(kafka-acr-sp-client-id)" --password-stdin
+                if ($LASTEXITCODE -ne 0) { exit 1 }
+              displayName: 'Login to ACR for Testcontainers image cache'
+          PostSteps:
+            - pwsh: docker logout "$(kafka-acr-login-server)"
+              displayName: 'Logout from ACR'
+              condition: always()
