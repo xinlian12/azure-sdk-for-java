@@ -31,7 +31,7 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * Create an HttpHeaders instance with the given size.
      */
     public HttpHeaders(int size) {
-        this.headers = new HashMap<>(size);
+        this.headers = new HashMap<>((int)(size / 0.75f) + 1);
     }
 
     /**
@@ -71,6 +71,24 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
             headers.remove(headerKey);
         } else {
             headers.put(headerKey, new HttpHeader(name, value));
+        }
+        return this;
+    }
+
+    /**
+     * Set a header using a name that is already lowercase.
+     * Skips the toLowerCase call for callers that guarantee lowercase keys
+     * (e.g. HTTP/2 headers per RFC 7540 §8.1.2).
+     *
+     * @param lowerCaseName the header name, must already be lowercase
+     * @param value the value
+     * @return this HttpHeaders
+     */
+    HttpHeaders setLowerCase(String lowerCaseName, String value) {
+        if (value == null) {
+            headers.remove(lowerCaseName);
+        } else {
+            headers.put(lowerCaseName, new HttpHeader(lowerCaseName, value));
         }
         return this;
     }
@@ -123,9 +141,9 @@ public class HttpHeaders implements Iterable<HttpHeader>, JsonSerializable {
      * @return the headers as map
      */
     public Map<String, String> toLowerCaseMap() {
-        final Map<String, String> result = new HashMap<>(headers.size());
-        for (String headerName : headers.keySet()) {
-            result.put(headerName, headers.get(headerName).value());
+        final Map<String, String> result = new HashMap<>((int)(headers.size() / 0.75f) + 1);
+        for (Map.Entry<String, HttpHeader> entry : headers.entrySet()) {
+            result.put(entry.getKey(), entry.getValue().value());
         }
         return result;
     }
