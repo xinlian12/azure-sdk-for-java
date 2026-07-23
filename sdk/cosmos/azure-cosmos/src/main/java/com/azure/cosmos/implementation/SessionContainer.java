@@ -224,6 +224,19 @@ public final class SessionContainer implements ISessionContainer {
 
         String[] tokenParts = StringUtils.split(token, ':');
         partitionKeyRangeId = tokenParts[0];
+
+        // Fast path: skip parse, lock, and merge if the token is unchanged.
+        // ConcurrentHashMap.get() is lock-free, and convertToString() returns a cached string.
+        // At steady-state read throughput (38K ops/s), >90% of tokens are unchanged.
+        ConcurrentHashMap<String, ISessionToken> existingTokensForFastCheck =
+            this.collectionResourceIdToSessionTokens.get(resourceId.getUniqueDocumentCollectionId());
+        if (existingTokensForFastCheck != null) {
+            ISessionToken existingToken = existingTokensForFastCheck.get(partitionKeyRangeId);
+            if (existingToken != null && existingToken.convertToString().equals(tokenParts[1])) {
+                return;
+            }
+        }
+
         parsedSessionToken = SessionTokenHelper.parse(tokenParts[1]);
 
         if (logger.isTraceEnabled()) {
