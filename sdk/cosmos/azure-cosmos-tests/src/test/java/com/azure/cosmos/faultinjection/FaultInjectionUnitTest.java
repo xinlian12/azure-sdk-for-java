@@ -2,12 +2,21 @@
 // Licensed under the MIT License.
 package com.azure.cosmos.faultinjection;
 
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.CosmosException;
+import com.azure.cosmos.GatewayConnectionConfig;
+import com.azure.cosmos.Http2ConnectionConfig;
+import com.azure.cosmos.TestObject;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.OperationType;
 import com.azure.cosmos.implementation.ResourceType;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
+import com.azure.cosmos.implementation.TestConfigurations;
 import com.azure.cosmos.implementation.directconnectivity.WFConstants;
+import com.azure.cosmos.implementation.throughputControl.TestItem;
+import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.test.faultinjection.FaultInjectionCondition;
 import com.azure.cosmos.test.faultinjection.FaultInjectionConditionBuilder;
 import com.azure.cosmos.test.faultinjection.FaultInjectionConnectionErrorType;
@@ -216,4 +225,25 @@ public class FaultInjectionUnitTest {
             assertTrue(e.getMessage().contains("STALED_ADDRESSES exception can not be injected for rule with gateway connection type"));
         }
     }
+
+    @Test
+    public void http2Test() {
+
+        GatewayConnectionConfig gatewayConnectionConfig = new GatewayConnectionConfig();
+        gatewayConnectionConfig.setHttp2ConnectionConfig(new Http2ConnectionConfig().setEnabled(false));
+
+        CosmosAsyncClient client = new CosmosClientBuilder()
+            .key(TestConfigurations.MASTER_KEY)
+            .endpoint(TestConfigurations.HOST)
+            .gatewayMode(gatewayConnectionConfig)
+            .buildAsyncClient();
+
+        CosmosAsyncContainer container = client.getDatabase("TestDatabase").getContainer("TestContainer");
+        CosmosItemResponse<TestObject> response = container.createItem(TestObject.create()).block();
+
+        System.out.println(
+        Character.isWhitespace(response.getResponseHeaders().get(HttpConstants.HttpHeaders.SERVER_VERSION).charAt(0)));
+    }
+
+
 }

@@ -25,6 +25,7 @@ import reactor.netty.ByteBufFlux;
 import reactor.netty.Connection;
 import reactor.netty.ConnectionObserver;
 import reactor.netty.NettyOutbound;
+import reactor.netty.ReactorNetty;
 import reactor.netty.http.HttpProtocol;
 import reactor.netty.http.client.HttpClientRequest;
 import reactor.netty.http.client.HttpClientResponse;
@@ -32,6 +33,7 @@ import reactor.netty.http.client.HttpClientState;
 import reactor.netty.resources.ConnectionProvider;
 import reactor.netty.transport.ProxyProvider;
 import reactor.util.context.Context;
+import reactor.util.context.ContextView;
 
 import java.lang.invoke.WrongMethodTypeException;
 import java.time.Duration;
@@ -187,25 +189,11 @@ public class ReactorNettyClient implements HttpClient {
                     .maxFrameSize(Configs.getHttp2MaxFrameSizeInBytes())   // 64KB default; overridable via COSMOS.HTTP2_MAX_FRAME_SIZE_IN_KB / COSMOS_HTTP2_MAX_FRAME_SIZE_IN_KB (clamped to [64KB, 16383KB])
                     .maxConcurrentStreams(http2CfgAccessor().getEffectiveMaxConcurrentStreams(http2Cfg))  // Increased from default 30
                 )
+                .doOnChannelInit((observer, channel, remoteAddress) ->
+                    CosmosHttp2ProtocolInitializer.install(
+                        channel, observer, this.httpClient.configuration().http2SettingsSpec()))
                 .doOnConnected((connection -> {
-                    // The response header clean up pipeline is being added due to an error getting when calling gateway:
-                    // java.lang.IllegalArgumentException: a header value contains prohibited character 0x20 at index 0 for 'x-ms-serviceversion', there is whitespace in the front of the value.
-                    // validateHeaders(false) does not work for http2
                     ChannelPipeline channelPipeline = connection.channel().pipeline();
-                    if (channelPipeline.get("reactor.left.httpCodec") != null
-                        && channelPipeline.get("customHeaderCleaner") == null) {
-                        try {
-                            channelPipeline.addAfter(
-                                "reactor.left.httpCodec",
-                                "customHeaderCleaner",
-                                new Http2ResponseHeaderCleanerHandler());
-                        } catch (IllegalArgumentException ignored) {
-                            // TOCTOU race: between the get()==null check above and addAfter(),
-                            // a concurrent doOnConnected may have installed the handler.
-                            // Duplicate handler name is the only possible cause.
-                        }
-                    }
-
                     // Install exception handler at the tail of the HTTP/2 parent (TCP)
                     // channel pipeline. This pipeline has no ChannelOperationsHandler
                     // (unlike H1.1), so TCP-level exceptions (RST, broken pipe) propagate
@@ -504,14 +492,19 @@ public class ReactorNettyClient implements HttpClient {
 
     /**
      * Extracts the ReactorNettyRequestRecord from the connection's context.
-     * Returns null if the connection is not a ConnectionObserver or if the record is not in context.
+     * Unpooled parent connections expose their subscriber context through the channel instead of
+     * implementing ConnectionObserver. Returns null if neither context contains the record.
      */
     private static ReactorNettyRequestRecord getRequestRecordFromConnection(Connection conn) {
         if (conn instanceof ConnectionObserver) {
-            return ((ConnectionObserver) conn)
+            ReactorNettyRequestRecord record = ((ConnectionObserver) conn)
                 .currentContext().getOrDefault(REACTOR_NETTY_REQUEST_RECORD_KEY, null);
+            if (record != null) {
+                return record;
+            }
         }
-        return null;
+        ContextView channelContext = ReactorNetty.getChannelContext(conn.channel());
+        return channelContext == null ? null : channelContext.getOrDefault(REACTOR_NETTY_REQUEST_RECORD_KEY, null);
     }
 
     /**

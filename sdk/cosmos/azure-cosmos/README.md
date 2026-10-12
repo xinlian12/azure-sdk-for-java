@@ -95,6 +95,13 @@ A Cosmos DB account contains zero or more databases, a database (DB) contains ze
 You may read more about databases, containers and items [here](https://learn.microsoft.com/azure/cosmos-db/databases-containers-items).
 A few important properties defined at the level of the container, among them are provisioned throughput and partition key.
 
+### HTTP response headers
+
+For HTTP/2 responses, the SDK removes leading and trailing spaces and tabs from the
+`x-ms-serviceversion` header before Netty validates its value. This compatibility handling does not
+change interior whitespace or normalize other headers. Header validation remains enabled, and
+HTTP/1.1 fallback continues to use Netty's standard HTTP/1 response parsing.
+
 ### Global Distribution
 - Azure Cosmos DB is a globally distributed database service that's designed to provide low latency, elastic scalability of throughput, well-defined semantics for data consistency, and high availability.
 In short, if your application needs guaranteed fast response time anywhere in the world, if it's required to be always online, and needs unlimited and elastic scalability of throughput and storage, you should build your application on Azure Cosmos DB.
